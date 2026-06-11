@@ -10,6 +10,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { ActionResult, Booking, Court, GridSlot, MyBooking } from "@/lib/types";
 
 /** Fetches all active courts with their arena info. */
@@ -142,16 +143,41 @@ export async function cancelBooking(bookingId: string): Promise<ActionResult<nul
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: DB_ERROR_COPY.AUTH_REQUIRED };
 
-  const { error } = await supabase
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { ok: false, error: "Cancelling isn't configured — set SUPABASE_SERVICE_ROLE_KEY." };
+  }
+
+  // bookings has no UPDATE RLS policy (all writes go through SECURITY DEFINER
+  // functions), so a user-context update silently matches zero rows. Cancel
+  // with the service-role client instead — ownership and an active-status guard
+  // are enforced right here in the query, and .select() lets us verify a row
+  // actually changed rather than reporting a false success.
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("bookings")
     .update({ status: "cancelled", open_to_join: false })
     .eq("id", bookingId)
     .eq("user_id", user.id)
-    .in("status", ["pending", "confirmed"]);
+    .in("status", ["pending", "confirmed"])
+    .select("id");
 
   if (error) return { ok: false, error: "Could not cancel this booking." };
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: "This booking can't be cancelled — it may already be cancelled or completed.",
+    };
+  }
+
+  // Take down any community post tied to this now-cancelled booking.
+  await admin
+    .from("matchmaking_posts")
+    .update({ status: "cancelled" })
+    .eq("booking_id", bookingId);
+
   revalidatePath("/book");
   revalidatePath("/my-bookings");
+  revalidatePath("/community");
   return { ok: true, data: null };
 }
 

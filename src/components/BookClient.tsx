@@ -9,7 +9,7 @@
 // Demo mode simulates the whole loop locally.
 // ============================================================================
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BookingMatrix from "@/components/BookingMatrix";
 import { useBookingStore } from "@/stores/useBookingStore";
@@ -47,7 +47,7 @@ export default function BookClient({ demoMode, courts, initialSlots }: BookClien
   const [locallyBooked, setLocallyBooked] = useState<Set<string>>(new Set());
 
   const refreshGrid = useCallback(
-    async (courtId: string, dateISO: string) => {
+    async (courtId: string, dateISO: string, opts?: { silent?: boolean }) => {
       if (demoMode) {
         setSlots(
           demoGrid(courtId, dateISO).map((s) =>
@@ -58,16 +58,35 @@ export default function BookClient({ demoMode, courts, initialSlots }: BookClien
       }
       // Mark loading synchronously so the matrix swaps to skeletons at once,
       // rather than lingering on the previous date's slots during the fetch.
-      setLoading(true);
+      // A silent refresh skips the skeleton and updates in place — used when we
+      // already have a plausible grid on screen (e.g. the mount re-sync below).
+      if (!opts?.silent) setLoading(true);
       try {
         const res = await getAvailabilityGrid(courtId, dateISO);
         if (res.ok) setSlots(res.data);
       } finally {
-        setLoading(false);
+        if (!opts?.silent) setLoading(false);
       }
     },
     [demoMode, locallyBooked]
   );
+
+  // The booking store survives navigation, so a returning player may hold a
+  // court/date that initialSlots (always default court + today) doesn't match,
+  // and a slot they just cancelled elsewhere must show as freed. Re-sync the
+  // grid to the live DB on every mount — server actions are never cached, so
+  // this is the source of truth regardless of route/RSC caching.
+  useEffect(() => {
+    if (demoMode) return;
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kathmandu" }).format(
+      new Date()
+    );
+    const { courtId, dateISO } = useBookingStore.getState();
+    const matchesInitial = (courtId === null || courtId === courts[0].id) && dateISO === today;
+    void refreshGrid(courtId ?? courts[0].id, dateISO, { silent: matchesInitial });
+    // Mount-only: run once when the player lands on /book.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleCourtChange = (courtId: string) =>
     void refreshGrid(courtId, useBookingStore.getState().dateISO);

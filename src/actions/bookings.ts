@@ -10,7 +10,38 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import type { ActionResult, Booking, GridSlot } from "@/lib/types";
+import type { ActionResult, Booking, Court, GridSlot, MyBooking } from "@/lib/types";
+
+/** Fetches all active courts with their arena info. */
+export async function getCourts(): Promise<
+  ActionResult<(Court & { arenaName: string; arenaArea: string })[]>
+> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("courts")
+    .select("id, arena_id, label, sport, side_count, base_price, arenas!inner(name, area)")
+    .eq("is_active", true)
+    .eq("arenas.is_active", true)
+    .order("label");
+
+  if (error) return { ok: false, error: "Could not load courts." };
+
+  const courts = (data ?? []).map((row: Record<string, unknown>) => {
+    const arena = row.arenas as { name: string; area: string };
+    return {
+      id: row.id as string,
+      arena_id: row.arena_id as string,
+      label: row.label as string,
+      sport: row.sport as string,
+      side_count: row.side_count as number,
+      base_price: row.base_price as number,
+      arenaName: arena.name,
+      arenaArea: arena.area,
+    };
+  });
+
+  return { ok: true, data: courts };
+}
 
 const CreateBookingSchema = z
   .object({
@@ -120,5 +151,57 @@ export async function cancelBooking(bookingId: string): Promise<ActionResult<nul
 
   if (error) return { ok: false, error: "Could not cancel this booking." };
   revalidatePath("/book");
+  revalidatePath("/my-bookings");
   return { ok: true, data: null };
+}
+
+/** Parses Postgres tstzrange text like ["2024-01-01T12:00:00+00","2024-01-01T13:00:00+00") */
+function parseSlotRange(slot: string): { starts_at: string; ends_at: string } {
+  const m = slot.match(/["[](.+?)[",]+(.+?)[")\]]/);
+  return {
+    starts_at: m ? new Date(m[1]).toISOString() : "",
+    ends_at: m ? new Date(m[2]).toISOString() : "",
+  };
+}
+
+/** All bookings for the authenticated user, enriched with court + arena context. */
+export async function getMyBookings(): Promise<ActionResult<MyBooking[]>> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: DB_ERROR_COPY.AUTH_REQUIRED, code: "AUTH_REQUIRED" };
+
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("*, courts!inner(label, arenas!inner(name, area))")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) return { ok: false, error: "Could not load your bookings." };
+
+  const bookings: MyBooking[] = (data ?? []).map((row: Record<string, unknown>) => {
+    const court = row.courts as { label: string; arenas: { name: string; area: string } };
+    const { starts_at, ends_at } = parseSlotRange(row.slot as string);
+    return {
+      id: row.id as string,
+      court_id: row.court_id as string,
+      user_id: row.user_id as string,
+      team_id: (row.team_id as string) ?? null,
+      slot: row.slot as string,
+      price_npr: row.price_npr as number,
+      is_peak: row.is_peak as boolean,
+      status: row.status as Booking["status"],
+      open_to_join: row.open_to_join as boolean,
+      created_at: row.created_at as string,
+      court_label: court.label,
+      arena_name: court.arenas.name,
+      arena_area: court.arenas.area,
+      starts_at,
+      ends_at,
+    };
+  });
+
+  return { ok: true, data: bookings };
 }

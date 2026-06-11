@@ -9,8 +9,11 @@ import type {
   Court,
   GridSlot,
   MatchmakingPost,
+  MyBooking,
   Profile,
   ProfileHighlight,
+  Team,
+  TeamMember,
   Tournament,
 } from "@/lib/types";
 
@@ -204,6 +207,76 @@ export const DEMO_HIGHLIGHTS: ProfileHighlight[] = [
     title: "Toe-poke winner, Monsoon Cup semis",
     url: "https://www.tiktok.com/@sajan_ktm/video/720834",
     created_at: new Date().toISOString(),
+  },
+];
+
+export const DEMO_TEAMS: Team[] = [
+  {
+    id: "team-1111",
+    name: "Jhamsikhel FC",
+    tag: "JFC",
+    crest_url: null,
+    captain_id: "demo-user",
+    home_arena: "a1",
+    join_code: "JFC-X7K2",
+    created_at: new Date().toISOString(),
+    member_count: 4,
+  },
+  {
+    id: "team-2222",
+    name: "Boudha Bulls",
+    tag: "BULLS",
+    crest_url: null,
+    captain_id: "u2",
+    home_arena: null,
+    join_code: "BUL-M3P9",
+    created_at: new Date().toISOString(),
+    member_count: 3,
+  },
+];
+
+export const DEMO_MEMBERS: Record<string, TeamMember[]> = {
+  "team-1111": [
+    { team_id: "team-1111", user_id: "demo-user", role: "captain", joined_at: new Date().toISOString(), username: "sajan_ktm", full_name: "Sajan Maharjan", avatar_url: null },
+    { team_id: "team-1111", user_id: "u2", role: "player", joined_at: new Date().toISOString(), username: "yeti_anish", full_name: "Anish Gurung", avatar_url: null },
+    { team_id: "team-1111", user_id: "u3", role: "player", joined_at: new Date().toISOString(), username: "prerana.s", full_name: "Prerana Shrestha", avatar_url: null },
+    { team_id: "team-1111", user_id: "u4", role: "player", joined_at: new Date().toISOString(), username: "ramesh_10", full_name: "Ramesh Tamang", avatar_url: null },
+  ],
+  "team-2222": [
+    { team_id: "team-2222", user_id: "u2", role: "captain", joined_at: new Date().toISOString(), username: "yeti_anish", full_name: "Anish Gurung", avatar_url: null },
+    { team_id: "team-2222", user_id: "u5", role: "player", joined_at: new Date().toISOString(), username: "kiran.b", full_name: "Kiran Basnet", avatar_url: null },
+    { team_id: "team-2222", user_id: "u6", role: "player", joined_at: new Date().toISOString(), username: "suman_gk", full_name: "Suman Rai", avatar_url: null },
+  ],
+};
+
+export const DEMO_MY_BOOKINGS: MyBooking[] = [
+  {
+    id: "bk-1111", court_id: DEMO_COURTS[0].id, user_id: "demo-user", team_id: null,
+    slot: `[${at(2, 19)},${at(2, 20)})`, price_npr: 1800, is_peak: true,
+    status: "confirmed", open_to_join: false, created_at: new Date().toISOString(),
+    court_label: DEMO_COURTS[0].label, arena_name: DEMO_COURTS[0].arenaName, arena_area: DEMO_COURTS[0].arenaArea,
+    starts_at: at(2, 19), ends_at: at(2, 20),
+  },
+  {
+    id: "bk-2222", court_id: DEMO_COURTS[1].id, user_id: "demo-user", team_id: null,
+    slot: `[${at(5, 17)},${at(5, 19)})`, price_npr: 4500, is_peak: true,
+    status: "pending", open_to_join: false, created_at: new Date().toISOString(),
+    court_label: DEMO_COURTS[1].label, arena_name: DEMO_COURTS[1].arenaName, arena_area: DEMO_COURTS[1].arenaArea,
+    starts_at: at(5, 17), ends_at: at(5, 19),
+  },
+  {
+    id: "bk-3333", court_id: DEMO_COURTS[0].id, user_id: "demo-user", team_id: "team-1111",
+    slot: `[${at(-3, 18)},${at(-3, 19)})`, price_npr: 1800, is_peak: true,
+    status: "completed", open_to_join: true, created_at: new Date(Date.now() - 3 * 86400000).toISOString(),
+    court_label: DEMO_COURTS[0].label, arena_name: DEMO_COURTS[0].arenaName, arena_area: DEMO_COURTS[0].arenaArea,
+    starts_at: at(-3, 18), ends_at: at(-3, 19),
+  },
+  {
+    id: "bk-4444", court_id: DEMO_COURTS[2].id, user_id: "demo-user", team_id: null,
+    slot: `[${at(-7, 10)},${at(-7, 11)})`, price_npr: 2000, is_peak: false,
+    status: "cancelled", open_to_join: false, created_at: new Date(Date.now() - 7 * 86400000).toISOString(),
+    court_label: DEMO_COURTS[2].label, arena_name: DEMO_COURTS[2].arenaName, arena_area: DEMO_COURTS[2].arenaArea,
+    starts_at: at(-7, 10), ends_at: at(-7, 11),
   },
 ];
 

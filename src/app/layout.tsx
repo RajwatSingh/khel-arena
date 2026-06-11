@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Archivo, IBM_Plex_Mono } from "next/font/google";
 import Nav from "@/components/Nav";
+import MotionProvider from "@/components/MotionProvider";
 import "./globals.css";
 
 const display = Fraunces({
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <body className="font-sans">
+        <MotionProvider>
         <Nav />
         {children}
         <footer className="border-t border-hairline bg-canvas py-12">
@@ -37,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </p>
           </div>
         </footer>
+        </MotionProvider>
       </body>
     </html>
   );

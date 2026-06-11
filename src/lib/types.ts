@@ -123,6 +123,38 @@ export interface Tournament {
   organizer_username: string | null;
 }
 
+/** Enriched booking with court/arena context — used by the My Bookings page. */
+export interface MyBooking extends Booking {
+  court_label: string;
+  arena_name: string;
+  arena_area: string;
+  starts_at: string;   // parsed from tstzrange slot
+  ends_at: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  tag: string;          // 2-5 uppercase alphanumeric
+  crest_url: string | null;
+  captain_id: string;
+  home_arena: string | null;
+  join_code: string;
+  created_at: string;
+  member_count: number;
+}
+
+export interface TeamMember {
+  team_id: string;
+  user_id: string;
+  role: "captain" | "player";
+  joined_at: string;
+  // joined profile fields
+  username: string;
+  full_name: string;
+  avatar_url: string | null;
+}
+
 /** Discriminated result type used by every server action. */
 export type ActionResult<T> =
   | { ok: true; data: T }

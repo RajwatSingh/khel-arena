@@ -3,7 +3,7 @@
 
 import type { Metadata } from "next";
 import BookClient from "@/components/BookClient";
-import { getAvailabilityGrid } from "@/actions/bookings";
+import { getAvailabilityGrid, getCourts } from "@/actions/bookings";
 import { DEMO_COURTS, demoGrid, isDemoMode } from "@/lib/demo";
 
 export const metadata: Metadata = { title: "Book a court — Khel Arena" };
@@ -24,11 +24,22 @@ export default async function BookPage() {
     );
   }
 
-  const grid = await getAvailabilityGrid(DEMO_COURTS[0].id, today);
+  const courtsResult = await getCourts();
+  const courts = courtsResult.ok ? courtsResult.data : [];
+
+  if (courts.length === 0) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <p className="text-muted-foreground">No courts available right now. Check back soon!</p>
+      </div>
+    );
+  }
+
+  const grid = await getAvailabilityGrid(courts[0].id, today);
   return (
     <BookClient
       demoMode={false}
-      courts={DEMO_COURTS /* MVP: replace with a courts query as arenas onboard */}
+      courts={courts}
       initialSlots={grid.ok ? grid.data : []}
     />
   );

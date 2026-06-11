@@ -15,7 +15,7 @@
 // ============================================================================
 
 import { useMemo, useState, useTransition } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { useBookingStore } from "@/stores/useBookingStore";
 import type { ActionResult, Booking, Court, GridSlot, PaymentProvider } from "@/lib/types";
 
@@ -168,7 +168,7 @@ export default function BookingMatrix({
                   {d.day}
                 </span>
                 {active && (
-                  <motion.span
+                  <m.span
                     layoutId="date-underline"
                     className="absolute inset-x-4 bottom-0 h-px bg-gold"
                   />
@@ -186,7 +186,7 @@ export default function BookingMatrix({
         </div>
 
         {/* THE GRID */}
-        <motion.div
+        <m.div
           key={`${activeCourt?.id}-${dateISO}`}
           initial="hidden"
           animate="show"
@@ -197,7 +197,7 @@ export default function BookingMatrix({
             const isSelected = selected.some((s) => s.starts_at === slot.starts_at);
             const disabled = slot.is_booked || slot.is_past;
             return (
-              <motion.button
+              <m.button
                 key={slot.starts_at}
                 variants={{
                   hidden: { opacity: 0, y: 10 },
@@ -209,7 +209,7 @@ export default function BookingMatrix({
                 aria-label={`${timeFmt.format(new Date(slot.starts_at))}, ${
                   slot.is_booked ? "taken" : `रू ${NPR.format(slot.price_npr)}${slot.is_peak ? ", peak" : ""}`
                 }`}
-                onClick={() => toggleSlot(slot)}
+                onClick={() => toggleSlot(slot, slots)}
                 className={`group relative flex h-24 flex-col justify-between p-4 text-left transition-colors duration-300 ${
                   isSelected
                     ? "bg-gold text-ink"
@@ -257,15 +257,15 @@ export default function BookingMatrix({
                     />
                   )}
                 </span>
-              </motion.button>
+              </m.button>
             );
           })}
-        </motion.div>
+        </m.div>
 
         {/* Confirmation + errors */}
         <AnimatePresence>
           {lastError && (
-            <motion.p
+            <m.p
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
@@ -273,10 +273,10 @@ export default function BookingMatrix({
               role="alert"
             >
               {lastError}
-            </motion.p>
+            </m.p>
           )}
           {confirmedId && (
-            <motion.p
+            <m.p
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
@@ -284,7 +284,7 @@ export default function BookingMatrix({
               role="status"
             >
               Slot held — confirmation #{confirmedId.slice(0, 8)}. Taking you to payment…
-            </motion.p>
+            </m.p>
           )}
         </AnimatePresence>
       </div>
@@ -292,7 +292,7 @@ export default function BookingMatrix({
       {/* Selection dock */}
       <AnimatePresence>
         {selected.length > 0 && activeCourt && (
-          <motion.aside
+          <m.aside
             initial={{ y: "120%" }}
             animate={{ y: 0 }}
             exit={{ y: "120%" }}
@@ -340,7 +340,7 @@ export default function BookingMatrix({
                 </button>
               </div>
             </div>
-          </motion.aside>
+          </m.aside>
         )}
       </AnimatePresence>
     </section>

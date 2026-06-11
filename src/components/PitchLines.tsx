@@ -10,7 +10,7 @@
 //     circle motif, replacing plain <hr> moments across the site.
 // ============================================================================
 
-import { motion, useReducedMotion } from "framer-motion";
+import { m, useReducedMotion } from "framer-motion";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -34,10 +34,10 @@ export function PitchBackdrop() {
       strokeWidth={1.5}
     >
       {/* Halfway line */}
-      <motion.line x1="600" y1="0" x2="600" y2="800" {...draw(0.2)} />
+      <m.line x1="600" y1="0" x2="600" y2="800" {...draw(0.2)} />
       {/* Center circle + spot */}
-      <motion.circle cx="600" cy="400" r="170" {...draw(0.5)} />
-      <motion.circle
+      <m.circle cx="600" cy="400" r="170" {...draw(0.5)} />
+      <m.circle
         cx="600"
         cy="400"
         r="4"
@@ -48,12 +48,12 @@ export function PitchBackdrop() {
         transition={{ duration: 0.5, delay: 2.1 }}
       />
       {/* Penalty arcs — 6 m semicircles off each goal line */}
-      <motion.path d="M 0 215 A 185 185 0 0 1 0 585" {...draw(0.8)} />
-      <motion.path d="M 1200 215 A 185 185 0 0 0 1200 585" {...draw(0.8)} />
+      <m.path d="M 0 215 A 185 185 0 0 1 0 585" {...draw(0.8)} />
+      <m.path d="M 1200 215 A 185 185 0 0 0 1200 585" {...draw(0.8)} />
       {/* Penalty spots */}
-      <motion.circle cx="185" cy="400" r="3" fill="var(--hairline-2)" stroke="none"
+      <m.circle cx="185" cy="400" r="3" fill="var(--hairline-2)" stroke="none"
         initial={{ opacity: 0 }} animate={{ opacity: 0.8 }} transition={{ delay: 2.3 }} />
-      <motion.circle cx="1015" cy="400" r="3" fill="var(--hairline-2)" stroke="none"
+      <m.circle cx="1015" cy="400" r="3" fill="var(--hairline-2)" stroke="none"
         initial={{ opacity: 0 }} animate={{ opacity: 0.8 }} transition={{ delay: 2.3 }} />
     </svg>
   );

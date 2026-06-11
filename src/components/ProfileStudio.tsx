@@ -9,7 +9,7 @@
 // ============================================================================
 
 import { useRef, useState, useTransition } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import FutsalPitchPicker from "@/components/FutsalPitchPicker";
 import { PitchDivider } from "@/components/PitchLines";
 import type {
@@ -430,7 +430,7 @@ export default function ProfileStudio({
                 <ul className="mb-6 space-y-3">
                   <AnimatePresence initial={false}>
                     {highlights.map((h) => (
-                      <motion.li
+                      <m.li
                         key={h.id}
                         layout
                         initial={{ opacity: 0, y: 8 }}
@@ -451,7 +451,7 @@ export default function ProfileStudio({
                         >
                           Remove
                         </button>
-                      </motion.li>
+                      </m.li>
                     ))}
                   </AnimatePresence>
                 </ul>
@@ -499,7 +499,7 @@ export default function ProfileStudio({
               </button>
               <AnimatePresence>
                 {saved && (
-                  <motion.span
+                  <m.span
                     initial={{ opacity: 0, x: -6 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0 }}
@@ -507,10 +507,10 @@ export default function ProfileStudio({
                     role="status"
                   >
                     Saved{demoMode ? " (demo — local only)" : ""}.
-                  </motion.span>
+                  </m.span>
                 )}
                 {error && (
-                  <motion.span
+                  <m.span
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -518,7 +518,7 @@ export default function ProfileStudio({
                     role="alert"
                   >
                     {error}
-                  </motion.span>
+                  </m.span>
                 )}
               </AnimatePresence>
             </div>

@@ -8,7 +8,7 @@
 // pivot of the center circle). The chosen zone lights gold.
 // ============================================================================
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import type { FutsalPosition } from "@/lib/types";
 
 interface Zone {
@@ -79,7 +79,7 @@ export default function FutsalPitchPicker({
               {/* generous invisible hit area */}
               <circle cx={z.cx} cy={z.cy} r="26" fill="transparent" />
               {selected && (
-                <motion.circle
+                <m.circle
                   layoutId="pos-halo"
                   cx={z.cx}
                   cy={z.cy}

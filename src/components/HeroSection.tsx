@@ -8,7 +8,7 @@
 // ============================================================================
 
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
+import { m, useReducedMotion } from "framer-motion";
 import { PitchBackdrop } from "@/components/PitchLines";
 
 const ARENAS = [
@@ -46,7 +46,7 @@ export default function HeroSection() {
       <PitchBackdrop />
 
       {/* Devanagari watermark */}
-      <motion.span
+      <m.span
         aria-hidden
         initial={{ opacity: 0 }}
         animate={{ opacity: 0.05 }}
@@ -54,24 +54,24 @@ export default function HeroSection() {
         className="absolute -right-8 top-1/2 -translate-y-1/2 select-none font-display text-[26rem] leading-none text-ink"
       >
         मैदान
-      </motion.span>
+      </m.span>
 
       <div className="relative mx-auto flex min-h-[calc(100svh-57px)] max-w-6xl flex-col justify-between px-6 pb-10 pt-8">
         {/* Headline */}
         <div className="py-20">
-          <motion.p
+          <m.p
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.1 }}
             className="eyebrow mb-8"
           >
             The arena network of the valley
-          </motion.p>
+          </m.p>
 
           <h1 className="font-display text-[clamp(3rem,9vw,7.5rem)] leading-[0.95] tracking-tight text-ink">
             {["Book the pitch.", "Find your five."].map((line, i) => (
               <span key={line} className="block overflow-hidden pb-2">
-                <motion.span
+                <m.span
                   custom={i}
                   variants={rise}
                   initial="hidden"
@@ -85,12 +85,12 @@ export default function HeroSection() {
                   ) : (
                     line
                   )}
-                </motion.span>
+                </m.span>
               </span>
             ))}
           </h1>
 
-          <motion.p
+          <m.p
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease, delay: 0.7 }}
@@ -99,9 +99,9 @@ export default function HeroSection() {
             Live availability across Kathmandu&rsquo;s best turfs. Pick an hour,
             pay with eSewa or Khalti, and let the community fill your last two
             spots.
-          </motion.p>
+          </m.p>
 
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease, delay: 0.85 }}
@@ -120,11 +120,11 @@ export default function HeroSection() {
             >
               Tonight&rsquo;s open games
             </Link>
-          </motion.div>
+          </m.div>
         </div>
 
         {/* Footer strip: stats + arena ticker */}
-        <motion.div
+        <m.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 1, delay: 1.1 }}
@@ -144,7 +144,7 @@ export default function HeroSection() {
             <div className="relative w-full max-w-sm overflow-hidden" aria-hidden>
               <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-canvas to-transparent" />
               <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-canvas to-transparent" />
-              <motion.div
+              <m.div
                 className="flex w-max gap-10 font-mono text-[0.65rem] uppercase tracking-editorial text-ink-faint"
                 animate={reduceMotion ? undefined : { x: ["0%", "-50%"] }}
                 transition={{ duration: 28, ease: "linear", repeat: Infinity }}
@@ -152,10 +152,10 @@ export default function HeroSection() {
                 {[...ARENAS, ...ARENAS].map((a, i) => (
                   <span key={i} className="whitespace-nowrap">{a}</span>
                 ))}
-              </motion.div>
+              </m.div>
             </div>
           </div>
-        </motion.div>
+        </m.div>
       </div>
     </section>
   );

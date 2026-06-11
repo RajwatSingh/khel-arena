@@ -8,7 +8,7 @@
 // ============================================================================
 
 import { useState, useTransition } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import type { ActionResult, MatchmakingPost, SkillTier } from "@/lib/types";
 
 export interface CommunityHubProps {
@@ -97,7 +97,7 @@ export default function CommunityHub({ posts, onJoin }: CommunityHubProps) {
                   const spotsLeft = post.needed_players - post.filled_players;
                   const hasJoined = joined.has(post.id);
                   return (
-                    <motion.li
+                    <m.li
                       key={post.id}
                       custom={i}
                       variants={row}
@@ -160,7 +160,7 @@ export default function CommunityHub({ posts, onJoin }: CommunityHubProps) {
                           </button>
                         </div>
                       </div>
-                    </motion.li>
+                    </m.li>
                   );
                 })}
               </ul>
@@ -168,7 +168,7 @@ export default function CommunityHub({ posts, onJoin }: CommunityHubProps) {
 
             <AnimatePresence>
               {error && (
-                <motion.p
+                <m.p
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -176,7 +176,7 @@ export default function CommunityHub({ posts, onJoin }: CommunityHubProps) {
                   className="mt-4 font-mono text-xs text-ember"
                 >
                   {error}
-                </motion.p>
+                </m.p>
               )}
             </AnimatePresence>
           </div>

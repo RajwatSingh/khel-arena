@@ -9,7 +9,7 @@
 // ============================================================================
 
 import { useMemo, useState, useTransition } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { PitchDivider } from "@/components/PitchLines";
 import type { ActionResult, SkillTier, Tournament, TournamentFormat } from "@/lib/types";
 import type { CreateTournamentInput } from "@/actions/tournaments";
@@ -190,7 +190,7 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
                   const closed = t.status !== "open" || spotsLeft <= 0;
                   const done = registeredIds.has(t.id);
                   return (
-                    <motion.li
+                    <m.li
                       key={t.id}
                       custom={i}
                       variants={rowAnim}
@@ -275,14 +275,14 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
                           </button>
                         </div>
                       </div>
-                    </motion.li>
+                    </m.li>
                   );
                 })}
               </ul>
             )}
             <AnimatePresence>
               {registerError && (
-                <motion.p
+                <m.p
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -290,7 +290,7 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
                   className="mt-4 font-mono text-xs text-ember"
                 >
                   {registerError}
-                </motion.p>
+                </m.p>
               )}
             </AnimatePresence>
           </div>
@@ -475,7 +475,7 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
 
                 <AnimatePresence>
                   {formError && (
-                    <motion.p
+                    <m.p
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
@@ -483,10 +483,10 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
                       className="font-mono text-xs text-ember"
                     >
                       {formError}
-                    </motion.p>
+                    </m.p>
                   )}
                   {created && (
-                    <motion.p
+                    <m.p
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
@@ -494,7 +494,7 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
                       className="font-mono text-xs text-sage"
                     >
                       {created.name} is live — teams can register now.
-                    </motion.p>
+                    </m.p>
                   )}
                 </AnimatePresence>
               </div>

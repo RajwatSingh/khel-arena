@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   KHEL ARENA — design tokens (light edition)
+   Warm porcelain canvas, espresso ink type, deep champagne gold for action
+   and peak pricing, pitch sage for availability. Same editorial architecture
+   as the dark edition — hairlines, mono data, display serif — in daylight.
+   ========================================================================== */
+
+:root {
+  --canvas: #faf7f0;       /* porcelain background */
+  --surface: #fffdf8;      /* raised surfaces */
+  --surface-2: #f1ece0;    /* hover / active surfaces */
+  --hairline: #e6dfcf;     /* structural lines */
+  --hairline-2: #cfc5ad;   /* emphasized lines */
+  --ink: #211d14;          /* primary type, espresso */
+  --ink-dim: #6b6354;      /* secondary type */
+  --ink-faint: #9a9180;    /* tertiary / labels */
+  --gold: #a47e33;         /* action, peak (deepened for light contrast) */
+  --gold-bright: #c9a36a;
+  --gold-soft: rgba(164, 126, 51, 0.1);
+  --sage: #5f7d5b;         /* available */
+  --sage-soft: rgba(95, 125, 91, 0.1);
+  --ember: #b4543f;        /* destructive / live errors */
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--gold);
+  color: var(--canvas);
+}
+
+/* Editorial eyebrow label — the recurring structural voice of the system. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Hairline rules used as architecture, not decoration. */
+.rule-x {
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--hairline-2) 12%, var(--hairline-2) 88%, transparent);
+}
+
+/* Subtle paper grain keeps large light fields from feeling flat. */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Visible, on-brand keyboard focus. */
+:focus-visible {
+  outline: 1.5px solid var(--gold);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

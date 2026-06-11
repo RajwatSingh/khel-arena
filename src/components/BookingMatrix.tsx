@@ -23,6 +23,8 @@ export interface BookingMatrixProps {
   courts: (Court & { arenaName: string; arenaArea: string })[];
   /** Availability for the active court + date (from get_availability_grid). */
   slots: GridSlot[];
+  /** True while a fresh grid is being fetched — render skeletons, not stale slots. */
+  loading?: boolean;
   onCourtChange?: (courtId: string) => void;
   onDateChange?: (dateISO: string) => void;
   onConfirm: (payload: {
@@ -56,6 +58,7 @@ const timeFmt = new Intl.DateTimeFormat("en-GB", {
 export default function BookingMatrix({
   courts,
   slots,
+  loading = false,
   onCourtChange,
   onDateChange,
   onConfirm,
@@ -186,6 +189,17 @@ export default function BookingMatrix({
         </div>
 
         {/* THE GRID */}
+        {loading ? (
+          <div
+            aria-busy="true"
+            aria-label="Loading availability"
+            className="grid grid-cols-2 gap-px bg-hairline sm:grid-cols-4"
+          >
+            {Array.from({ length: slots.length || 16 }).map((_, i) => (
+              <div key={i} className="h-24 animate-pulse bg-surface/60" />
+            ))}
+          </div>
+        ) : (
         <m.div
           key={`${activeCourt?.id}-${dateISO}`}
           initial="hidden"
@@ -261,6 +275,7 @@ export default function BookingMatrix({
             );
           })}
         </m.div>
+        )}
 
         {/* Confirmation + errors */}
         <AnimatePresence>

@@ -2,6 +2,8 @@
 
 import type { Metadata } from "next";
 import ProfileClient from "@/components/ProfileClient";
+import AuthPanel from "@/components/AuthPanel";
+import AccountBar from "@/components/AccountBar";
 import { getMyProfile } from "@/actions/profile";
 import { DEMO_HIGHLIGHTS, DEMO_PROFILE, isDemoMode } from "@/lib/demo";
 
@@ -13,10 +15,13 @@ export default async function ProfilePage() {
   }
   const res = await getMyProfile();
   if (!res.ok) {
-    // Not signed in (or no profile) — fall back to the demo card as a preview.
-    return <ProfileClient demoMode profile={DEMO_PROFILE} highlights={DEMO_HIGHLIGHTS} />;
+    // Not signed in — gate the studio behind sign in / sign up.
+    return <AuthPanel />;
   }
   return (
-    <ProfileClient demoMode={false} profile={res.data.profile} highlights={res.data.highlights} />
+    <>
+      <AccountBar username={res.data.profile.username} />
+      <ProfileClient demoMode={false} profile={res.data.profile} highlights={res.data.highlights} />
+    </>
   );
 }

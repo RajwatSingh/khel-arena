@@ -43,6 +43,7 @@ function submitGatewayForm(action: string, fields: Record<string, string>) {
 export default function BookClient({ demoMode, courts, initialSlots }: BookClientProps) {
   const router = useRouter();
   const [slots, setSlots] = useState<GridSlot[]>(initialSlots);
+  const [loading, setLoading] = useState(false);
   const [locallyBooked, setLocallyBooked] = useState<Set<string>>(new Set());
 
   const refreshGrid = useCallback(
@@ -55,8 +56,15 @@ export default function BookClient({ demoMode, courts, initialSlots }: BookClien
         );
         return;
       }
-      const res = await getAvailabilityGrid(courtId, dateISO);
-      if (res.ok) setSlots(res.data);
+      // Mark loading synchronously so the matrix swaps to skeletons at once,
+      // rather than lingering on the previous date's slots during the fetch.
+      setLoading(true);
+      try {
+        const res = await getAvailabilityGrid(courtId, dateISO);
+        if (res.ok) setSlots(res.data);
+      } finally {
+        setLoading(false);
+      }
     },
     [demoMode, locallyBooked]
   );
@@ -139,6 +147,7 @@ export default function BookClient({ demoMode, courts, initialSlots }: BookClien
       <BookingMatrix
         courts={courts}
         slots={slots}
+        loading={loading}
         onCourtChange={handleCourtChange}
         onDateChange={handleDateChange}
         onConfirm={handleConfirm}

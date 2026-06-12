@@ -8,7 +8,7 @@
 // than dropdowns, and the prize purse previews live as you type.
 // ============================================================================
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { PitchBackdrop, PitchDivider } from "@/components/PitchLines";
 import type { ActionResult, SkillTier, Tournament, TournamentFormat } from "@/lib/types";
@@ -110,6 +110,7 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
   const [registeredIds, setRegisteredIds] = useState<Set<string>>(new Set());
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [showForm, setShowForm] = useState(false);
 
   const gate = useMemo(() => entryFee * maxTeams, [entryFee, maxTeams]);
   const splitTotal = useMemo(() => split.reduce((a, b) => a + b, 0), [split]);
@@ -117,6 +118,16 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
 
   const updateSplitAt = (i: number, pct: number) =>
     setSplit((s) => s.map((v, idx) => (idx === i ? pct : v)));
+
+  // Close the host-a-tournament modal on Escape.
+  useEffect(() => {
+    if (!showForm) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowForm(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showForm]);
 
   const handleCreate = () => {
     setFormError(null);
@@ -180,15 +191,24 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
             <p className="eyebrow mb-4">Tournaments · प्रतियोगिता</p>
             <h2 className="font-display text-5xl tracking-tight text-ink">Silverware season</h2>
           </div>
-          <p className="max-w-xs text-sm leading-relaxed text-ink-dim">
-            Enter a cup, or run your own — set the format, the purse, and the
-            deadline, and let the valley&rsquo;s teams come to you.
-          </p>
+          <div className="flex flex-col gap-4 sm:items-end">
+            <p className="max-w-xs text-sm leading-relaxed text-ink-dim">
+              Enter a cup, or run your own — set the format, the purse, and the
+              deadline, and let the valley&rsquo;s teams come to you.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="shrink-0 border border-gold/60 px-6 py-3 font-mono text-[0.65rem] uppercase tracking-editorial text-gold transition-colors duration-300 hover:bg-gold hover:text-ink"
+            >
+              Host a tournament
+            </button>
+          </div>
         </div>
 
-        <div className="grid gap-16 lg:grid-cols-5">
+        <div>
           {/* ───────────────── Competitions ───────────────── */}
-          <div className="lg:col-span-3">
+          <div>
             <div className="mb-6 flex items-baseline justify-between border-b border-hairline-2 pb-4">
               <h3 className="font-mono text-[0.65rem] uppercase tracking-editorial text-ink-dim">
                 Open competitions
@@ -202,7 +222,7 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
               <div className="border border-dashed border-hairline-2 p-12 text-center">
                 <p className="font-display text-xl text-ink-dim">No competitions yet.</p>
                 <p className="mt-2 text-sm text-ink-faint">
-                  Be the first — the form on the right takes two minutes.
+                  Be the first — tap “Host a tournament” above; it takes two minutes.
                 </p>
               </div>
             ) : (
@@ -317,9 +337,35 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
             </AnimatePresence>
           </div>
 
-          {/* ───────────────── Host a tournament ───────────────── */}
-          <div className="lg:col-span-2">
-            <div className="border border-hairline-2 bg-surface p-8">
+          {/* ───────────────── Host a tournament (modal) ───────────────── */}
+          <AnimatePresence>
+            {showForm && (
+              <m.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-ink/40 px-6 py-10 backdrop-blur-sm"
+                onClick={() => setShowForm(false)}
+              >
+              <m.div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Host a tournament"
+                initial={{ opacity: 0, y: 24, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                transition={{ duration: 0.35, ease }}
+                className="relative w-full max-w-lg border border-hairline-2 bg-surface p-8"
+                onClick={(e) => e.stopPropagation()}
+              >
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                aria-label="Close"
+                className="absolute right-5 top-5 font-mono text-sm text-ink-faint transition-colors hover:text-ink"
+              >
+                ✕
+              </button>
               <p className="eyebrow mb-2">Host · आयोजना</p>
               <h3 className="font-display text-3xl tracking-tight text-ink">Run your own cup</h3>
 
@@ -581,8 +627,10 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
                   )}
                 </AnimatePresence>
               </div>
-            </div>
-          </div>
+              </m.div>
+              </m.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </section>

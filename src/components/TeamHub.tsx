@@ -12,7 +12,7 @@
 // Devanagari watermark.
 // ============================================================================
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { PitchBackdrop, PitchDivider } from "@/components/PitchLines";
 import type { ActionResult, Team, TeamMember } from "@/lib/types";
@@ -57,6 +57,7 @@ export default function TeamHub({
   const [formError, setFormError] = useState<string | null>(null);
   const [created, setCreated] = useState<Team | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [showCreate, setShowCreate] = useState(false);
 
   // ── Join code state ───────────────────────────────────────────────────────
   const [joinCode, setJoinCode] = useState("");
@@ -169,6 +170,16 @@ export default function TeamHub({
     setTimeout(() => setCopied(null), 1500);
   };
 
+  // Close the build-a-squad modal on Escape.
+  useEffect(() => {
+    if (!showCreate) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowCreate(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showCreate]);
+
   // If a team was just created, auto-select it
   if (created && !teams.find((t) => t.id === created.id)) {
     // Will be in the list on next render via parent state
@@ -201,10 +212,19 @@ export default function TeamHub({
               Your <em className="not-italic text-gold">squads</em>
             </h2>
           </div>
-          <p className="max-w-xs text-sm leading-relaxed text-ink-dim">
-            Build a squad, invite players by username or share a join code,
-            then register for tournaments together.
-          </p>
+          <div className="flex flex-col gap-4 sm:items-end">
+            <p className="max-w-xs text-sm leading-relaxed text-ink-dim">
+              Build a squad, invite players by username or share a join code,
+              then register for tournaments together.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="shrink-0 border border-gold/60 px-6 py-3 font-mono text-[0.65rem] uppercase tracking-editorial text-gold transition-colors duration-300 hover:bg-gold hover:text-ink"
+            >
+              Build a squad
+            </button>
+          </div>
         </div>
 
         <div className="grid gap-16 lg:grid-cols-5">
@@ -510,12 +530,39 @@ export default function TeamHub({
               )}
             </div>
 
-            {/* ── Build a squad ──────────────────────────────────── */}
-            <div className="border border-hairline-2 bg-surface p-8">
-              <p className="eyebrow mb-2">Create &middot; बनाउनुहोस्</p>
-              <h3 className="font-display text-3xl tracking-tight text-ink">Build a squad</h3>
+            {/* ── Build a squad (modal) ──────────────────────────── */}
+            <AnimatePresence>
+              {showCreate && (
+                <m.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-ink/40 px-6 py-10 backdrop-blur-sm"
+                  onClick={() => setShowCreate(false)}
+                >
+                <m.div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Build a squad"
+                  initial={{ opacity: 0, y: 24, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                  transition={{ duration: 0.35, ease }}
+                  className="relative w-full max-w-md border border-hairline-2 bg-surface p-8"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(false)}
+                  aria-label="Close"
+                  className="absolute right-5 top-5 font-mono text-sm text-ink-faint transition-colors hover:text-ink"
+                >
+                  ✕
+                </button>
+                <p className="eyebrow mb-2">Create &middot; बनाउनुहोस्</p>
+                <h3 className="font-display text-3xl tracking-tight text-ink">Build a squad</h3>
 
-              <PitchDivider className="my-7" />
+                <PitchDivider className="my-7" />
 
               <div className="space-y-6">
                 <div>
@@ -604,7 +651,10 @@ export default function TeamHub({
                   )}
                 </AnimatePresence>
               </div>
-            </div>
+                </m.div>
+                </m.div>
+              )}
+            </AnimatePresence>
 
             {/* ── Join a team ────────────────────────────────────── */}
             <div className="border border-hairline-2 bg-surface p-8">

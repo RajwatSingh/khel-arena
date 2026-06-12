@@ -26,6 +26,7 @@ const SignUpSchema = z.object({
     .regex(/^[a-z0-9_]{3,24}$/, "Username: 3–24 chars — lowercase letters, numbers, or _."),
   email: z.string().trim().email("Enter a valid email."),
   password: z.string().min(8, "Use at least 8 characters."),
+  accountType: z.enum(["player", "futsal_owner"]).default("player"),
 });
 export type SignUpInput = z.input<typeof SignUpSchema>;
 
@@ -83,6 +84,7 @@ export async function signUp(
     id: data.user.id,
     username: v.username,
     full_name: v.fullName,
+    account_type: v.accountType,
   });
   if (profileError) {
     return {

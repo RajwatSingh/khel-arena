@@ -55,6 +55,50 @@ export function PitchBackdrop() {
         initial={{ opacity: 0 }} animate={{ opacity: 0.8 }} transition={{ delay: 2.3 }} />
       <m.circle cx="1015" cy="400" r="3" fill="var(--hairline-2)" stroke="none"
         initial={{ opacity: 0 }} animate={{ opacity: 0.8 }} transition={{ delay: 2.3 }} />
+
+      {/* Match ball — drops in and bounces to rest on the center spot while
+          the groundskeeper is still chalking the lines. */}
+      <m.g
+        style={{ transformBox: "fill-box", transformOrigin: "center" }}
+        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -460 }}
+        animate={
+          reduceMotion
+            ? { opacity: 1 }
+            : { opacity: 1, y: [-460, 0, -150, 0, -55, 0, -18, 0] }
+        }
+        transition={
+          reduceMotion
+            ? { duration: 0.6, delay: 1.4 }
+            : {
+                opacity: { duration: 0.25, delay: 1.0 },
+                y: {
+                  duration: 1.6,
+                  delay: 1.0,
+                  times: [0, 0.32, 0.5, 0.64, 0.75, 0.84, 0.92, 1],
+                  ease: ["easeIn", "easeOut", "easeIn", "easeOut", "easeIn", "easeOut", "easeIn"],
+                },
+              }
+        }
+      >
+        <circle
+          cx="600" cy="400" r="20"
+          fill="var(--canvas)"
+          stroke="var(--ink)" strokeOpacity={0.85} strokeWidth={1.5}
+        />
+        {/* Center pentagon */}
+        <path
+          d="M600 393 L606.7 397.8 L604.1 405.7 L595.9 405.7 L593.3 397.8 Z"
+          fill="var(--ink)" fillOpacity={0.85} stroke="none"
+        />
+        {/* Seams radiating from the pentagon */}
+        <g stroke="var(--ink)" strokeOpacity={0.85} strokeWidth={1.2}>
+          <line x1="600" y1="393" x2="600" y2="381" />
+          <line x1="606.7" y1="397.8" x2="618" y2="394" />
+          <line x1="604.1" y1="405.7" x2="611" y2="415.5" />
+          <line x1="595.9" y1="405.7" x2="589" y2="415.5" />
+          <line x1="593.3" y1="397.8" x2="582" y2="394" />
+        </g>
+      </m.g>
     </svg>
   );
 }

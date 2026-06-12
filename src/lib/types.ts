@@ -9,10 +9,13 @@ export type PaymentProvider = "esewa" | "khalti" | "cash";
 
 export type FutsalPosition = "Goleiro" | "Fixo" | "Ala" | "Pivô" | "Universal";
 
+export type AccountType = "player" | "futsal_owner";
+
 export interface Profile {
   id: string;
   username: string;
   full_name: string;
+  account_type: AccountType;
   avatar_url: string | null;
   city: string;
   position: FutsalPosition | null;
@@ -35,15 +38,18 @@ export interface ProfileHighlight {
 
 export interface Arena {
   id: string;
+  owner_id: string;
   name: string;
   slug: string;
   area: string;
   city: string;
+  description: string | null;
   amenities: string[];
   opens_at: string; // "06:00:00"
   closes_at: string;
   rating: number | null;
   cover_url: string | null;
+  is_active: boolean;
 }
 
 export interface Court {

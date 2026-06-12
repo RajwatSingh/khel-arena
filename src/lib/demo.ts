@@ -183,6 +183,7 @@ export const DEMO_PROFILE: Profile = {
   id: "demo-user",
   username: "sajan_ktm",
   full_name: "Sajan Maharjan",
+  account_type: "player",
   avatar_url: null,
   city: "Kathmandu",
   position: "Pivô",

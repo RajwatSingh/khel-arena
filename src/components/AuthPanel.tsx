@@ -12,8 +12,14 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, m } from "framer-motion";
 import { signIn, signUp } from "@/actions/auth";
+import type { AccountType } from "@/lib/types";
 
 type Mode = "signin" | "signup";
+
+const ACCOUNT_TYPES: { value: AccountType; title: string; blurb: string }[] = [
+  { value: "player", title: "Player", blurb: "Book courts, join games, build your player card." },
+  { value: "futsal_owner", title: "Futsal owner", blurb: "List your arena, set hours and court prices." },
+];
 
 const inputClass =
   "w-full border border-hairline-2 bg-surface px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-gold focus:outline-none";
@@ -30,6 +36,7 @@ export default function AuthPanel() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [accountType, setAccountType] = useState<AccountType>("player");
 
   const switchMode = (next: Mode) => {
     setMode(next);
@@ -48,7 +55,7 @@ export default function AuthPanel() {
         else setError(res.error);
         return;
       }
-      const res = await signUp({ fullName, username, email, password });
+      const res = await signUp({ fullName, username, email, password, accountType });
       if (!res.ok) {
         setError(res.error);
         return;
@@ -73,7 +80,9 @@ export default function AuthPanel() {
         <p className="mt-4 text-sm leading-relaxed text-ink-dim">
           {mode === "signin"
             ? "Sign in to manage your bookings, teams, and player card."
-            : "Create an account to book courts and build your player card."}
+            : accountType === "futsal_owner"
+              ? "Create an owner account to list your futsal, set hours, and manage prices."
+              : "Create an account to book courts and build your player card."}
         </p>
 
         {/* Mode toggle */}
@@ -96,6 +105,45 @@ export default function AuthPanel() {
         <form onSubmit={handleSubmit} className="mt-8 space-y-6">
           {mode === "signup" && (
             <>
+              <div role="radiogroup" aria-label="Account type" className="space-y-0">
+                <span className={labelClass}>I am a…</span>
+                <div className="divide-y divide-hairline-2 border border-hairline-2">
+                  {ACCOUNT_TYPES.map((t) => {
+                    const selected = accountType === t.value;
+                    return (
+                      <button
+                        key={t.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => setAccountType(t.value)}
+                        className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors ${
+                          selected ? "bg-surface-2" : "hover:bg-surface"
+                        }`}
+                      >
+                        <span
+                          aria-hidden
+                          className={`mt-0.5 block h-3 w-3 shrink-0 rounded-full border ${
+                            selected ? "border-gold bg-gold" : "border-hairline-2"
+                          }`}
+                        />
+                        <span>
+                          <span
+                            className={`block font-mono text-[0.62rem] uppercase tracking-editorial ${
+                              selected ? "text-ink" : "text-ink-dim"
+                            }`}
+                          >
+                            {t.title}
+                          </span>
+                          <span className="mt-1 block text-xs leading-relaxed text-ink-faint">
+                            {t.blurb}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <div>
                 <label htmlFor="a-name" className={labelClass}>Full name</label>
                 <input

@@ -9,7 +9,6 @@
 // ============================================================================
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { AnimatePresence, m } from "framer-motion";
 import { PitchBackdrop, PitchDivider } from "@/components/PitchLines";
 import type { ActionResult, BookingStatus, MatchmakingPost, MyBooking } from "@/lib/types";
@@ -248,14 +247,6 @@ export default function MyBookingsHub({
 
   const visible = tab === "upcoming" ? upcoming : past;
 
-  const totalSpent = useMemo(
-    () =>
-      bookings
-        .filter((b) => b.status !== "cancelled")
-        .reduce((sum, b) => sum + b.price_npr, 0),
-    [bookings]
-  );
-
   const handleCancel = (id: string) => {
     setCancelError(null);
     startTransition(async () => {
@@ -305,9 +296,9 @@ export default function MyBookingsHub({
           </p>
         </div>
 
-        <div className="grid gap-16 lg:grid-cols-5">
-          {/* ────────────── LEFT: Booking ledger ────────────── */}
-          <div className="lg:col-span-3">
+        <div>
+          {/* ────────────── Booking ledger ────────────── */}
+          <div>
             {/* Segmented toggle */}
             <div className="mb-6 flex items-center justify-between border-b border-hairline-2 pb-4">
               <div
@@ -483,97 +474,6 @@ export default function MyBookingsHub({
                 </m.p>
               )}
             </AnimatePresence>
-          </div>
-
-          {/* ────────────── RIGHT: Summary card (sticky) ────────────── */}
-          <div className="lg:col-span-2">
-            <div className="sticky top-24">
-              <p className="eyebrow mb-4">
-                Season summary
-              </p>
-
-              <div className="relative overflow-hidden border border-hairline-2 bg-surface">
-                {/* Watermark */}
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute -right-3 -top-6 select-none font-display text-[10rem] leading-none text-ink"
-                  style={{ opacity: 0.04 }}
-                >
-                  #
-                </span>
-
-                <div className="relative p-8">
-                  <h3 className="font-display text-3xl tracking-tight text-ink">
-                    At a glance
-                  </h3>
-
-                  <PitchDivider className="my-6" />
-
-                  {/* Stats grid */}
-                  <div className="grid grid-cols-3 gap-px bg-hairline text-center">
-                    <div className="bg-surface py-4">
-                      <p className="font-display text-2xl tabular-nums text-ink">
-                        {bookings.length}
-                      </p>
-                      <p className="eyebrow mt-1">Total</p>
-                    </div>
-                    <div className="bg-surface py-4">
-                      <p className="font-display text-2xl tabular-nums text-gold">
-                        {upcoming.length}
-                      </p>
-                      <p className="eyebrow mt-1">Upcoming</p>
-                    </div>
-                    <div className="bg-surface py-4">
-                      <p className="font-display text-2xl tabular-nums text-ink">
-                        रू {NPR.format(totalSpent)}
-                      </p>
-                      <p className="eyebrow mt-1">Spent</p>
-                    </div>
-                  </div>
-
-                  {/* Upcoming next */}
-                  {upcoming.length > 0 && (
-                    <div className="mt-6">
-                      <p className="eyebrow mb-3">Next up</p>
-                      <div className="border border-hairline bg-canvas px-4 py-3">
-                        <p className="font-display text-lg tracking-tight text-ink">
-                          {upcoming[0].court_label}
-                        </p>
-                        <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-editorial text-ink-faint">
-                          {upcoming[0].arena_name} &middot;{" "}
-                          {dayFmt.format(new Date(upcoming[0].starts_at))},{" "}
-                          {timeFmt.format(new Date(upcoming[0].starts_at))}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  <PitchDivider className="my-6" />
-
-                  {/* CTAs */}
-                  <div className="space-y-4">
-                    <Link
-                      href="/book"
-                      className="group flex w-full items-center justify-center gap-3 border border-gold/60 px-6 py-4 font-mono text-[0.68rem] uppercase tracking-editorial text-gold transition-colors duration-300 hover:bg-gold hover:text-ink"
-                    >
-                      Book another slot
-                      <span
-                        aria-hidden
-                        className="transition-transform duration-300 group-hover:translate-x-1"
-                      >
-                        &rarr;
-                      </span>
-                    </Link>
-                    <Link
-                      href="/community"
-                      className="block text-center font-mono text-[0.65rem] uppercase tracking-editorial text-ink-dim underline decoration-hairline-2 underline-offset-8 transition-colors hover:text-ink"
-                    >
-                      Browse open games
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>

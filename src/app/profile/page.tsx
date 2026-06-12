@@ -31,6 +31,7 @@ export default async function ProfilePage() {
           <ArenaStudio
             arena={arenaRes.ok ? arenaRes.data.arena : null}
             courts={arenaRes.ok ? arenaRes.data.courts : []}
+            photos={arenaRes.ok ? arenaRes.data.photos : []}
           />
         </main>
       </>

@@ -175,6 +175,36 @@ export interface TeamMember {
   avatar_url: string | null;
 }
 
+/** A player's star rating + comment for an arena — one per player per arena. */
+export interface ArenaReview {
+  id: string;
+  arena_id: string;
+  user_id: string;
+  rating: number; // 1–5
+  comment: string | null;
+  created_at: string;
+  author?: Pick<Profile, "username" | "full_name" | "avatar_url"> | null;
+}
+
+/** A photo the arena's owner posted to its gallery. */
+export interface ArenaPhoto {
+  id: string;
+  arena_id: string;
+  url: string;
+  caption: string | null;
+  created_at: string;
+}
+
+/** Everything the public arena page needs in one shot. */
+export interface ArenaProfile {
+  arena: Arena;
+  courts: Court[];
+  photos: ArenaPhoto[];
+  reviews: ArenaReview[];
+  myReview: ArenaReview | null;
+  reviewCount: number;
+}
+
 /** Discriminated result type used by every server action. */
 export type ActionResult<T> =
   | { ok: true; data: T }

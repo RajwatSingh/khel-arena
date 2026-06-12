@@ -6,6 +6,10 @@
 // ============================================================================
 
 import type {
+  Arena,
+  ArenaPhoto,
+  ArenaProfile,
+  ArenaReview,
   Court,
   GridSlot,
   MatchmakingPost,
@@ -17,7 +21,7 @@ import type {
   Tournament,
 } from "@/lib/types";
 
-export const DEMO_COURTS: (Court & { arenaName: string; arenaArea: string })[] = [
+export const DEMO_COURTS: (Court & { arenaName: string; arenaArea: string; arenaSlug: string })[] = [
   {
     id: "11111111-1111-4111-8111-111111111111",
     arena_id: "a1",
@@ -27,6 +31,7 @@ export const DEMO_COURTS: (Court & { arenaName: string; arenaArea: string })[] =
     base_price: 1200,
     arenaName: "Dhuku Futsal",
     arenaArea: "Jhamsikhel",
+    arenaSlug: "dhuku-futsal",
   },
   {
     id: "22222222-2222-4222-8222-222222222222",
@@ -37,6 +42,7 @@ export const DEMO_COURTS: (Court & { arenaName: string; arenaArea: string })[] =
     base_price: 1500,
     arenaName: "Hattiban Arena",
     arenaArea: "Lalitpur",
+    arenaSlug: "hattiban-arena",
   },
   {
     id: "33333333-3333-4333-8333-333333333333",
@@ -47,6 +53,7 @@ export const DEMO_COURTS: (Court & { arenaName: string; arenaArea: string })[] =
     base_price: 2000,
     arenaName: "Baluwatar Turf",
     arenaArea: "Kathmandu",
+    arenaSlug: "baluwatar-turf",
   },
 ];
 
@@ -280,5 +287,85 @@ export const DEMO_MY_BOOKINGS: MyBooking[] = [
     starts_at: at(-7, 10), ends_at: at(-7, 11),
   },
 ];
+
+export const DEMO_ARENAS: Arena[] = [
+  {
+    id: "a1", owner_id: "o1", name: "Dhuku Futsal", slug: "dhuku-futsal",
+    area: "Jhamsikhel", city: "Lalitpur",
+    description:
+      "Jhamsikhel's neighbourhood pitch — fresh turf laid in 2024, proper floodlights, and a chiya stand that stays open until the last whistle.",
+    amenities: ["Floodlights", "Changing room", "Parking", "Chiya stand", "Bibs & balls"],
+    opens_at: "06:00:00", closes_at: "22:00:00",
+    rating: 4.6, cover_url: null, is_active: true,
+  },
+  {
+    id: "a2", owner_id: "o2", name: "Hattiban Arena", slug: "hattiban-arena",
+    area: "Hattiban", city: "Lalitpur",
+    description:
+      "The valley's biggest 7-a-side turf, ringed by pine forest. Tournament-grade pitch with seating for fifty.",
+    amenities: ["Floodlights", "Spectator stand", "Showers", "Cafeteria", "First aid"],
+    opens_at: "06:00:00", closes_at: "21:00:00",
+    rating: 4.2, cover_url: null, is_active: true,
+  },
+  {
+    id: "a3", owner_id: "o3", name: "Baluwatar Turf", slug: "baluwatar-turf",
+    area: "Baluwatar", city: "Kathmandu",
+    description:
+      "Rooftop turf in the heart of town. Quick to reach, quicker to fill — book the sunrise slots before the regulars do.",
+    amenities: ["Rooftop view", "Floodlights", "Drinking water", "Lockers"],
+    opens_at: "06:00:00", closes_at: "22:00:00",
+    rating: 3.9, cover_url: null, is_active: true,
+  },
+];
+
+/** Inline SVG placeholder so demo galleries render without external images. */
+function demoPhotoUrl(label: string, hue: number): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue},32%,24%)"/><stop offset="1" stop-color="hsl(${hue},38%,12%)"/></linearGradient></defs><rect width="800" height="600" fill="url(#g)"/><circle cx="400" cy="300" r="90" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="3"/><line x1="400" y1="0" x2="400" y2="600" stroke="rgba(255,255,255,0.25)" stroke-width="3"/><text x="400" y="560" text-anchor="middle" font-family="monospace" font-size="24" fill="rgba(255,255,255,0.55)">${label}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+export const DEMO_ARENA_PHOTOS: Record<string, ArenaPhoto[]> = {
+  a1: [
+    { id: "ph1", arena_id: "a1", url: demoPhotoUrl("DHUKU · MAIN COURT", 140), caption: "Court A under the new floodlights", created_at: new Date(Date.now() - 5 * 86400000).toISOString() },
+    { id: "ph2", arena_id: "a1", url: demoPhotoUrl("DHUKU · TURF CLOSE-UP", 95), caption: "Fresh turf, laid March 2024", created_at: new Date(Date.now() - 12 * 86400000).toISOString() },
+    { id: "ph3", arena_id: "a1", url: demoPhotoUrl("DHUKU · CHIYA STAND", 30), caption: null, created_at: new Date(Date.now() - 30 * 86400000).toISOString() },
+  ],
+  a2: [
+    { id: "ph4", arena_id: "a2", url: demoPhotoUrl("HATTIBAN · FULL PITCH", 160), caption: "7-a-side pitch from the stand", created_at: new Date(Date.now() - 3 * 86400000).toISOString() },
+    { id: "ph5", arena_id: "a2", url: demoPhotoUrl("HATTIBAN · PINES", 120), caption: "Pine forest behind the far goal", created_at: new Date(Date.now() - 20 * 86400000).toISOString() },
+  ],
+  a3: [
+    { id: "ph6", arena_id: "a3", url: demoPhotoUrl("BALUWATAR · ROOFTOP", 200), caption: "Sunrise slot, city behind", created_at: new Date(Date.now() - 8 * 86400000).toISOString() },
+  ],
+};
+
+export const DEMO_ARENA_REVIEWS: Record<string, ArenaReview[]> = {
+  a1: [
+    { id: "rv1", arena_id: "a1", user_id: "u2", rating: 5, comment: "Best turf in Jhamsikhel right now. Lights are bright enough for late games and the bounce is true.", created_at: new Date(Date.now() - 2 * 86400000).toISOString(), author: { username: "yeti_anish", full_name: "Anish Gurung", avatar_url: null } },
+    { id: "rv2", arena_id: "a1", user_id: "u3", rating: 4, comment: "Great pitch, parking gets tight after 6.", created_at: new Date(Date.now() - 9 * 86400000).toISOString(), author: { username: "prerana.s", full_name: "Prerana Shrestha", avatar_url: null } },
+    { id: "rv3", arena_id: "a1", user_id: "u4", rating: 5, comment: null, created_at: new Date(Date.now() - 15 * 86400000).toISOString(), author: { username: "ramesh_10", full_name: "Ramesh Tamang", avatar_url: null } },
+  ],
+  a2: [
+    { id: "rv4", arena_id: "a2", user_id: "u5", rating: 4, comment: "Worth the drive for the 7-a-side pitch. Showers actually have hot water.", created_at: new Date(Date.now() - 4 * 86400000).toISOString(), author: { username: "kiran.b", full_name: "Kiran Basnet", avatar_url: null } },
+    { id: "rv5", arena_id: "a2", user_id: "u6", rating: 4, comment: "Tournament weekends get crowded, weekday mornings are perfect.", created_at: new Date(Date.now() - 11 * 86400000).toISOString(), author: { username: "suman_gk", full_name: "Suman Rai", avatar_url: null } },
+  ],
+  a3: [
+    { id: "rv6", arena_id: "a3", user_id: "u2", rating: 4, comment: "Rooftop view is unbeatable at sunrise.", created_at: new Date(Date.now() - 6 * 86400000).toISOString(), author: { username: "yeti_anish", full_name: "Anish Gurung", avatar_url: null } },
+  ],
+};
+
+export function demoArenaProfile(slug: string): ArenaProfile | null {
+  const arena = DEMO_ARENAS.find((a) => a.slug === slug);
+  if (!arena) return null;
+  const reviews = DEMO_ARENA_REVIEWS[arena.id] ?? [];
+  return {
+    arena,
+    courts: DEMO_COURTS.filter((c) => c.arena_id === arena.id),
+    photos: DEMO_ARENA_PHOTOS[arena.id] ?? [],
+    reviews,
+    myReview: null,
+    reviewCount: reviews.length,
+  };
+}
 
 export const isDemoMode = () => !process.env.NEXT_PUBLIC_SUPABASE_URL;

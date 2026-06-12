@@ -15,12 +15,13 @@
 // ============================================================================
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { AnimatePresence, m } from "framer-motion";
 import { useBookingStore } from "@/stores/useBookingStore";
 import type { ActionResult, Booking, Court, GridSlot, PaymentProvider } from "@/lib/types";
 
 export interface BookingMatrixProps {
-  courts: (Court & { arenaName: string; arenaArea: string })[];
+  courts: (Court & { arenaName: string; arenaArea: string; arenaSlug: string })[];
   /** Availability for the active court + date (from get_availability_grid). */
   slots: GridSlot[];
   /** True while a fresh grid is being fetched — render skeletons, not stale slots. */
@@ -149,6 +150,18 @@ export default function BookingMatrix({
             );
           })}
         </div>
+
+        {/* Arena profile link for the active court */}
+        {activeCourt && (
+          <div className="-mt-6 mb-10 text-right">
+            <Link
+              href={`/arenas/${activeCourt.arenaSlug}`}
+              className="font-mono text-[0.62rem] uppercase tracking-editorial text-ink-dim underline decoration-hairline-2 underline-offset-8 transition-colors hover:text-gold"
+            >
+              About {activeCourt.arenaName} — photos &amp; reviews &rarr;
+            </Link>
+          </div>
+        )}
 
         {/* Date strip */}
         <div role="tablist" aria-label="Choose a date" className="mb-2 grid grid-cols-7 border-y border-hairline">

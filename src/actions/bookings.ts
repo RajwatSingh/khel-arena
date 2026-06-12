@@ -15,12 +15,12 @@ import type { ActionResult, Booking, Court, GridSlot, MyBooking } from "@/lib/ty
 
 /** Fetches all active courts with their arena info. */
 export async function getCourts(): Promise<
-  ActionResult<(Court & { arenaName: string; arenaArea: string })[]>
+  ActionResult<(Court & { arenaName: string; arenaArea: string; arenaSlug: string })[]>
 > {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("courts")
-    .select("id, arena_id, label, sport, side_count, base_price, arenas!inner(name, area)")
+    .select("id, arena_id, label, sport, side_count, base_price, arenas!inner(name, area, slug)")
     .eq("is_active", true)
     .eq("arenas.is_active", true)
     .order("label");
@@ -28,7 +28,7 @@ export async function getCourts(): Promise<
   if (error) return { ok: false, error: "Could not load courts." };
 
   const courts = (data ?? []).map((row: Record<string, unknown>) => {
-    const arena = row.arenas as { name: string; area: string };
+    const arena = row.arenas as { name: string; area: string; slug: string };
     return {
       id: row.id as string,
       arena_id: row.arena_id as string,
@@ -38,6 +38,7 @@ export async function getCourts(): Promise<
       base_price: row.base_price as number,
       arenaName: arena.name,
       arenaArea: arena.area,
+      arenaSlug: arena.slug,
     };
   });
 

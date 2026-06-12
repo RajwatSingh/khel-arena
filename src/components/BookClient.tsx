@@ -20,7 +20,7 @@ import type { ActionResult, Booking, Court, GridSlot, PaymentProvider } from "@/
 
 interface BookClientProps {
   demoMode: boolean;
-  courts: (Court & { arenaName: string; arenaArea: string })[];
+  courts: (Court & { arenaName: string; arenaArea: string; arenaSlug: string })[];
   initialSlots: GridSlot[];
 }
 

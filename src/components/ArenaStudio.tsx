@@ -8,17 +8,20 @@
 // server actions; RLS keeps owners inside their own arena.
 // ============================================================================
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { AnimatePresence, m } from "framer-motion";
 import { PitchDivider } from "@/components/PitchLines";
 import {
   addCourt,
   createArena,
+  removeArenaPhoto,
   updateArena,
   updateCourtPrice,
+  uploadArenaPhoto,
   type ArenaInput,
 } from "@/actions/arena";
-import type { Arena, Court } from "@/lib/types";
+import type { Arena, ArenaPhoto, Court } from "@/lib/types";
 
 const inputClass =
   "w-full border border-hairline-2 bg-surface px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-gold focus:outline-none";
@@ -116,12 +119,131 @@ function CourtRow({ court }: { court: Court }) {
   );
 }
 
+function PhotoManager({ initialPhotos }: { initialPhotos: ArenaPhoto[] }) {
+  const [photos, setPhotos] = useState<ArenaPhoto[]>(initialPhotos);
+  const [caption, setCaption] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setNotice(null);
+    const file = fileRef.current?.files?.[0];
+    if (!file) {
+      setError("Choose an image first.");
+      return;
+    }
+    const fd = new FormData();
+    fd.set("photo", file);
+    fd.set("caption", caption);
+    startTransition(async () => {
+      const res = await uploadArenaPhoto(fd);
+      if (res.ok) {
+        setPhotos((prev) => [res.data, ...prev]);
+        setCaption("");
+        if (fileRef.current) fileRef.current.value = "";
+        setNotice("Photo posted — it's live on your arena page.");
+      } else setError(res.error);
+    });
+  };
+
+  const handleRemove = (id: string) => {
+    setError(null);
+    setNotice(null);
+    startTransition(async () => {
+      const res = await removeArenaPhoto(id);
+      if (res.ok) setPhotos((prev) => prev.filter((p) => p.id !== id));
+      else setError(res.error);
+    });
+  };
+
+  return (
+    <>
+      <PitchDivider className="my-14" />
+
+      <h3 className="font-display text-3xl tracking-tight text-ink">Photos</h3>
+      <p className="mt-3 text-sm leading-relaxed text-ink-dim">
+        Show players the turf, the lights, the changing rooms — photos appear on
+        your public arena page.
+      </p>
+
+      {photos.length > 0 && (
+        <div className="mt-8 grid gap-4 sm:grid-cols-3">
+          {photos.map((p) => (
+            <figure key={p.id} className="group relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={p.url}
+                alt={p.caption ?? "Arena photo"}
+                className="aspect-[4/3] w-full border border-hairline object-cover"
+                loading="lazy"
+              />
+              <button
+                type="button"
+                onClick={() => handleRemove(p.id)}
+                disabled={isPending}
+                aria-label="Remove photo"
+                className="absolute right-2 top-2 border border-hairline-2 bg-canvas/90 px-2 py-1 font-mono text-[0.58rem] uppercase tracking-editorial text-ink-dim opacity-0 transition-opacity hover:border-ember hover:text-ember focus:opacity-100 group-hover:opacity-100 disabled:opacity-40"
+              >
+                Remove
+              </button>
+              {p.caption && (
+                <figcaption className="mt-1 truncate font-mono text-[0.58rem] uppercase tracking-editorial text-ink-faint">
+                  {p.caption}
+                </figcaption>
+              )}
+            </figure>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={handleUpload} className="mt-8 space-y-6">
+        <div className="grid gap-6 sm:grid-cols-2">
+          <div>
+            <label htmlFor="ph-file" className={labelClass}>Image</label>
+            <input
+              id="ph-file"
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className={`${inputClass} file:mr-4 file:border-0 file:bg-transparent file:font-mono file:text-[0.62rem] file:uppercase file:tracking-editorial file:text-gold`}
+            />
+            <p className="mt-2 font-mono text-[0.58rem] uppercase tracking-editorial text-ink-faint">
+              JPEG, PNG, or WebP — under 4 MB
+            </p>
+          </div>
+          <div>
+            <label htmlFor="ph-caption" className={labelClass}>Caption (optional)</label>
+            <input
+              id="ph-caption"
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              maxLength={120}
+              placeholder="Court A under the floodlights"
+              className={inputClass}
+            />
+          </div>
+        </div>
+        <button type="submit" disabled={isPending} className={buttonClass}>
+          {isPending ? "Uploading…" : "Post photo"}
+        </button>
+        <Feedback error={error} notice={notice} />
+      </form>
+    </>
+  );
+}
+
 export default function ArenaStudio({
   arena: initialArena,
   courts: initialCourts,
+  photos: initialPhotos = [],
 }: {
   arena: Arena | null;
   courts: Court[];
+  photos?: ArenaPhoto[];
 }) {
   const [arena, setArena] = useState<Arena | null>(initialArena);
   const [courts, setCourts] = useState<Court[]>(initialCourts);
@@ -204,6 +326,14 @@ export default function ArenaStudio({
             ? "Tune your arena profile, opening hours, and court prices. Changes go live on the booking page immediately."
             : "Set up your arena profile — players will find it on the booking page once it's live."}
         </p>
+        {arena && (
+          <Link
+            href={`/arenas/${arena.slug}`}
+            className="mt-4 inline-block font-mono text-[0.65rem] uppercase tracking-editorial text-gold underline decoration-hairline-2 underline-offset-8 transition-colors hover:text-ink"
+          >
+            View your public page &rarr;
+          </Link>
+        )}
 
         {/* Arena profile + hours */}
         <form onSubmit={handleSave} className="mt-12 space-y-6">
@@ -366,6 +496,8 @@ export default function ArenaStudio({
               </button>
               <Feedback error={courtError} notice={null} />
             </form>
+
+            <PhotoManager initialPhotos={initialPhotos} />
           </>
         )}
       </div>

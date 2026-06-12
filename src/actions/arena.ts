@@ -8,10 +8,18 @@
 // supabase/04_arena_owners.sql — only the arena's owner can touch its rows.
 // ============================================================================
 
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import type { ActionResult, Arena, Court } from "@/lib/types";
+import type {
+  ActionResult,
+  Arena,
+  ArenaPhoto,
+  ArenaProfile,
+  ArenaReview,
+  Court,
+} from "@/lib/types";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -69,7 +77,7 @@ async function requireOwner(): Promise<
 }
 
 export async function getMyArena(): Promise<
-  ActionResult<{ arena: Arena | null; courts: Court[] }>
+  ActionResult<{ arena: Arena | null; courts: Court[]; photos: ArenaPhoto[] }>
 > {
   const auth = await requireOwner();
   if (!auth.ok) return auth;
@@ -80,15 +88,25 @@ export async function getMyArena(): Promise<
     .eq("owner_id", auth.userId)
     .maybeSingle();
 
-  if (!arena) return { ok: true, data: { arena: null, courts: [] } };
+  if (!arena) return { ok: true, data: { arena: null, courts: [], photos: [] } };
 
-  const { data: courts } = await auth.supabase
-    .from("courts")
-    .select("*")
-    .eq("arena_id", arena.id)
-    .order("label");
+  const [{ data: courts }, { data: photos }] = await Promise.all([
+    auth.supabase.from("courts").select("*").eq("arena_id", arena.id).order("label"),
+    auth.supabase
+      .from("arena_photos")
+      .select("*")
+      .eq("arena_id", arena.id)
+      .order("created_at", { ascending: false }),
+  ]);
 
-  return { ok: true, data: { arena: arena as Arena, courts: (courts ?? []) as Court[] } };
+  return {
+    ok: true,
+    data: {
+      arena: arena as Arena,
+      courts: (courts ?? []) as Court[],
+      photos: (photos ?? []) as ArenaPhoto[],
+    },
+  };
 }
 
 export async function createArena(input: ArenaInput): Promise<ActionResult<Arena>> {
@@ -224,5 +242,176 @@ export async function updateCourtPrice(
   if (error) return { ok: false, error: "Could not update the price." };
   revalidatePath("/profile");
   revalidatePath("/book");
+  return { ok: true, data: null };
+}
+
+// ============================================================================
+// Public arena profiles, reviews & photos — supabase/07_arena_reviews_photos.sql
+// ============================================================================
+
+const PHOTO_BUCKET = "arena-photos";
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_PHOTO_BYTES = 4 * 1024 * 1024;
+
+/** Everything the public /arenas/[slug] page needs, in one call. */
+export async function getArenaProfile(slug: string): Promise<ActionResult<ArenaProfile>> {
+  const supabase = await createClient();
+
+  const { data: arena } = await supabase
+    .from("arenas")
+    .select("*")
+    .eq("slug", slug)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!arena) return { ok: false, error: "Arena not found.", code: "NOT_FOUND" };
+
+  const [{ data: courts }, { data: photos }, { data: reviews }, { data: auth }] =
+    await Promise.all([
+      supabase.from("courts").select("*").eq("arena_id", arena.id).order("label"),
+      supabase
+        .from("arena_photos")
+        .select("*")
+        .eq("arena_id", arena.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("arena_reviews")
+        .select("*, author:profiles(username, full_name, avatar_url)")
+        .eq("arena_id", arena.id)
+        .order("created_at", { ascending: false })
+        .limit(50),
+      supabase.auth.getUser(),
+    ]);
+
+  const all = (reviews ?? []) as ArenaReview[];
+  const myReview = auth.user ? (all.find((r) => r.user_id === auth.user!.id) ?? null) : null;
+
+  return {
+    ok: true,
+    data: {
+      arena: arena as Arena,
+      courts: (courts ?? []) as Court[],
+      photos: (photos ?? []) as ArenaPhoto[],
+      reviews: all,
+      myReview,
+      reviewCount: all.length,
+    },
+  };
+}
+
+const ReviewSchema = z.object({
+  arenaId: z.string().uuid(),
+  slug: z.string().min(1),
+  rating: z.number().int().min(1, "Pick a star rating.").max(5),
+  comment: z.string().trim().max(500, "Keep your review under 500 characters.").nullable(),
+});
+export type ReviewInput = z.input<typeof ReviewSchema>;
+
+/** Inserts or replaces the signed-in player's review (one per arena). */
+export async function submitReview(input: ReviewInput): Promise<ActionResult<ArenaReview>> {
+  const parsed = ReviewSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0].message, code: "VALIDATION" };
+  }
+  const v = parsed.data;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in to leave a review.", code: "AUTH_REQUIRED" };
+
+  const { data, error } = await supabase
+    .from("arena_reviews")
+    .upsert(
+      {
+        arena_id: v.arenaId,
+        user_id: user.id,
+        rating: v.rating,
+        comment: v.comment || null,
+      },
+      { onConflict: "arena_id,user_id" }
+    )
+    .select("*, author:profiles(username, full_name, avatar_url)")
+    .single();
+
+  if (error || !data) {
+    // RLS blocks owners from reviewing their own arena.
+    return { ok: false, error: "Could not save your review." };
+  }
+  revalidatePath(`/arenas/${v.slug}`);
+  return { ok: true, data: data as ArenaReview };
+}
+
+/** Owner posts a photo to their arena's gallery. Field name: "photo". */
+export async function uploadArenaPhoto(
+  formData: FormData
+): Promise<ActionResult<ArenaPhoto>> {
+  const file = formData.get("photo");
+  const caption = String(formData.get("caption") ?? "").trim().slice(0, 120) || null;
+  if (!(file instanceof File)) return { ok: false, error: "Choose an image first." };
+  if (!PHOTO_TYPES.includes(file.type))
+    return { ok: false, error: "Use a JPEG, PNG, or WebP image." };
+  if (file.size > MAX_PHOTO_BYTES) return { ok: false, error: "Keep the image under 4 MB." };
+
+  const auth = await requireOwner();
+  if (!auth.ok) return auth;
+
+  const { data: arena } = await auth.supabase
+    .from("arenas")
+    .select("id, slug")
+    .eq("owner_id", auth.userId)
+    .maybeSingle();
+  if (!arena) return { ok: false, error: "Create your arena profile first." };
+
+  const ext = file.type.split("/")[1];
+  const path = `${arena.id}/${randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await auth.supabase.storage
+    .from(PHOTO_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: false });
+  if (uploadError) return { ok: false, error: "Upload failed. Try a different image." };
+
+  const {
+    data: { publicUrl },
+  } = auth.supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+
+  const { data, error } = await auth.supabase
+    .from("arena_photos")
+    .insert({ arena_id: arena.id, url: publicUrl, caption })
+    .select()
+    .single();
+  if (error || !data) return { ok: false, error: "Could not save the photo." };
+
+  revalidatePath("/profile");
+  revalidatePath(`/arenas/${arena.slug}`);
+  return { ok: true, data: data as ArenaPhoto };
+}
+
+export async function removeArenaPhoto(photoId: string): Promise<ActionResult<null>> {
+  const auth = await requireOwner();
+  if (!auth.ok) return auth;
+
+  // RLS limits the delete to photos of the owner's own arena.
+  const { data: photo } = await auth.supabase
+    .from("arena_photos")
+    .delete()
+    .eq("id", photoId)
+    .select("url, arenas(slug)")
+    .maybeSingle();
+  if (!photo) return { ok: false, error: "Could not remove the photo." };
+
+  // Best-effort cleanup of the storage object behind the public URL.
+  const marker = `/${PHOTO_BUCKET}/`;
+  const idx = photo.url.indexOf(marker);
+  if (idx !== -1) {
+    await auth.supabase.storage
+      .from(PHOTO_BUCKET)
+      .remove([photo.url.slice(idx + marker.length)]);
+  }
+
+  revalidatePath("/profile");
+  const arenaJoin = photo.arenas as { slug: string } | { slug: string }[] | null;
+  const slug = Array.isArray(arenaJoin) ? arenaJoin[0]?.slug : arenaJoin?.slug;
+  if (slug) revalidatePath(`/arenas/${slug}`);
   return { ok: true, data: null };
 }

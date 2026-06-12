@@ -12,9 +12,10 @@ import type { ActionResult, MatchmakingCall, MatchmakingPost } from "@/lib/types
 const ToggleSchema = z.object({
   bookingId: z.string().uuid(),
   open: z.boolean(),
-  neededPlayers: z.number().int().min(1).max(10).default(2),
+  neededPlayers: z.number().int().min(1).max(15).default(2),
   title: z.string().min(4).max(120).optional(),
   skill: z.enum(["casual", "intermediate", "competitive", "semi_pro"]).default("casual"),
+  description: z.string().trim().max(280).optional(),
 });
 
 /**
@@ -29,7 +30,7 @@ export async function toggleMatchmakingSlot(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0].message, code: "VALIDATION" };
   }
-  const { bookingId, open, neededPlayers, title, skill } = parsed.data;
+  const { bookingId, open, neededPlayers, title, skill, description } = parsed.data;
 
   const supabase = await createClient();
   const {
@@ -43,6 +44,7 @@ export async function toggleMatchmakingSlot(
     p_needed_players: neededPlayers,
     p_title: title ?? null,
     p_skill: skill,
+    p_description: description || null,
   });
 
   if (error) {
@@ -64,6 +66,7 @@ export async function getMatchmakingFeed(): Promise<ActionResult<MatchmakingPost
     .from("matchmaking_posts")
     .select(
       `id, title, needed_players, filled_players, skill, starts_at, status, booking_id,
+       description,
        author:profiles!author_id (username, full_name, avatar_url, community_score),
        arena:arenas!arena_id (name, area)`
     )
@@ -129,7 +132,7 @@ export async function getMyCalls(): Promise<ActionResult<MatchmakingCall[]>> {
     .from("matchmaking_posts")
     .select(
       `id, author_id, booking_id, arena_id, title, needed_players, filled_players,
-       skill, starts_at, status,
+       skill, starts_at, status, description,
        arena:arenas!arena_id (name, area),
        responses:matchmaking_responses (
          user_id, message, accepted, created_at,

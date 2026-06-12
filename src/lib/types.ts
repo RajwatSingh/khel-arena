@@ -95,6 +95,8 @@ export interface MatchmakingPost {
   skill: SkillTier;
   starts_at: string;
   status: MatchmakingStatus;
+  /** Author's note on how the game will run, incl. wanted positions. */
+  description?: string | null;
   // hydrated joins for the feed
   author?: Pick<Profile, "username" | "full_name" | "avatar_url" | "community_score">;
   arena?: Pick<Arena, "name" | "area">;

@@ -329,6 +329,11 @@ export default function CommunityHub({
                           <span className="mx-3 text-hairline-2">|</span>
                           {SKILL_LABEL[post.skill]}
                         </p>
+                        {post.description && (
+                          <p className="mt-3 max-w-md text-sm leading-relaxed text-ink-dim">
+                            {post.description}
+                          </p>
+                        )}
                         {post.author && (
                           <p className="mt-2 text-xs text-ink-dim">
                             Posted by <span className="text-ink">@{post.author.username}</span>

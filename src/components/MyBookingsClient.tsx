@@ -51,6 +51,7 @@ export default function MyBookingsClient({
     neededPlayers?: number;
     title?: string;
     skill?: string;
+    description?: string;
   }): Promise<ActionResult<MatchmakingPost>> => {
     if (demoMode) {
       await new Promise((r) => setTimeout(r, 400));
@@ -72,6 +73,7 @@ export default function MyBookingsClient({
           skill: (input.skill as "casual") ?? "casual",
           starts_at: new Date().toISOString(),
           status: input.open ? "open" : "filled",
+          description: input.description ?? null,
         },
       };
     }
@@ -81,6 +83,7 @@ export default function MyBookingsClient({
       neededPlayers: input.neededPlayers ?? 2,
       title: input.title,
       skill: (input.skill as "casual") ?? "casual",
+      description: input.description,
     });
     if (res.ok) {
       setList((prev) =>

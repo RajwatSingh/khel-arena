@@ -8,7 +8,7 @@
 // book-another CTA, and community link.
 // ============================================================================
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { AnimatePresence, m } from "framer-motion";
 import { PitchBackdrop, PitchDivider } from "@/components/PitchLines";
@@ -23,6 +23,7 @@ export interface MyBookingsHubProps {
     neededPlayers?: number;
     title?: string;
     skill?: string;
+    description?: string;
   }) => Promise<ActionResult<MatchmakingPost>>;
 }
 
@@ -49,6 +50,166 @@ const STATUS_STYLE: Record<BookingStatus, { label: string; color: string }> = {
 };
 
 const ease = [0.22, 1, 0.36, 1] as const;
+
+/** Modal card: players needed + a note on the game — then the slot goes live. */
+function OpenSlotDialog({
+  booking,
+  onClose,
+  onConfirm,
+}: {
+  booking: MyBooking;
+  onClose: () => void;
+  onConfirm: MyBookingsHubProps["onToggleCommunity"];
+}) {
+  const [count, setCount] = useState(2);
+  const [description, setDescription] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const submit = () => {
+    setError(null);
+    const plural = count > 1 ? "s" : "";
+    const title = `Need ${count} player${plural} at ${booking.arena_name} — come play`;
+    startTransition(async () => {
+      const res = await onConfirm({
+        bookingId: booking.id,
+        open: true,
+        neededPlayers: count,
+        title,
+        skill: "casual",
+        description: description.trim() || undefined,
+      });
+      if (res.ok) onClose();
+      else setError(res.error);
+    });
+  };
+
+  return (
+    <m.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 px-6 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <m.div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Open this slot to the community"
+        initial={{ opacity: 0, y: 24, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        transition={{ duration: 0.35, ease }}
+        className="grain relative w-full max-w-md border border-hairline-2 bg-canvas p-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Watermark */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -right-2 -top-8 select-none font-display text-[7rem] leading-none text-ink"
+          style={{ opacity: 0.05 }}
+        >
+          खेल
+        </span>
+
+        <p className="eyebrow mb-3">Community &middot; समुदाय</p>
+        <h3 className="font-display text-3xl tracking-tight text-ink">Open this slot</h3>
+        <p className="mt-2 font-mono text-[0.62rem] uppercase tracking-editorial text-ink-faint">
+          {booking.arena_name} &middot; {booking.court_label}
+          <span className="mx-2 text-hairline-2">|</span>
+          {dayFmt.format(new Date(booking.starts_at))},{" "}
+          {timeFmt.format(new Date(booking.starts_at))}
+        </p>
+
+        <PitchDivider className="my-6" />
+
+        <p className="eyebrow mb-3">Players needed</p>
+        <div
+          role="radiogroup"
+          aria-label="Players needed"
+          className="grid grid-cols-5 gap-px bg-hairline"
+        >
+          {Array.from({ length: 15 }, (_, i) => i + 1).map((n) => (
+            <button
+              key={n}
+              type="button"
+              role="radio"
+              aria-checked={count === n}
+              onClick={() => setCount(n)}
+              className={`py-2.5 font-display text-lg tabular-nums transition-colors duration-200 ${
+                count === n
+                  ? "bg-gold text-ink"
+                  : "bg-surface text-ink-dim hover:bg-surface-2 hover:text-ink"
+              }`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+
+        <p className="eyebrow mb-3 mt-7">How will the game be?</p>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          maxLength={280}
+          rows={4}
+          placeholder="Friendly 5-a-side, rolling subs, bring both bibs. Looking for a goleiro and two alas…"
+          className="w-full resize-none border border-hairline-2 bg-surface px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-gold focus:outline-none"
+        />
+        <p className="mt-2 font-mono text-[0.55rem] uppercase tracking-editorial text-ink-faint">
+          Mention the positions you need — keeper, fixo, ala, pivô
+        </p>
+
+        <PitchDivider className="my-6" />
+
+        <button
+          type="button"
+          onClick={submit}
+          disabled={isPending}
+          className="group flex w-full items-center justify-center gap-3 border border-gold/60 px-6 py-4 font-mono text-[0.68rem] uppercase tracking-editorial text-gold transition-colors duration-300 hover:bg-gold hover:text-ink disabled:opacity-50"
+        >
+          {isPending ? "Posting…" : "Post to the community"}
+          <span
+            aria-hidden
+            className="transition-transform duration-300 group-hover:translate-x-1"
+          >
+            &rarr;
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-4 block w-full text-center font-mono text-[0.62rem] uppercase tracking-editorial text-ink-faint underline decoration-hairline-2 underline-offset-8 transition-colors hover:text-ink"
+        >
+          Never mind
+        </button>
+
+        <AnimatePresence>
+          {error && (
+            <m.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              role="alert"
+              className="mt-4 font-mono text-xs text-ember"
+            >
+              {error}
+            </m.p>
+          )}
+        </AnimatePresence>
+      </m.div>
+    </m.div>
+  );
+}
+
 const rowAnim = {
   hidden: { opacity: 0, y: 14 },
   show: (i: number) => ({
@@ -66,6 +227,7 @@ export default function MyBookingsHub({
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
   const [isPending, startTransition] = useTransition();
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [dialogBooking, setDialogBooking] = useState<MyBooking | null>(null);
 
   const now = useMemo(() => new Date().toISOString(), []);
 
@@ -103,14 +265,13 @@ export default function MyBookingsHub({
   };
 
   const handleToggleCommunity = (b: MyBooking) => {
+    if (!b.open_to_join) {
+      // Opening asks for details first — the dialog posts to the board.
+      setDialogBooking(b);
+      return;
+    }
     startTransition(async () => {
-      await onToggleCommunity({
-        bookingId: b.id,
-        open: !b.open_to_join,
-        neededPlayers: 2,
-        title: `Open slot at ${b.arena_name} — come play`,
-        skill: "casual",
-      });
+      await onToggleCommunity({ bookingId: b.id, open: false });
     });
   };
 
@@ -416,6 +577,16 @@ export default function MyBookingsHub({
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {dialogBooking && (
+          <OpenSlotDialog
+            booking={dialogBooking}
+            onClose={() => setDialogBooking(null)}
+            onConfirm={onToggleCommunity}
+          />
+        )}
+      </AnimatePresence>
     </section>
   );
 }

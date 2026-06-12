@@ -114,6 +114,8 @@ export const DEMO_POSTS: MatchmakingPost[] = [
     skill: "intermediate",
     starts_at: at(0, 19),
     status: "open",
+    description:
+      "Friendly but quick 5-a-side — rolling subs, first to 10 wins the set. Bibs and ball provided, just bring water.",
     author: { username: "sajan_ktm", full_name: "Sajan Maharjan", avatar_url: null, community_score: 87 },
     arena: { name: "Dhuku Futsal", area: "Jhamsikhel" },
   },

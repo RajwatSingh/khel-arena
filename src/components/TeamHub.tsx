@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { AnimatePresence, m } from "framer-motion";
+import AvatarImage from "@/components/AvatarImage";
 import { PitchBackdrop, PitchDivider } from "@/components/PitchLines";
 import type { ActionResult, Team, TeamMember } from "@/lib/types";
 import type { CreateTeamInput } from "@/actions/teams";
@@ -336,10 +337,9 @@ export default function TeamHub({
                                     {/* Avatar circle */}
                                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-hairline-2 bg-surface-2">
                                       {member.avatar_url ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img
+                                        <AvatarImage
                                           src={member.avatar_url}
-                                          alt=""
+                                          size={32}
                                           className="h-full w-full rounded-full object-cover"
                                         />
                                       ) : (

@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import AvatarImage from "@/components/AvatarImage";
 import { getNavIdentity, type NavIdentity } from "@/actions/profile";
 
 const LINKS = [
@@ -27,10 +28,9 @@ function ProfileAvatar({ identity, active }: { identity: NavIdentity | null; act
 
   if (identity?.avatarUrl) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
+      <AvatarImage
         src={identity.avatarUrl}
-        alt=""
+        size={28}
         className={`h-7 w-7 rounded-full border object-cover transition-colors ${ring}`}
       />
     );

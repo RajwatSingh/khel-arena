@@ -11,6 +11,7 @@
 import { useRef, useState, useTransition } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import FutsalPitchPicker from "@/components/FutsalPitchPicker";
+import AvatarImage from "@/components/AvatarImage";
 import { PitchDivider } from "@/components/PitchLines";
 import type {
   ActionResult,
@@ -215,8 +216,7 @@ export default function ProfileStudio({
                   <div className="flex items-center gap-5">
                     <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full border border-hairline-2 bg-surface-2">
                       {avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                        <AvatarImage src={avatarUrl} size={80} className="h-full w-full object-cover" />
                       ) : (
                         <span className="flex h-full w-full items-center justify-center font-display text-2xl text-ink-faint">
                           {initials || "—"}
@@ -310,8 +310,7 @@ export default function ProfileStudio({
               <div className="flex items-center gap-5">
                 <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border border-hairline-2 bg-surface-2">
                   {avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                    <AvatarImage src={avatarUrl} size={64} className="h-full w-full object-cover" />
                   ) : (
                     <span className="flex h-full w-full items-center justify-center font-display text-xl text-ink-faint">
                       {initials || "—"}

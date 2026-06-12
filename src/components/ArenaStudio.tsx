@@ -10,6 +10,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { AnimatePresence, m } from "framer-motion";
 import { PitchDivider } from "@/components/PitchLines";
 import {
@@ -174,13 +175,15 @@ function PhotoManager({ initialPhotos }: { initialPhotos: ArenaPhoto[] }) {
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
           {photos.map((p) => (
             <figure key={p.id} className="group relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={p.url}
-                alt={p.caption ?? "Arena photo"}
-                className="aspect-[4/3] w-full border border-hairline object-cover"
-                loading="lazy"
-              />
+              <div className="relative aspect-[4/3] w-full overflow-hidden border border-hairline">
+                <Image
+                  src={p.url}
+                  alt={p.caption ?? "Arena photo"}
+                  fill
+                  sizes="(min-width: 640px) 33vw, 100vw"
+                  className="object-cover"
+                />
+              </div>
               <button
                 type="button"
                 onClick={() => handleRemove(p.id)}

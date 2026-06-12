@@ -9,6 +9,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { AnimatePresence, m } from "framer-motion";
 import { PitchBackdrop, PitchDivider } from "@/components/PitchLines";
 import { submitReview } from "@/actions/arena";
@@ -208,13 +209,15 @@ export default function ArenaShowcase({
                     viewport={{ once: true, margin: "-60px" }}
                     className={i === 0 ? "sm:col-span-2" : undefined}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={p.url}
-                      alt={p.caption ?? `${arena.name} photo`}
-                      className="aspect-[4/3] w-full border border-hairline object-cover sm:aspect-[16/9]"
-                      loading="lazy"
-                    />
+                    <div className="relative aspect-[4/3] w-full overflow-hidden border border-hairline sm:aspect-[16/9]">
+                      <Image
+                        src={p.url}
+                        alt={p.caption ?? `${arena.name} photo`}
+                        fill
+                        sizes={i === 0 ? "100vw" : "(min-width: 640px) 50vw, 100vw"}
+                        className="object-cover"
+                      />
+                    </div>
                     {p.caption && (
                       <figcaption className="mt-2 font-mono text-[0.62rem] uppercase tracking-editorial text-ink-faint">
                         {p.caption}

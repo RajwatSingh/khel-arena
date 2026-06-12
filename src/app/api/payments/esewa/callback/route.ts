@@ -28,6 +28,28 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient();
 
+  // Look up our intent so the amount can be cross-checked before we trust it.
+  const { data: intent } = await admin
+    .from("payments")
+    .select("transaction_uuid, amount_npr")
+    .eq("transaction_uuid", result.transactionUuid)
+    .single();
+
+  if (!intent) return confirmation(req, { status: "failed", provider: "esewa" });
+
+  // Reject a tampered or partial payment: what eSewa confirms must match the
+  // amount we created the intent for.
+  const amountMatches =
+    typeof result.amountNpr !== "number" || result.amountNpr === intent.amount_npr;
+  if (!amountMatches) {
+    await admin
+      .from("payments")
+      .update({ status: "failed", raw_response: result.raw ?? null })
+      .eq("transaction_uuid", intent.transaction_uuid)
+      .eq("status", "initiated");
+    return confirmation(req, { status: "failed", provider: "esewa" });
+  }
+
   // Idempotent: a replayed callback finds the row already verified.
   const { data: payment } = await admin
     .from("payments")

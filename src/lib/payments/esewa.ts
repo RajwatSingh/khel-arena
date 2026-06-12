@@ -67,7 +67,16 @@ export interface EsewaCallbackResult {
   verified: boolean;
   transactionUuid?: string;
   providerRef?: string;
+  /** Amount eSewa confirms was paid, in NPR — cross-check against the intent. */
+  amountNpr?: number;
   raw?: unknown;
+}
+
+/** eSewa returns total_amount as a string, sometimes like "1,000.0". */
+function parseAmount(value: unknown): number | undefined {
+  if (value == null) return undefined;
+  const n = Number(String(value).replace(/,/g, ""));
+  return Number.isFinite(n) ? Math.round(n) : undefined;
 }
 
 /** Verifies the base64 payload eSewa appends to the success redirect. */
@@ -99,6 +108,7 @@ export async function verifyEsewaCallback(encodedData: string): Promise<EsewaCal
     verified: status.status === "COMPLETE",
     transactionUuid: payload.transaction_uuid,
     providerRef: status.ref_id ?? payload.transaction_code,
+    amountNpr: parseAmount(status.total_amount ?? payload.total_amount),
     raw: status,
   };
 }

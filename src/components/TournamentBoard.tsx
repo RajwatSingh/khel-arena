@@ -99,6 +99,7 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
   const [entryFee, setEntryFee] = useState(3000);
   const [prizePool, setPrizePool] = useState(50000);
   const [split, setSplit] = useState<number[]>([60, 30, 10]);
+  const [customSplit, setCustomSplit] = useState(false);
   const [skill, setSkill] = useState<SkillTier>("casual");
   const [startsOn, setStartsOn] = useState("");
   const [registerBy, setRegisterBy] = useState("");
@@ -111,11 +112,19 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
   const [isPending, startTransition] = useTransition();
 
   const gate = useMemo(() => entryFee * maxTeams, [entryFee, maxTeams]);
+  const splitTotal = useMemo(() => split.reduce((a, b) => a + b, 0), [split]);
   const placeLabels = ["Champion", "Runner-up", "Third place", "Fourth place"];
+
+  const updateSplitAt = (i: number, pct: number) =>
+    setSplit((s) => s.map((v, idx) => (idx === i ? pct : v)));
 
   const handleCreate = () => {
     setFormError(null);
     setCreated(null);
+    if (splitTotal !== 100) {
+      setFormError("Prize split must add up to 100%.");
+      return;
+    }
     startTransition(async () => {
       const res = await onCreate({
         name,
@@ -397,13 +406,74 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
                   <span className={labelClass}>Prize split</span>
                   <Segmented
                     label="Prize split"
-                    value={split.join("/")}
-                    onChange={(v) => setSplit(v.split("/").map(Number))}
-                    options={SPLIT_PRESETS.map((p) => ({
-                      value: p.split.join("/"),
-                      label: p.label,
-                    }))}
+                    value={customSplit ? "custom" : split.join("/")}
+                    onChange={(v) => {
+                      if (v === "custom") {
+                        setCustomSplit(true);
+                      } else {
+                        setCustomSplit(false);
+                        setSplit(v.split("/").map(Number));
+                      }
+                    }}
+                    options={[
+                      ...SPLIT_PRESETS.map((p) => ({
+                        value: p.split.join("/"),
+                        label: p.label,
+                      })),
+                      { value: "custom", label: "Custom" },
+                    ]}
                   />
+
+                  {/* Custom split editor — one % per place, must total 100 */}
+                  {customSplit && (
+                    <div className="mt-3 space-y-3 border border-hairline-2 bg-canvas p-4">
+                      {split.map((pct, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="w-24 shrink-0 font-mono text-[0.6rem] uppercase tracking-editorial text-ink-dim">
+                            {placeLabels[i] ?? `Place ${i + 1}`}
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={pct}
+                            onChange={(e) => updateSplitAt(i, Number(e.target.value))}
+                            aria-label={`${placeLabels[i] ?? `Place ${i + 1}`} percentage`}
+                            className={`${inputClass} flex-1`}
+                          />
+                          <span className="font-mono text-xs text-ink-faint">%</span>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between pt-1">
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSplit((s) => [...s, 0])}
+                            disabled={split.length >= 4}
+                            className="border border-hairline-2 px-3 py-1.5 font-mono text-[0.56rem] uppercase tracking-editorial text-ink-dim transition-colors hover:border-gold hover:text-gold disabled:opacity-40"
+                          >
+                            Add place
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSplit((s) => (s.length > 1 ? s.slice(0, -1) : s))}
+                            disabled={split.length <= 1}
+                            className="border border-hairline-2 px-3 py-1.5 font-mono text-[0.56rem] uppercase tracking-editorial text-ink-dim transition-colors hover:border-ember hover:text-ember disabled:opacity-40"
+                          >
+                            Remove last
+                          </button>
+                        </div>
+                        <span
+                          className={`font-mono text-xs tabular-nums ${
+                            splitTotal === 100 ? "text-sage" : "text-ember"
+                          }`}
+                        >
+                          Total {splitTotal}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Live purse preview */}
                   <ul className="mt-3 space-y-1">
                     {split.map((pct, i) => (

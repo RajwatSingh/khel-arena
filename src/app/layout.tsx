@@ -35,7 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               Khel<span className="text-gold">.</span>
             </p>
             <p className="font-mono text-[0.62rem] uppercase tracking-editorial text-ink-faint">
-              Kathmandu Valley · eSewa &amp; Khalti accepted
+              Created by Rajwat &middot; June 2026
             </p>
           </div>
         </footer>

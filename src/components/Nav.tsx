@@ -106,13 +106,6 @@ export default function Nav() {
               </Link>
             );
           })}
-          <span className="hidden items-center gap-2 text-sage sm:flex">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute h-full w-full animate-ping rounded-full bg-sage opacity-60" />
-              <span className="h-1.5 w-1.5 rounded-full bg-sage" />
-            </span>
-            Kathmandu · Live
-          </span>
           <Link
             href="/profile"
             aria-label="Profile"

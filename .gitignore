@@ -33,3 +33,7 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code local settings (personal/local; shared .claude/settings.json may be committed)
+.claude/settings.local.json
+**/.claude/settings.local.json

@@ -100,6 +100,20 @@ export interface MatchmakingPost {
   arena?: Pick<Arena, "name" | "area">;
 }
 
+/** A player's request to join a call — pending (accepted=false) or accepted. */
+export interface MatchmakingResponse {
+  user_id: string;
+  message: string | null;
+  accepted: boolean;
+  created_at: string;
+  responder?: Pick<Profile, "username" | "full_name" | "avatar_url" | "community_score"> | null;
+}
+
+/** One of the author's own calls, with its join requests — for the manage view. */
+export interface MatchmakingCall extends MatchmakingPost {
+  responses: MatchmakingResponse[];
+}
+
 export type TournamentFormat = "knockout" | "league" | "group_knockout";
 export type TournamentStatus = "open" | "full" | "ongoing" | "completed" | "cancelled";
 

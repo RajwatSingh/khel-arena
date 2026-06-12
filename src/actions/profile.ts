@@ -10,7 +10,34 @@ import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { DEMO_PROFILE, isDemoMode } from "@/lib/demo";
 import type { ActionResult, Profile, ProfileHighlight } from "@/lib/types";
+
+export interface NavIdentity {
+  username: string;
+  avatarUrl: string | null;
+}
+
+/** Lightweight identity for the nav avatar — null when signed out. */
+export async function getNavIdentity(): Promise<NavIdentity | null> {
+  if (isDemoMode()) {
+    return { username: DEMO_PROFILE.username, avatarUrl: DEMO_PROFILE.avatar_url };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("username, avatar_url")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!data) return null;
+  return { username: data.username, avatarUrl: data.avatar_url };
+}
 
 const UpdateProfileSchema = z.object({
   fullName: z.string().min(2, "Tell us your name.").max(60),

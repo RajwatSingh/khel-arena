@@ -43,7 +43,7 @@ export default function HeroSection() {
     <section className="grain relative min-h-[calc(100svh-57px)] overflow-hidden bg-canvas">
       {/* The court itself, chalked in hairlines — halfway line, center
           circle, penalty arcs. The page opens standing on the pitch. */}
-      <PitchBackdrop />
+      <PitchBackdrop withBall />
 
       {/* Devanagari watermark */}
       <m.span

@@ -14,7 +14,7 @@ import { m, useReducedMotion } from "framer-motion";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
-export function PitchBackdrop() {
+export function PitchBackdrop({ withBall = false }: { withBall?: boolean }) {
   const reduceMotion = useReducedMotion();
   const draw = (delay: number) => ({
     initial: { pathLength: reduceMotion ? 1 : 0, opacity: 0 },
@@ -57,7 +57,8 @@ export function PitchBackdrop() {
         initial={{ opacity: 0 }} animate={{ opacity: 0.8 }} transition={{ delay: 2.3 }} />
 
       {/* Match ball — drops in and bounces to rest on the center spot while
-          the groundskeeper is still chalking the lines. */}
+          the groundskeeper is still chalking the lines. Homepage hero only. */}
+      {withBall && (
       <m.g
         style={{ transformBox: "fill-box", transformOrigin: "center" }}
         initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -460 }}
@@ -99,6 +100,7 @@ export function PitchBackdrop() {
           <line x1="593.3" y1="397.8" x2="582" y2="394" />
         </g>
       </m.g>
+      )}
     </svg>
   );
 }

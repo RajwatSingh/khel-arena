@@ -6,6 +6,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "@/actions/auth";
+import { AUTH_EVENT } from "@/components/Nav";
 
 export default function AccountBar({ username }: { username: string }) {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function AccountBar({ username }: { username: string }) {
   const handleSignOut = () =>
     startTransition(async () => {
       await signOut();
+      window.dispatchEvent(new Event(AUTH_EVENT));
       router.refresh();
     });
 

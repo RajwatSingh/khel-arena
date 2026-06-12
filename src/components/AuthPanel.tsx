@@ -12,6 +12,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, m } from "framer-motion";
 import { signIn, signUp } from "@/actions/auth";
+import { AUTH_EVENT } from "@/components/Nav";
 import type { AccountType } from "@/lib/types";
 
 type Mode = "signin" | "signup";
@@ -51,8 +52,10 @@ export default function AuthPanel() {
     startTransition(async () => {
       if (mode === "signin") {
         const res = await signIn({ email, password });
-        if (res.ok) router.refresh();
-        else setError(res.error);
+        if (res.ok) {
+          window.dispatchEvent(new Event(AUTH_EVENT));
+          router.refresh();
+        } else setError(res.error);
         return;
       }
       const res = await signUp({ fullName, username, email, password, accountType });
@@ -65,6 +68,7 @@ export default function AuthPanel() {
         setMode("signin");
         setPassword("");
       } else {
+        window.dispatchEvent(new Event(AUTH_EVENT));
         router.refresh();
       }
     });

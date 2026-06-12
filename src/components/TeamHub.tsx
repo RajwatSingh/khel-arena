@@ -12,7 +12,7 @@
 // Devanagari watermark.
 // ============================================================================
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { PitchBackdrop, PitchDivider } from "@/components/PitchLines";
 import type { ActionResult, Team, TeamMember } from "@/lib/types";
@@ -33,14 +33,6 @@ const inputClass =
 const labelClass = "eyebrow mb-2 block";
 
 const ease = [0.22, 1, 0.36, 1] as const;
-const rowAnim = {
-  hidden: { opacity: 0, y: 14 },
-  show: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.55, ease, delay: i * 0.07 },
-  }),
-};
 
 export default function TeamHub({
   teams,
@@ -179,6 +171,25 @@ export default function TeamHub({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [showCreate]);
+
+  // Team picker dropdown: close on outside click or Escape.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   // If a team was just created, auto-select it
   if (created && !teams.find((t) => t.id === created.id)) {
@@ -456,77 +467,90 @@ export default function TeamHub({
                 <div className="border border-dashed border-hairline-2 p-12 text-center">
                   <p className="font-display text-xl text-ink-dim">No squads yet.</p>
                   <p className="mt-2 text-sm text-ink-faint">
-                    Create your first below — it takes thirty seconds.
+                    Build your first with the button above — it takes thirty seconds.
                   </p>
                 </div>
               ) : (
-                <ul>
-                  {teams.map((t, i) => {
-                    const isSelected = selectedTeamId === t.id;
-                    return (
-                      <m.li
-                        key={t.id}
-                        custom={i}
-                        variants={rowAnim}
-                        initial="hidden"
-                        whileInView="show"
-                        viewport={{ once: true, margin: "-60px" }}
-                        className="border-b border-hairline py-7"
+                <div className="relative" ref={menuRef}>
+                  {/* Themed team picker */}
+                  <button
+                    type="button"
+                    aria-haspopup="listbox"
+                    aria-expanded={menuOpen}
+                    onClick={() => setMenuOpen((o) => !o)}
+                    className="flex w-full items-center justify-between gap-4 border border-hairline-2 bg-surface px-5 py-4 text-left transition-colors hover:border-gold"
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="truncate font-display text-lg tracking-tight text-ink">
+                        {selectedTeam ? selectedTeam.name : "Select a squad"}
+                      </span>
+                      {selectedTeam && (
+                        <span className="shrink-0 border border-gold/60 px-2 py-0.5 font-mono text-[0.55rem] uppercase tracking-editorial text-gold">
+                          {selectedTeam.tag}
+                        </span>
+                      )}
+                    </span>
+                    <svg
+                      aria-hidden
+                      viewBox="0 0 24 24"
+                      className={`h-4 w-4 shrink-0 text-ink-dim transition-transform duration-200 ${
+                        menuOpen ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.8}
+                    >
+                      <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+
+                  <AnimatePresence>
+                    {menuOpen && (
+                      <m.ul
+                        role="listbox"
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.18, ease }}
+                        className="absolute z-30 mt-2 max-h-80 w-full overflow-y-auto border border-hairline-2 bg-surface shadow-xl"
                       >
-                        <button
-                          onClick={() => handleSelect(t.id)}
-                          className="flex w-full flex-wrap items-start justify-between gap-5 text-left"
-                        >
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-3">
-                              <h4 className="font-display text-2xl leading-tight tracking-tight text-ink">
-                                {t.name}
-                              </h4>
-                              <span
-                                className={`border px-2 py-0.5 font-mono text-[0.58rem] uppercase tracking-editorial transition-colors ${
-                                  isSelected
-                                    ? "border-gold/60 text-gold"
-                                    : "border-hairline-2 text-ink-dim"
+                        {teams.map((t) => {
+                          const isSelected = selectedTeamId === t.id;
+                          return (
+                            <li key={t.id} role="option" aria-selected={isSelected}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleSelect(t.id);
+                                  setMenuOpen(false);
+                                }}
+                                className={`flex w-full items-center justify-between gap-3 border-b border-hairline px-5 py-3.5 text-left transition-colors last:border-b-0 ${
+                                  isSelected ? "bg-surface-2" : "hover:bg-surface-2"
                                 }`}
                               >
-                                {t.tag}
-                              </span>
-                            </div>
-                            <p className="mt-2 font-mono text-[0.65rem] uppercase tracking-editorial text-ink-faint">
-                              {t.member_count} {t.member_count === 1 ? "player" : "players"}
-                              <span className="mx-3 text-hairline-2">|</span>
-                              {t.captain_id === "demo-user" ? "Captain" : "Member"}
-                            </p>
-                          </div>
-
-                          <div className="flex flex-col items-end gap-3">
-                            {/* Diamond capacity gauge */}
-                            <div
-                              className="flex max-w-[5rem] flex-wrap justify-end gap-1"
-                              aria-hidden
-                            >
-                              {Array.from({ length: Math.max(t.member_count, 5) }, (_, n) => (
-                                <i
-                                  key={n}
-                                  className={`h-1.5 w-1.5 rotate-45 ${
-                                    n < t.member_count ? "bg-gold" : "bg-hairline-2"
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                            <span
-                              className={`font-mono text-[0.62rem] uppercase tracking-editorial transition-colors ${
-                                isSelected ? "text-gold" : "text-ink-dim"
-                              }`}
-                            >
-                              {isSelected ? "Viewing" : "View roster"}
-                            </span>
-                          </div>
-                        </button>
-                      </m.li>
-                    );
-                  })}
-                </ul>
+                                <span className="flex min-w-0 items-center gap-3">
+                                  <span
+                                    className={`truncate font-display text-base tracking-tight ${
+                                      isSelected ? "text-gold" : "text-ink"
+                                    }`}
+                                  >
+                                    {t.name}
+                                  </span>
+                                  <span className="shrink-0 border border-hairline-2 px-1.5 py-0.5 font-mono text-[0.52rem] uppercase tracking-editorial text-ink-dim">
+                                    {t.tag}
+                                  </span>
+                                </span>
+                                <span className="shrink-0 font-mono text-[0.58rem] uppercase tracking-editorial text-ink-faint">
+                                  {t.member_count} {t.member_count === 1 ? "player" : "players"}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </m.ul>
+                    )}
+                  </AnimatePresence>
+                </div>
               )}
             </div>
 

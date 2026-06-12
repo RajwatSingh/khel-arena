@@ -10,7 +10,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { PitchDivider } from "@/components/PitchLines";
+import { PitchBackdrop, PitchDivider } from "@/components/PitchLines";
 import type { ActionResult, SkillTier, Tournament, TournamentFormat } from "@/lib/types";
 import type { CreateTournamentInput } from "@/actions/tournaments";
 
@@ -151,8 +151,21 @@ export default function TournamentBoard({ tournaments, onCreate, onRegister }: T
   };
 
   return (
-    <section className="relative bg-canvas py-28">
-      <div className="mx-auto max-w-6xl px-6">
+    <section className="grain relative min-h-screen overflow-hidden bg-canvas py-28">
+      <PitchBackdrop />
+
+      {/* Devanagari watermark */}
+      <m.span
+        aria-hidden
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.04 }}
+        transition={{ duration: 2, delay: 0.6 }}
+        className="absolute -right-8 top-1/2 -translate-y-1/2 select-none font-display text-[13rem] leading-none text-ink"
+      >
+        प्रतियोगिता
+      </m.span>
+
+      <div className="relative mx-auto max-w-6xl px-6">
         <div className="mb-16 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="eyebrow mb-4">Tournaments · प्रतियोगिता</p>

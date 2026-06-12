@@ -17,6 +17,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { AnimatePresence, m } from "framer-motion";
+import { PitchBackdrop } from "@/components/PitchLines";
 import { useBookingStore } from "@/stores/useBookingStore";
 import type { ActionResult, Booking, Court, GridSlot, PaymentProvider } from "@/lib/types";
 
@@ -114,8 +115,22 @@ export default function BookingMatrix({
   };
 
   return (
-    <section id="book" className="relative bg-canvas py-28">
-      <div className="mx-auto max-w-6xl px-6">
+    <section id="book" className="grain relative overflow-hidden bg-canvas py-28">
+      {/* Chalked-court field animation, matching the other pages */}
+      <PitchBackdrop />
+
+      {/* Devanagari watermark */}
+      <m.span
+        aria-hidden
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.04 }}
+        transition={{ duration: 2, delay: 0.6 }}
+        className="absolute -right-8 top-1/2 -translate-y-1/2 select-none font-display text-[13rem] leading-none text-ink"
+      >
+        आरक्षण
+      </m.span>
+
+      <div className="relative mx-auto max-w-6xl px-6">
         {/* Section head */}
         <div className="mb-16 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>

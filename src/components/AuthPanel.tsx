@@ -11,11 +11,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, m } from "framer-motion";
-import { signIn, signUp } from "@/actions/auth";
+import { requestPasswordReset, signIn, signUp } from "@/actions/auth";
 import { AUTH_EVENT } from "@/components/Nav";
 import type { AccountType } from "@/lib/types";
 
-type Mode = "signin" | "signup";
+type Mode = "signin" | "signup" | "reset";
 
 const ACCOUNT_TYPES: { value: AccountType; title: string; blurb: string }[] = [
   { value: "player", title: "Player", blurb: "Book courts, join games, build your player card." },
@@ -37,6 +37,7 @@ export default function AuthPanel() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [accountType, setAccountType] = useState<AccountType>("player");
 
   const switchMode = (next: Mode) => {
@@ -50,12 +51,26 @@ export default function AuthPanel() {
     setError(null);
     setNotice(null);
     startTransition(async () => {
+      if (mode === "reset") {
+        const res = await requestPasswordReset(email);
+        if (res.ok) {
+          setNotice("If that email has an account, a reset link is on its way. Check your inbox.");
+          setMode("signin");
+        } else {
+          setError(res.error);
+        }
+        return;
+      }
       if (mode === "signin") {
         const res = await signIn({ email, password });
         if (res.ok) {
           window.dispatchEvent(new Event(AUTH_EVENT));
           router.refresh();
         } else setError(res.error);
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("Those passwords don't match.");
         return;
       }
       const res = await signUp({ fullName, username, email, password, accountType });
@@ -67,6 +82,7 @@ export default function AuthPanel() {
         setNotice("Account created. Check your inbox to confirm your email, then sign in.");
         setMode("signin");
         setPassword("");
+        setConfirmPassword("");
       } else {
         window.dispatchEvent(new Event(AUTH_EVENT));
         router.refresh();
@@ -79,32 +95,44 @@ export default function AuthPanel() {
       <div className="mx-auto max-w-md px-6">
         <p className="eyebrow mb-4">Profile · खेलाडी</p>
         <h2 className="font-display text-5xl tracking-tight text-ink">
-          {mode === "signin" ? "Welcome back" : "Join Khel"}
+          {mode === "signin" ? "Welcome back" : mode === "reset" ? "Reset password" : "Join Khel"}
         </h2>
         <p className="mt-4 text-sm leading-relaxed text-ink-dim">
-          {mode === "signin"
-            ? "Sign in to manage your bookings, teams, and player card."
-            : accountType === "futsal_owner"
-              ? "Create an owner account to list your futsal, set hours, and manage prices."
-              : "Create an account to book courts and build your player card."}
+          {mode === "reset"
+            ? "Enter your email and we'll send a link to set a new password."
+            : mode === "signin"
+              ? "Sign in to manage your bookings, teams, and player card."
+              : accountType === "futsal_owner"
+                ? "Create an owner account to list your futsal, set hours, and manage prices."
+                : "Create an account to book courts and build your player card."}
         </p>
 
-        {/* Mode toggle */}
-        <div className="mt-10 flex border border-hairline-2" role="tablist" aria-label="Auth mode">
-          {(["signin", "signup"] as const).map((m_) => (
-            <button
-              key={m_}
-              role="tab"
-              aria-selected={mode === m_}
-              onClick={() => switchMode(m_)}
-              className={`flex-1 px-4 py-3 font-mono text-[0.62rem] uppercase tracking-editorial transition-colors ${
-                mode === m_ ? "bg-ink text-canvas" : "text-ink-dim hover:text-ink"
-              }`}
-            >
-              {m_ === "signin" ? "Sign in" : "Create account"}
-            </button>
-          ))}
-        </div>
+        {/* Mode toggle (hidden during password reset) */}
+        {mode === "reset" ? (
+          <button
+            type="button"
+            onClick={() => switchMode("signin")}
+            className="mt-10 font-mono text-[0.62rem] uppercase tracking-editorial text-ink-dim underline decoration-hairline-2 underline-offset-8 transition-colors hover:text-ink"
+          >
+            ← Back to sign in
+          </button>
+        ) : (
+          <div className="mt-10 flex border border-hairline-2" role="tablist" aria-label="Auth mode">
+            {(["signin", "signup"] as const).map((m_) => (
+              <button
+                key={m_}
+                role="tab"
+                aria-selected={mode === m_}
+                onClick={() => switchMode(m_)}
+                className={`flex-1 px-4 py-3 font-mono text-[0.62rem] uppercase tracking-editorial transition-colors ${
+                  mode === m_ ? "bg-ink text-canvas" : "text-ink-dim hover:text-ink"
+                }`}
+              >
+                {m_ === "signin" ? "Sign in" : "Create account"}
+              </button>
+            ))}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-6">
           {mode === "signup" && (
@@ -189,18 +217,44 @@ export default function AuthPanel() {
             />
           </div>
 
-          <div>
-            <label htmlFor="a-password" className={labelClass}>Password</label>
-            <input
-              id="a-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
-              placeholder={mode === "signup" ? "At least 8 characters" : "••••••••"}
-              className={inputClass}
-            />
-          </div>
+          {mode !== "reset" && (
+            <div>
+              <label htmlFor="a-password" className={labelClass}>Password</label>
+              <input
+                id="a-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                placeholder={mode === "signup" ? "At least 8 characters" : "••••••••"}
+                className={inputClass}
+              />
+              {mode === "signin" && (
+                <button
+                  type="button"
+                  onClick={() => switchMode("reset")}
+                  className="mt-2 font-mono text-[0.58rem] uppercase tracking-editorial text-ink-faint underline decoration-hairline-2 underline-offset-4 transition-colors hover:text-ink"
+                >
+                  Forgot password?
+                </button>
+              )}
+            </div>
+          )}
+
+          {mode === "signup" && (
+            <div>
+              <label htmlFor="a-confirm" className={labelClass}>Confirm password</label>
+              <input
+                id="a-confirm"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                placeholder="Re-enter your password"
+                className={inputClass}
+              />
+            </div>
+          )}
 
           <button
             type="submit"
@@ -210,10 +264,14 @@ export default function AuthPanel() {
             {isPending
               ? mode === "signin"
                 ? "Signing in…"
-                : "Creating…"
+                : mode === "reset"
+                  ? "Sending…"
+                  : "Creating…"
               : mode === "signin"
                 ? "Sign in"
-                : "Create account"}
+                : mode === "reset"
+                  ? "Send reset link"
+                  : "Create account"}
           </button>
 
           <AnimatePresence>

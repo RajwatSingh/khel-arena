@@ -118,3 +118,79 @@ export async function signOut(): Promise<ActionResult<null>> {
   revalidatePath("/profile");
   return { ok: true, data: null };
 }
+
+const siteUrl = () => process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+/**
+ * Sends a password-reset email. The link returns to /auth/callback, which
+ * establishes a short-lived recovery session and forwards to /reset-password.
+ * We never reveal whether the address has an account.
+ */
+export async function requestPasswordReset(email: string): Promise<ActionResult<null>> {
+  const parsed = z.string().trim().email("Enter a valid email.").safeParse(email);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0].message, code: "VALIDATION" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
+    redirectTo: `${siteUrl()}/auth/callback?next=/reset-password`,
+  });
+  if (error) return { ok: false, error: "Could not send the reset email. Try again." };
+
+  return { ok: true, data: null };
+}
+
+/** Sets a new password for the current session (recovery link or signed-in). */
+export async function updatePassword(newPassword: string): Promise<ActionResult<null>> {
+  const parsed = z.string().min(8, "Use at least 8 characters.").safeParse(newPassword);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0].message, code: "VALIDATION" };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      ok: false,
+      error: "Your session has expired. Request a new reset link.",
+      code: "AUTH_REQUIRED",
+    };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: parsed.data });
+  if (error) return { ok: false, error: "Could not update your password. Try again." };
+
+  return { ok: true, data: null };
+}
+
+/**
+ * Starts an email change for the signed-in user. Supabase emails a confirmation
+ * link to the new address; the change only lands after that link is clicked
+ * (it returns through /auth/callback).
+ */
+export async function updateEmail(newEmail: string): Promise<ActionResult<null>> {
+  const parsed = z.string().trim().email("Enter a valid email.").safeParse(newEmail);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0].message, code: "VALIDATION" };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in first.", code: "AUTH_REQUIRED" };
+  if (user.email === parsed.data) {
+    return { ok: false, error: "That's already your email." };
+  }
+
+  const { error } = await supabase.auth.updateUser(
+    { email: parsed.data },
+    { emailRedirectTo: `${siteUrl()}/auth/callback?next=/profile` }
+  );
+  if (error) return { ok: false, error: "Could not start the email change. Try again." };
+
+  return { ok: true, data: null };
+}

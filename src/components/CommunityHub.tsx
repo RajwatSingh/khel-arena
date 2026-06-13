@@ -20,7 +20,7 @@ import type {
 export interface CommunityHubProps {
   posts: MatchmakingPost[];
   myCalls: MatchmakingCall[];
-  onJoin: (postId: string) => Promise<ActionResult<null>>;
+  onJoin: (postId: string, message?: string) => Promise<ActionResult<null>>;
   onApprove: (postId: string, userId: string) => Promise<ActionResult<null>>;
   onDecline: (postId: string, userId: string) => Promise<ActionResult<null>>;
 }
@@ -59,6 +59,8 @@ export default function CommunityHub({
 }: CommunityHubProps) {
   const [calls, setCalls] = useState<MatchmakingCall[]>(myCalls);
   const [joined, setJoined] = useState<Set<string>>(new Set());
+  const [composing, setComposing] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -67,12 +69,24 @@ export default function CommunityHub({
   const ownIds = new Set(calls.map((c) => c.id));
   const board = posts.filter((p) => !ownIds.has(p.id));
 
-  const handleJoin = (postId: string) => {
+  // Open/close the inline message composer for a post.
+  const toggleCompose = (postId: string) => {
+    setError(null);
+    setMessage("");
+    setComposing((cur) => (cur === postId ? null : postId));
+  };
+
+  const handleJoin = (postId: string, msg?: string) => {
     setError(null);
     startTransition(async () => {
-      const res = await onJoin(postId);
-      if (res.ok) setJoined((prev) => new Set(prev).add(postId));
-      else setError(res.error);
+      const res = await onJoin(postId, msg?.trim() || undefined);
+      if (res.ok) {
+        setJoined((prev) => new Set(prev).add(postId));
+        setComposing(null);
+        setMessage("");
+      } else {
+        setError(res.error);
+      }
     });
   };
 
@@ -363,7 +377,7 @@ export default function CommunityHub({
                         </div>
 
                         <button
-                          onClick={() => handleJoin(post.id)}
+                          onClick={() => toggleCompose(post.id)}
                           disabled={hasJoined || isPending || spotsLeft === 0}
                           className={`border px-5 py-2.5 font-mono text-[0.62rem] uppercase tracking-editorial transition-colors duration-300 ${
                             hasJoined
@@ -371,10 +385,52 @@ export default function CommunityHub({
                               : "border-hairline-2 text-ink-dim hover:border-gold hover:text-gold"
                           } disabled:cursor-default`}
                         >
-                          {hasJoined ? "Requested" : "Ask to join"}
+                          {hasJoined ? "Requested" : composing === post.id ? "Cancel" : "Ask to join"}
                         </button>
                       </div>
                     </div>
+
+                    {/* Inline request composer */}
+                    <AnimatePresence>
+                      {composing === post.id && !hasJoined && (
+                        <m.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2, ease }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                            <div className="flex-1">
+                              <label
+                                htmlFor={`msg-${post.id}`}
+                                className="eyebrow mb-2 block"
+                              >
+                                Message to the host (optional)
+                              </label>
+                              <input
+                                id={`msg-${post.id}`}
+                                value={message}
+                                onChange={(e) => setMessage(e.target.value)}
+                                maxLength={200}
+                                placeholder="Keeper, free after 7 — can bring a ball."
+                                className="w-full border border-hairline-2 bg-surface px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-gold focus:outline-none"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleJoin(post.id, message);
+                                }}
+                              />
+                            </div>
+                            <button
+                              onClick={() => handleJoin(post.id, message)}
+                              disabled={isPending}
+                              className="shrink-0 border border-gold/60 px-5 py-3 font-mono text-[0.62rem] uppercase tracking-editorial text-gold transition-colors duration-300 hover:bg-gold hover:text-ink disabled:opacity-50"
+                            >
+                              {isPending ? "Sending…" : "Send request"}
+                            </button>
+                          </div>
+                        </m.div>
+                      )}
+                    </AnimatePresence>
                   </m.li>
                 );
               })}

@@ -13,12 +13,12 @@ interface CommunityClientProps {
 }
 
 export default function CommunityClient({ demoMode, posts, myCalls }: CommunityClientProps) {
-  const handleJoin = async (postId: string): Promise<ActionResult<null>> => {
+  const handleJoin = async (postId: string, message?: string): Promise<ActionResult<null>> => {
     if (demoMode) {
       await new Promise((r) => setTimeout(r, 400));
       return { ok: true, data: null };
     }
-    return respondToPost(postId);
+    return respondToPost(postId, message);
   };
 
   const handleApprove = async (postId: string, userId: string): Promise<ActionResult<null>> => {

@@ -1,174 +1,123 @@
-# Khel Arena — Futsal & Sports Arena Booking · Kathmandu
+# Khel Arena — Backend
 
-A premium, community-driven booking platform for Nepal's futsal scene.
-Light editorial interface (Fraunces / Archivo / IBM Plex Mono on a warm
-porcelain canvas with espresso type and deep-gold accents) over a race-proof
-Postgres booking engine with a complete eSewa/Khalti payment loop.
+Futsal and sports arena booking for Kathmandu. Go service over stock
+PostgreSQL.
 
-The design speaks futsal: the hero opens *standing on the court* — halfway
-line, center circle and penalty arcs chalk themselves in as hairlines — a
-pitch-divider motif separates sections, and players pick their position
-(Goleiro / Fixo / Ala / Pivô / Universal) by **tapping the zone on a
-top-down court diagram** rather than choosing from a dropdown.
+This is a rewrite. The previous version was a Next.js app talking to Supabase
+from server actions; it is in the git history, not in this tree.
 
-Beyond booking: host or enter **tournaments** (format, side count, prize
-purse with a live split preview, capacity-gauged registration) and build an
-**editorial player card** — avatar, position, jersey, preferred foot, bio,
-and highlight reels — that updates live as you edit.
+## Why it looks like this
 
-## Routes
+**Bookings cannot overlap, and application code cannot opt out of that.** A
+`tstzrange` column plus a GiST `EXCLUDE` constraint makes two live bookings on
+one court physically impossible — under concurrency, under retries, under a
+buggy deploy, or at a `psql` prompt. Everything above that constraint exists to
+produce a good error message, not to provide the guarantee.
 
-| Route | Purpose |
-| --- | --- |
-| `/` | Cinematic landing + doorways into the product |
-| `/book` | The booking matrix — live availability, dynamic pricing, payment handoff |
-| `/book/confirmation` | Gateway return destination (success / failure verdict) |
-| `/tournaments` | Enter a cup or host your own — format, purse, deadline |
-| `/community` | Matchmaking board — open calls for players |
-| `/profile` | Customize your editorial player card |
-| `/api/payments/esewa/callback` | eSewa return — signature + status-API verification |
-| `/api/payments/khalti/callback` | Khalti return — pidx lookup verification |
+**One connection pool, not one HTTP round-trip per query.** The old stack
+reached the database through PostgREST and re-verified the session against
+Supabase Auth on every server action, so a page that showed five things cost
+five or more network round-trips to a remote service. Here, `pgx` holds pooled
+connections and caches prepared statements, and a signed access token is
+verified in-process without touching the database.
 
-## Run it now (demo mode)
+**Reads are joined, not looped.** "My bookings" is one query with the court and
+arena joined in. The availability grid is two queries and a projection in Go,
+where the old version ran a correlated price lookup per hour inside SQL.
 
-```bash
-npm install
-npm run dev        # → http://localhost:3000
-```
+**Business rules live in Go, in one place.** Supabase pushed authorization into
+RLS policies and writes into `SECURITY DEFINER` functions because untrusted
+browsers talked straight to the database. A Go service is a trusted client, so
+the rules are ordinary, readable, testable code. The database keeps the
+invariants only it can enforce.
 
-With no Supabase env vars set, the app runs the **full experience on bundled
-demo data** — the matrix, dynamic pricing, the simulated payment loop, matchmaking
-board, and standings all work. Component code is identical in both modes.
-
-## Go live
-
-1. Create a Supabase project, then run in the SQL editor, in order:
-   - `supabase/schema.sql`
-   - `supabase/functions.sql`
-   - `supabase/02_tournaments_profiles.sql`
-   Then create a public Storage bucket named `avatars` (see the comment in
-   the SQL file) for profile-photo uploads.
-2. Copy `.env.example` → `.env.local` and fill in your keys.
-3. Restart `npm run dev` — the page now reads/writes the real database.
-
-## Architecture
+## Layout
 
 ```
-src/
-├── app/                    Next.js App Router (server-first)
-├── components/
-│   ├── Nav.tsx             Shared sticky navigation
-│   ├── HeroSection.tsx     Cinematic landing — orchestrated reveal
-│   ├── BookingMatrix.tsx   The signature slot grid + selection dock
-│   ├── CommunityHub.tsx    Matchmaking board + season standings
-│   ├── PitchLines.tsx      Futsal court markings as design elements
-│   ├── TournamentBoard.tsx Listing + "host a tournament" form
-│   ├── FutsalPitchPicker.tsx  Pick your position by tapping the court
-│   ├── ProfileStudio.tsx   Player card + customization studio
-│   ├── BookClient.tsx      /book composition — booking → payment handoff
-│   ├── CommunityClient.tsx /community composition
-│   ├── TournamentsClient.tsx  /tournaments composition
-│   └── ProfileClient.tsx   /profile composition (live ↔ demo routing)
-├── actions/                Server actions (validation + error translation)
-├── stores/                 Zustand — ephemeral selection state only
-└── lib/
-    ├── payments/           eSewa ePay v2 + Khalti ePayment hooks
-    ├── supabase/           SSR + browser clients
-    ├── demo.ts             Bundled dataset mirroring real RPC shapes
-    └── types.ts            Shared domain types
-supabase/
-├── schema.sql              Tables, enums, RLS, standings view
-└── functions.sql           create_booking, toggle_matchmaking_slot,
-                            get_availability_grid, resolve_slot_price
+cmd/migrate/          Applies migrations and exits
+internal/
+  domain/             Entities, value objects, rules. No database, no HTTP.
+  postgres/           Every line of SQL, and the pgx repositories that run it
+    migrations/       Numbered, checksummed, embedded in the binary
+  service/            Use cases: booking, auth, the background janitor
+  platform/
+    config/           Environment loading, validated eagerly at startup
+    token/            Argon2id password hashing, JWT and refresh tokens
 ```
 
-## Futsal design language
+Dependencies point inward. `domain` imports nothing of ours; `service` depends
+on `domain` and on interfaces it declares itself; only `postgres` knows pgx
+exists.
 
-The interface speaks futsal, not generic SaaS. Court markings (halfway line,
-center circle, penalty arcs) are drawn in hairlines as the hero backdrop and
-chalk themselves in on load like a groundskeeper at dawn (`PitchLines.tsx`).
-The `PitchDivider` reuses the halfway-line + center-circle motif as a section
-rule. Positions use authentic futsal vocabulary — **Goleiro, Fixo, Ala, Pivô,
-Universal** — and you set yours by **tapping where you play on a top-down
-court** (`FutsalPitchPicker.tsx`). Prize purses, jersey numbers, and team
-capacity all render in the same display-gold / mono-data editorial system.
+## Running it
 
-## Tournaments
+Requires Go 1.24+ and PostgreSQL 14+ (for `pgcrypto`, `btree_gist`, `citext` —
+the first migration creates them).
 
-`/tournaments` lists open competitions and hosts a creation form: format
-(knockout / league / groups+KO), side count, max teams, entry fee, **prize
-pool with a live per-place split preview**, skill tier, and deadlines.
-Registration runs through `register_team_for_tournament()` — the same
-advisory-lock + capacity-check discipline as bookings, so a tournament can
-**never** accept more teams than `max_teams` even under concurrent submits,
-and flips to `full` atomically on the final spot.
+```sh
+cp .env.example .env          # then set JWT_SECRET
+make db-up                    # local Postgres in Docker, both databases
+make migrate
+make check                    # tidy + vet + tests under -race
+```
 
-## Profiles
+`make help` lists the rest.
 
-`/profile` is a two-pane studio: the editorial player card on the left
-updates live as you edit it on the right. Avatar uploads go to a Supabase
-Storage `avatars` bucket (under each user's own prefix); position, jersey
-number, preferred foot, skill, and bio are RLS-guarded profile updates; and
-highlight reels are link-based (`profile_highlights`) with source detection
-for YouTube / TikTok / Instagram / Drive.
+## Tests
 
-> The `team_standings` view from `schema.sql` is retained in the database for
-> future seasons but is no longer surfaced in the UI, per the latest design.
+Unit tests need nothing and cover the rules worth being sure about: slot
+overlap, price resolution across timezones and rule priorities, hold expiry,
+payment verification, and token handling.
 
-## Why double-booking is impossible
+Integration tests need a database and skip without `TEST_DATABASE_URL`, so
+`go test ./...` stays useful on a machine with no Postgres. They cover what
+only a real database can demonstrate — most importantly
+`TestConcurrentBookingsCannotDoubleBook`, where twenty goroutines contend for
+one court-hour and exactly one may win.
 
-Three independent layers, strongest last:
+```sh
+make test              # unit only
+make test-integration  # everything
+make test-race         # everything, under the race detector
+```
 
-1. **Advisory lock** — `pg_advisory_xact_lock` on a hash of court + start
-   time serialises concurrent attempts, so the loser waits rather than errors.
-2. **Pre-check** — an overlap query inside the lock returns a clean,
-   human-readable `SLOT_TAKEN` message.
-3. **`EXCLUDE USING gist (court_id WITH =, slot WITH &&)`** — a database
-   constraint. Even a buggy code path that bypasses `create_booking()`
-   physically cannot insert an overlapping live booking. Cancelled bookings
-   are excluded, so freed slots are instantly rebookable.
+## Migrations
 
-Pricing is also resolved **server-side** inside the transaction
-(`resolve_slot_price`), so a stale or tampered client price can never be
-charged.
+Numbered `NNNN_name.sql` under `internal/postgres/migrations`, embedded into
+the binary with `go:embed`. Each runs in its own transaction; a session
+advisory lock keeps two instances from racing at startup.
 
-Tournament registration reuses the same discipline:
-`register_team_for_tournament()` takes an advisory lock, checks the team
-count inside it, and flips the tournament to `full` on the final spot — so a
-cup can never accept more teams than `max_teams`, even under a stampede of
-concurrent sign-ups.
+Applied migrations are checksummed. Editing one that has already run is a
+deployment error — the database cannot be brought to the state the code now
+expects — so it is reported rather than silently skipped. Write a new
+migration instead.
 
-## Why TimeSlots are virtual
+## Notes on the schema
 
-Materialising every hour × court × day creates unbounded dead rows.
-`get_availability_grid(court, date)` projects the daily grid from arena
-operating hours, pricing rules, and live bookings in one round trip — the
-grid the frontend renders *is* the TimeSlots entity, always fresh, never
-stale.
+A few deliberate departures from what it replaces:
 
-## Payments
+- **Credentials and the player card are one row.** The old split between
+  Supabase's `auth.users` and a `profiles` table meant a join on nearly every
+  read, and an account could exist with no profile.
+- **`hold_expires_at` is a column,** not `created_at` plus an interval computed
+  by a SQL function. Expiry is now indexable and per-booking.
+- **The exclusion constraint and the availability query agree.** They
+  previously did not: the constraint ignored only `cancelled` while the grid
+  ignored `cancelled` and `no_show`, so a no-show slot rendered as free and
+  then threw a constraint violation on booking. Both now go through
+  `booking_blocks_slot`.
+- **`bookings.open_to_join` is gone.** It mirrored whether a matchmaking post
+  existed — two sources of truth for one fact, which had already drifted. It is
+  derived now.
+- **Counters are maintained by trigger and guarded by `CHECK`.** Tournament
+  capacity and matchmaking fill are enforced by the database, so the row lock
+  taken by the counter update settles concurrent registrations for free.
 
-Fully wired, end to end:
+## Status
 
-1. **Confirm & pay** on `/book` calls `createBooking()` (slot held under the
-   race-proof transaction) then `payForBooking()` (server action), which
-   creates a `payments` intent row and returns a gateway instruction.
-2. The browser enters the gateway — eSewa via signed HMAC-SHA256 form POST,
-   Khalti via redirect to its `payment_url`.
-3. The gateway returns to `/api/payments/{provider}/callback`, which verifies
-   **server-to-server** (eSewa status API / Khalti pidx lookup, with amount
-   cross-check) — redirect parameters are never trusted. Only then does
-   `payments.status → 'verified'` and `bookings.status → 'confirmed'`.
-4. The player lands on `/book/confirmation` with the verdict and receipt ref.
+Done: schema and migrations; the domain layer; repositories for bookings,
+availability, users and sessions; the booking and auth services; the janitor.
 
-Callbacks are idempotent (replays find the row already verified) and run on
-the service-role client, since the gateway redirect carries no user session.
-In demo mode the whole loop is simulated locally, ending on the same
-confirmation page.
-
-## Next milestones
-
-- Court onboarding dashboard for arena owners (replace the MVP court list)
-- Supabase Realtime channel on `bookings` for live grid invalidation
-- Match result submission + dual-captain verification flow
-- Player profile pages (editorial cards are designed in the token system)
+Not yet written: the HTTP API, and repositories for teams, tournaments,
+matchmaking and arena management. The tables, domain types and rules for those
+are in place — what is missing is the storage and transport code over them.

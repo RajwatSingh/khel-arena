@@ -86,3 +86,23 @@ db-reset: ## Drop and recreate both databases, then migrate
 .PHONY: psql
 psql: ## Open a psql shell on the development database
 	docker exec -it $(PG_CONTAINER) psql -U khel -d khel_arena
+
+# ── Web ─────────────────────────────────────────────────────────────────────
+
+WEB = npm --prefix web
+
+.PHONY: web-install
+web-install: ## Install the frontend's dependencies
+	$(WEB) install
+
+.PHONY: web
+web: ## Run the frontend dev server on :5173
+	$(WEB) run dev
+
+.PHONY: web-build
+web-build: ## Build the frontend into web/build
+	$(WEB) run build
+
+.PHONY: web-check
+web-check: ## Type- and a11y-check every Svelte component
+	$(WEB) run check

@@ -1,7 +1,7 @@
-# Khel Arena — Backend
+# Khel Arena
 
 Futsal and sports arena booking for Kathmandu. Go service over stock
-PostgreSQL.
+PostgreSQL, with a SvelteKit frontend in `web/`.
 
 This is a rewrite. The previous version was a Next.js app talking to Supabase
 from server actions; it is in the git history, not in this tree.
@@ -43,6 +43,7 @@ internal/
   platform/
     config/           Environment loading, validated eagerly at startup
     token/            Argon2id password hashing, JWT and refresh tokens
+web/                  SvelteKit frontend, plain JavaScript — see web/README.md
 ```
 
 Dependencies point inward. `domain` imports nothing of ours; `service` depends
@@ -117,7 +118,10 @@ A few deliberate departures from what it replaces:
 
 Done: schema and migrations; the domain layer; repositories for bookings,
 availability, users and sessions; the booking and auth services; the janitor.
+The frontend is built and complete over the booking flow, reading from a mock
+that mirrors the planned wire format — one file switches it to the real thing.
 
 Not yet written: the HTTP API, and repositories for teams, tournaments,
 matchmaking and arena management. The tables, domain types and rules for those
 are in place — what is missing is the storage and transport code over them.
+Until the API exists, the frontend is the only running part of the system.

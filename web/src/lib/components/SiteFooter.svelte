@@ -1,0 +1,121 @@
+<script>
+	import CentreMark from './CentreMark.svelte';
+</script>
+
+<footer>
+	<div class="shell">
+		<div class="grid">
+			<div class="about">
+				<span class="mark">
+					<CentreMark width={26} />
+					Khel Arena
+				</span>
+				<p class="small">
+					Court hours in Kathmandu and Lalitpur, bookable by the hour. Built on a database that
+					will not let two games start on the same turf.
+				</p>
+			</div>
+
+			<nav aria-label="Booking">
+				<h2 class="label">Book</h2>
+				<a class="foot-link" href="/tonight">Find a court</a>
+				<a class="foot-link" href="/arenas">All arenas</a>
+				<a class="foot-link" href="/bookings">My bookings</a>
+			</nav>
+
+			<nav aria-label="Account">
+				<h2 class="label">Account</h2>
+				<a class="foot-link" href="/login">Sign in</a>
+				<a class="foot-link" href="/register">Create an account</a>
+			</nav>
+
+			<div>
+				<h2 class="label">Paying</h2>
+				<p class="small">eSewa, Khalti, or cash at the arena.</p>
+				<p class="small dim">Prices are per hour, per court, in NPR. The arena sets them.</p>
+			</div>
+		</div>
+
+		<p class="colophon small">Kathmandu · UTC+05:45 · Khel Arena {new Date().getFullYear()}</p>
+	</div>
+</footer>
+
+<style>
+	footer {
+		background: var(--surface);
+		border-top: 1px solid var(--line);
+		padding-block: clamp(3rem, 6vw, 4.5rem) 2rem;
+	}
+
+	.grid {
+		display: grid;
+		grid-template-columns: 1.7fr repeat(3, 1fr);
+		gap: 2.5rem 2rem;
+	}
+
+	.mark {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.6rem;
+		font-family: var(--display);
+		font-size: 1.25rem;
+		font-weight: 500;
+		letter-spacing: -0.02em;
+	}
+
+	.mark :global(svg) {
+		color: var(--pine);
+	}
+
+	.about p {
+		margin-top: 1rem;
+		max-width: 38ch;
+		color: var(--muted);
+	}
+
+	nav {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.5rem;
+	}
+
+	.label {
+		margin-bottom: 0.35rem;
+	}
+
+	.foot-link {
+		font-size: 0.9375rem;
+		color: var(--muted);
+		transition: color 0.18s var(--ease);
+	}
+
+	.foot-link:hover {
+		color: var(--pine);
+	}
+
+	.small + .small {
+		margin-top: 0.6rem;
+	}
+
+	.dim {
+		color: var(--faint);
+	}
+
+	.colophon {
+		margin-top: 3rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid var(--line);
+		color: var(--faint);
+	}
+
+	@media (max-width: 760px) {
+		.grid {
+			grid-template-columns: 1fr 1fr;
+		}
+
+		.about {
+			grid-column: 1 / -1;
+		}
+	}
+</style>

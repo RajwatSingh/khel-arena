@@ -9,3 +9,9 @@
 # Test artifacts
 *.out
 coverage.*
+
+# Web frontend
+node_modules/
+web/.svelte-kit/
+web/build/
+.DS_Store

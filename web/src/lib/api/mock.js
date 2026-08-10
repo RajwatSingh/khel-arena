@@ -150,6 +150,7 @@ export function availability(courtId, date, now = new Date()) {
 	for (let offset = openMinutes; offset + 60 <= closeMinutes; offset += 60) {
 		const start = instantAt(date, offset);
 		const end = instantAt(date, offset + 60);
+    const hour = Math.floor(offset / 60)
 		const { price_npr, is_peak, rule } = resolvePrice(court, date, hour);
 		const startsAt = start.toISOString();
 		const isBooked = seededBooked(courtId, date, hour) || isHeldElsewhere(courtId, startsAt);

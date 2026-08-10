@@ -150,7 +150,6 @@ export function availability(courtId, date, now = new Date()) {
 	for (let offset = openMinutes; offset + 60 <= closeMinutes; offset += 60) {
 		const start = instantAt(date, offset);
 		const end = instantAt(date, offset + 60);
-		const hour = Math.floor(offset / 60);
 		const { price_npr, is_peak, rule } = resolvePrice(court, date, hour);
 		const startsAt = start.toISOString();
 		const isBooked = seededBooked(courtId, date, hour) || isHeldElsewhere(courtId, startsAt);
@@ -252,9 +251,12 @@ export async function login({ email, password }) {
 	if (!record || record.password !== password) {
 		// One message for both cases: a distinct "no such account" reply is an
 		// account-enumeration oracle.
-		throw new ApiError('unauthenticated', 'That email and password do not match.');
+		throw new ApiError('unauthenticated', 'The email or password do not match.');
 	}
-	session = { user: record.user, access_token: 'mock.access.token' };
+	session = { 
+    user: record.user, 
+    access_token: 'mock.access.token' 
+  };
 	persist();
 	return session;
 }

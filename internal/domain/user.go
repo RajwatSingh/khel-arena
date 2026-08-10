@@ -41,9 +41,11 @@ type User struct {
 	UpdatedAt time.Time
 }
 
-// PasswordHash never appears on User. It is loaded only by the one repository
-// method that authenticates a login, so no handler can accidentally serialise
-// it. Credentials travel in this separate struct.
+/** 
+PasswordHash never appears on User. It is loaded only by the one repository
+method that authenticates a login, so no handler can accidentally serialise
+it. Credentials travel in this separate struct. 
+**/
 type Credentials struct {
 	UserID       uuid.UUID
 	Email        string

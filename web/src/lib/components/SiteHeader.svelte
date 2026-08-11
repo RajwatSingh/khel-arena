@@ -75,10 +75,11 @@
 		font-weight: 500;
 		letter-spacing: -0.02em;
 		white-space: nowrap;
+		color: var(--on-field);
 	}
 
 	.mark :global(svg) {
-		color: var(--pine);
+		color: var(--accent-on-field);
 	}
 
 	nav {
@@ -92,7 +93,7 @@
 		border-radius: var(--r-pill);
 		font-size: 0.9375rem;
 		font-weight: 500;
-		color: var(--muted);
+		color: var(--on-field-muted);
 		transition:
 			background-color 0.18s var(--ease),
 			color 0.18s var(--ease);
@@ -117,7 +118,7 @@
 
 	.clock {
 		font-size: 0.875rem;
-		color: var(--faint);
+		color: var(--on-field-faint);
 		white-space: nowrap;
 	}
 

@@ -1,11 +1,10 @@
 /*
  * Khel Arena — design tokens.
  *
- * Daylight, not floodlight. The ground is a faint green-grey — turf seen in
- * the morning, desaturated until it stops competing with text — and white
- * cards sit on top of it. Nothing here is pure white or pure black: the page
- * should be readable for the length of a booking, not for the length of a
- * screenshot.
+ * Under floodlight. The ground is a bold matte pitch-green, not a tint of
+ * one — and white cards sit on top of it, lit like the one bright thing on
+ * the field. Nothing here is pure white or pure black: the page should be
+ * readable for the length of a booking, not for the length of a screenshot.
  *
  * Two faces do all the work. Newsreader (a low-contrast text serif with a real
  * optical-size axis) carries headings and prices; Hanken Grotesk carries every
@@ -14,20 +13,26 @@
 
 :root {
 	/* Surfaces */
-	--field: #ecefea; /* page ground */
+	--field: #2b612e; /* page ground — bold matte green, not a tint */
 	--surface: #ffffff; /* cards, panels, cells */
 	--surface-sunk: #e3e8e2; /* wells, taken slots */
 	--line: #dbe1d9; /* hairlines */
 	--line-strong: #c3cdc0;
 
-	/* Text */
+	/* Text — for content sitting on white/cream surfaces (cards, panels) */
 	--ink: #16211b; /* primary */
-	--muted: #54615a; /* secondary — 5.2:1 on --field */
+	--muted: #54615a; /* secondary — 5.2:1 on --surface */
 	--faint: #7c8880; /* labels, tertiary */
 
+	/* Text — for content sitting directly on --field, which is now dark */
+	--on-field: #f3f2ea; /* primary — 6.6:1 on --field */
+	--on-field-muted: #c7d8c4; /* secondary — 4.9:1 on --field */
+	--on-field-faint: #b5cbb0; /* labels, tertiary — 4.3:1 on --field */
+	--accent-on-field: #8fe08a; /* pine's role, sized for --field instead of --surface — 4.6:1 */
+
 	/* Accents */
-	--pine: #2c5847; /* the one action colour */
-	--pine-deep: #1e3e31;
+	--pine: #2b612e; /* the one action colour */
+	--pine-deep: #1c4720;
 	--pine-wash: #e2ebe5;
 	--sand: #f6eee0; /* peak-rate tint */
 	--sand-line: #e6d8bf;
@@ -119,8 +124,9 @@ a {
 }
 
 :focus-visible {
-	outline: 2px solid var(--pine);
+	outline: 2px solid #ffffff;
 	outline-offset: 2px;
+	box-shadow: 0 0 0 4px var(--pine);
 	border-radius: 4px;
 }
 

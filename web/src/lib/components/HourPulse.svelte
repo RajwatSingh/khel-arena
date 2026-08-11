@@ -27,7 +27,7 @@
 		min-width: 0;
 		height: 100%;
 		border-radius: 3px 3px 1px 1px;
-		background: var(--pine);
+		background: var(--accent-on-field);
 		transform-origin: bottom;
 		animation: drain 7.2s var(--ease) infinite;
 		animation-delay: calc(var(--i) * -0.42s);
@@ -37,7 +37,7 @@
 		0%,
 		44% {
 			height: 100%;
-			background: var(--pine);
+			background: var(--accent-on-field);
 		}
 		56% {
 			height: 100%;
@@ -50,7 +50,7 @@
 		}
 		100% {
 			height: 100%;
-			background: var(--pine);
+			background: var(--accent-on-field);
 		}
 	}
 </style>

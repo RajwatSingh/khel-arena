@@ -228,7 +228,17 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		color: var(--faint);
+		color: var(--on-field-faint);
+	}
+
+	.crumbs .link {
+		color: var(--accent-on-field);
+		text-decoration-color: color-mix(in srgb, var(--accent-on-field) 35%, transparent);
+	}
+
+	.crumbs .link:hover,
+	.crumbs .link:focus-visible {
+		text-decoration-color: var(--accent-on-field);
 	}
 
 	.title {
@@ -237,6 +247,10 @@
 		flex-wrap: wrap;
 		gap: 0.75rem 1.25rem;
 		margin-top: 0.9rem;
+	}
+
+	.title h1 {
+		color: var(--on-field);
 	}
 
 	.rating {
@@ -316,6 +330,7 @@
 
 	.section-label {
 		margin-bottom: 0.8rem;
+		color: var(--on-field-faint);
 	}
 
 	.courts {

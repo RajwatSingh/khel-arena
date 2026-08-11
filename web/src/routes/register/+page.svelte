@@ -149,8 +149,13 @@
 		align-items: start;
 	}
 
+	.say h1 {
+		color: var(--on-field);
+	}
+
 	.say .lede {
 		margin-top: 1.1rem;
+		color: var(--on-field-muted);
 	}
 
 	form {

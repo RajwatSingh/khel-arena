@@ -251,7 +251,7 @@
 		flex-wrap: wrap;
 		gap: 0.6rem 1.75rem;
 		margin-top: 1.25rem;
-		color: var(--muted);
+		color: var(--on-field-muted);
 	}
 
 	.key li {

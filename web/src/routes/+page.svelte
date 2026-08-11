@@ -216,10 +216,21 @@
 		padding-block: clamp(3rem, 6vw, 5.5rem) clamp(2.5rem, 5vw, 4rem);
 	}
 
+	.hero h1,
+	.hero .from strong {
+		color: var(--on-field);
+	}
+
+	.hero .lede,
+	.hero .from {
+		color: var(--on-field-muted);
+	}
+
 	.label.live {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.55rem;
+		color: var(--on-field-faint);
 	}
 
 	.label.live::before {
@@ -227,7 +238,7 @@
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background: var(--pine);
+		background: var(--accent-on-field);
 		animation: pulse 2.4s ease-in-out infinite;
 	}
 
@@ -249,7 +260,7 @@
 	}
 
 	.count {
-		color: var(--pine);
+		color: var(--accent-on-field);
 		font-weight: 600;
 	}
 
@@ -280,6 +291,16 @@
 
 	.board {
 		padding-bottom: var(--band);
+	}
+
+	.board .section-head h2,
+	.arenas-band .section-head h2 {
+		color: var(--on-field);
+	}
+
+	.board .section-head .lede,
+	.arenas-band .section-head .lede {
+		color: var(--on-field-muted);
 	}
 
 	.section-head {
@@ -332,10 +353,11 @@
 
 	.steps h3 {
 		margin-bottom: 0.5rem;
+		color: var(--on-field);
 	}
 
 	.steps p {
-		color: var(--muted);
+		color: var(--on-field-muted);
 	}
 
 	/* ------------------------------------------------------------ arenas --- */

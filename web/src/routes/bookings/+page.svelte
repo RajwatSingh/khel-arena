@@ -145,8 +145,13 @@
 		padding-block: clamp(2.5rem, 5vw, 4rem) 1.75rem;
 	}
 
+	.head .label {
+		color: var(--on-field-faint);
+	}
+
 	h1 {
 		margin-top: 0.6rem;
+		color: var(--on-field);
 	}
 
 	.body {

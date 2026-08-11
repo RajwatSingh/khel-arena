@@ -189,9 +189,6 @@ export function cityLedger(
 				court_id: court.id,
 				court_name: court.name,
 				sport: court.sport,
-				format: court.format,
-				arena_name: court.arena_name,
-				arena_slug: court.arena_slug,
 				arena_area: court.arena_area,
 				slots: grid.slots
 			};
@@ -339,11 +336,6 @@ export async function createBooking({ court_id, starts_at, note }) {
 		id: crypto.randomUUID(),
 		reference: `KA-${nextRef++}`,
 		court_id,
-		court_name: court.name,
-		format: court.format,
-		arena_name: court.arena_name,
-		arena_slug: court.arena_slug,
-		arena_area: court.arena_area,
 		starts_at,
 		ends_at: slot.ends_at,
 		price_npr: slot.price_npr,

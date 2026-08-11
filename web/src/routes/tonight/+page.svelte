@@ -109,17 +109,23 @@
 		padding-block: clamp(2.5rem, 5vw, 4rem) 1.75rem;
 	}
 
+	.head .label {
+		color: var(--on-field-faint);
+	}
+
 	h1 {
 		margin-top: 0.6rem;
+		color: var(--on-field);
 	}
 
 	.head .lede {
 		margin-top: 1rem;
 		max-width: 56ch;
+		color: var(--on-field-muted);
 	}
 
 	.head strong {
-		color: var(--ink);
+		color: var(--on-field);
 		font-weight: 600;
 	}
 

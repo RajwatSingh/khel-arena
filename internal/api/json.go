@@ -8,13 +8,13 @@ import (
 )
 
 func decode[T any](w http.ResponseWriter, r *http.Request) (T, error) {
-	var v T 
+	var v T
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 
-	if 	err := decoder.Decode(&v); err != nil {
+	if err := decoder.Decode(&v); err != nil {
 		return v, domain.Invalid("", "Malformed request body.")
 	}
 

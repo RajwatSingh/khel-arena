@@ -10,6 +10,19 @@ import (
 	"github.com/google/uuid"
 )
 
+type loginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type bookingInput struct {
+	CourtID  uuid.UUID  `json:"court_id"`
+	StartsAt time.Time  `json:"starts_at"`
+	EndsAt   time.Time  `json:"ends_at"`
+	TeamID   *uuid.UUID `json:"team_id"`
+	Note     string     `json:"note"`
+}
+
 type gridSlotDTO struct {
 	StartsAt  time.Time `json:"starts_at"`
 	EndsAt    time.Time `json:"ends_at"`

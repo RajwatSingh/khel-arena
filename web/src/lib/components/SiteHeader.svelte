@@ -40,9 +40,9 @@
 			<span class="clock num">Kathmandu {kathmandu}</span>
 			{#if session.signedIn}
 				<button class="btn btn-quiet" onclick={() => session.signOut()}>Sign out</button>
-				<a class="btn btn-primary" href="/bookings">{session.user.username}</a>
+				<a class="btn btn-primary username" href="/bookings">{session.user.username}</a>
 			{:else}
-				<a class="tab" href="/login">Sign in</a>
+				<a class="btn btn-quiet" href="/login">Sign in</a>
 				<a class="btn btn-primary" href="/tonight">Book a court</a>
 			{/if}
 		</div>
@@ -62,8 +62,9 @@
 	.bar {
 		display: flex;
 		align-items: center;
-		gap: 1.5rem;
+		gap: clamp(0.75rem, 2.5vw, 1.5rem);
 		min-height: 76px;
+		padding-block: 0.75rem;
 	}
 
 	.mark {
@@ -76,6 +77,7 @@
 		letter-spacing: -0.02em;
 		white-space: nowrap;
 		color: var(--ink);
+		flex-shrink: 0;
 	}
 
 	.mark :global(svg) {
@@ -89,16 +91,19 @@
 
 	nav {
 		display: flex;
-		gap: 0.35rem;
+		gap: 0.2rem;
 		margin-right: auto;
+		min-width: 0;
 	}
 
 	.tab {
-		padding: 0.5rem 0.95rem;
+		padding: 0.5rem 0.85rem;
 		border-radius: var(--r-pill);
 		font-size: 0.9375rem;
 		font-weight: 600;
 		color: var(--muted);
+		white-space: nowrap;
+		flex-shrink: 0;
 		transition:
 			background-color 0.18s var(--ease),
 			color 0.18s var(--ease);
@@ -118,22 +123,35 @@
 	.right {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
+		gap: clamp(0.5rem, 1.5vw, 0.75rem);
+		flex-shrink: 0;
+	}
+
+	.right :global(.btn) {
+		flex-shrink: 0;
+		white-space: nowrap;
+	}
+
+	.username {
+		max-width: 12rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.clock {
 		font-size: 0.875rem;
 		color: var(--faint);
 		white-space: nowrap;
+		flex-shrink: 0;
 	}
 
-	@media (max-width: 1040px) {
+	@media (max-width: 1180px) {
 		.clock {
 			display: none;
 		}
 	}
 
-	@media (max-width: 880px) {
+	@media (max-width: 940px) {
 		.bar {
 			flex-wrap: wrap;
 			gap: 0.6rem 1rem;

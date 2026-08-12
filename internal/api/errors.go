@@ -1,10 +1,10 @@
 package api
 
 import (
-	"net/http"
 	"errors"
 	"github.com/RajwatSingh/khel-arena/internal/domain"
 	"log/slog"
+	"net/http"
 )
 
 func codeToStatus(code domain.Code) int {
@@ -33,13 +33,13 @@ type Resp struct {
 }
 
 type Error struct {
-	Code string `json:"code"`
-	Message string `json:"message"`
-	Fields []Field `json:"fields,omitempty"`
+	Code    string  `json:"code"`
+	Message string  `json:"message"`
+	Fields  []Field `json:"fields,omitempty"`
 }
 
 type Field struct {
-	F string `json:"field"`
+	F       string `json:"field"`
 	Message string `json:"message"`
 }
 
@@ -61,13 +61,13 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 			"request_id", requestIDFromContext(r.Context()),
 			"method", r.Method,
 			"path", r.URL.Path,
-        )
+		)
 	}
-	
+
 	body := Error{
-		Code: string(code),
+		Code:    string(code),
 		Message: domain.UserMessage(err),
-		Fields: fieldsFromError(err),
+		Fields:  fieldsFromError(err),
 	}
 
 	encode(w, status, Resp{Err: body})
@@ -88,5 +88,5 @@ func fieldsFromError(err error) []Field {
 	for i, fe := range fes {
 		out[i] = Field{F: fe.Field, Message: fe.Message}
 	}
-	 return out
+	return out
 }

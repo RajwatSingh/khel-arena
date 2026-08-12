@@ -15,8 +15,9 @@ import (
 )
 
 type Config struct {
-	Env      string // "development" | "production"
-	HTTPAddr string
+	Env            string // "development" | "production"
+	HTTPAddr       string
+	AllowedOrigins []string
 
 	Database Database
 	Auth     Auth
@@ -56,9 +57,17 @@ func Load() (Config, error) {
 		problems = append(problems, fmt.Sprintf(format, args...))
 	}
 
+	var allowedOrigins []string
+	if org := os.Getenv("CORS_ALLOWED_ORIGINS"); org != "" {
+		for _, o := range strings.Split(org, ",") {
+			allowedOrigins = append(allowedOrigins, strings.TrimSpace(o))
+		}
+	}
+
 	cfg := Config{
-		Env:      envOr("APP_ENV", "development"),
-		HTTPAddr: envOr("HTTP_ADDR", ":8080"),
+		Env:            envOr("APP_ENV", "development"),
+		HTTPAddr:       envOr("HTTP_ADDR", ":8080"),
+		AllowedOrigins: allowedOrigins,
 	}
 
 	cfg.Database.URL = os.Getenv("DATABASE_URL")

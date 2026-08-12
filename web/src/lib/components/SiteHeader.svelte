@@ -105,8 +105,8 @@
 		white-space: nowrap;
 		flex-shrink: 0;
 		transition:
-			background-color 0.18s var(--ease),
-			color 0.18s var(--ease);
+			background-color var(--dur-hover) var(--ease),
+			color var(--dur-hover) var(--ease);
 	}
 
 	.tab:hover {

@@ -2,6 +2,7 @@
 	import '../app.css';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import AmbientLedger from '$lib/components/AmbientLedger.svelte';
 	import { session } from '$lib/session.svelte.js';
 
 	let { children } = $props();
@@ -11,6 +12,7 @@
 	$effect(() => session.restore());
 </script>
 
+<AmbientLedger />
 <a class="skip" href="#main">Skip to content</a>
 <SiteHeader />
 <main id="main">

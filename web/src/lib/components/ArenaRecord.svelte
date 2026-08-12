@@ -64,9 +64,9 @@
 		height: 100%;
 		padding: clamp(1.4rem, 2.5vw, 1.85rem);
 		transition:
-			border-color 0.2s var(--ease),
-			box-shadow 0.2s var(--ease),
-			transform 0.2s var(--ease);
+			border-color var(--dur-hover) var(--ease),
+			box-shadow var(--dur-hover) var(--ease),
+			transform var(--dur-hover) var(--ease);
 	}
 
 	.record:hover,
@@ -84,7 +84,7 @@
 	}
 
 	h3 {
-		transition: color 0.2s var(--ease);
+		transition: color var(--dur-hover) var(--ease);
 	}
 
 	.record:hover h3 {

@@ -228,10 +228,6 @@
 </section>
 
 <style>
-	.masthead {
-		padding-block: clamp(2rem, 4vw, 3rem) clamp(2.5rem, 5vw, 3.5rem);
-	}
-
 	.crumbs {
 		display: flex;
 		align-items: center;

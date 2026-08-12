@@ -3,7 +3,7 @@
 	import CentreMark from '$lib/components/CentreMark.svelte';
 </script>
 
-<section class="band forest-band">
+<section class="forest-band">
 	<div class="shell box">
 		<p class="label num fade-up">Error {page.status}</p>
 		<h1 class="display display-l fade-up">{page.error?.message ?? 'That page is not here'}</h1>

@@ -80,11 +80,6 @@
 </section>
 
 <style>
-	.auth {
-		padding-block: clamp(3rem, 6vw, 5.5rem);
-		min-height: 65vh;
-	}
-
 	.split {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 24rem);

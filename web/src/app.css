@@ -63,6 +63,15 @@
 	--band: clamp(4rem, 8vw, 7rem);
 
 	--ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+
+	/* Motion scale */
+	--dur-hover: 140ms; /* hover micro-interactions */
+	--dur-load: 460ms; /* page-load reveal, per element */
+	--dur-load-step: 70ms; /* stagger interval between load elements */
+	--dur-reveal: 520ms; /* scroll-triggered section entry */
+	--amb-a: 6400ms; /* ambient ledger, three desynced breathing rates */
+	--amb-b: 8600ms;
+	--amb-c: 10800ms;
 }
 
 *,
@@ -78,7 +87,12 @@ html {
 
 body {
 	margin: 0;
-	background: var(--field);
+	/* A page ground, not a flat fill — the same warm light a floodlit pitch
+	   throws upward at dusk, pooled top-centre and gone by mid-page. */
+	background:
+		radial-gradient(120% 46% at 50% -8%, color-mix(in srgb, var(--sand) 55%, transparent), transparent 68%),
+		var(--field);
+	background-attachment: fixed;
 	color: var(--ink);
 	font-family: var(--sans);
 	font-size: 1.0625rem; /* 17px */
@@ -209,7 +223,52 @@ a {
    of a bold homepage bolted onto a plain app. */
 
 .forest-band {
-	background: var(--forest);
+	position: relative;
+	overflow: hidden;
+	/* The one dimension every non-home band shares — only the homepage hero
+	   is allowed to set its own padding-block after this. */
+	padding-block: clamp(2.5rem, 5vw, 4rem);
+	/* Two floodlights, not one even wash — the accent green from the far
+	   corner, the pine from the near one, the way two pitch lights never
+	   land the same. */
+	background:
+		radial-gradient(60% 85% at 6% -20%, color-mix(in srgb, var(--accent-on-field) 22%, transparent), transparent 62%),
+		radial-gradient(55% 80% at 106% 18%, color-mix(in srgb, var(--pine) 50%, transparent), transparent 58%),
+		var(--forest);
+}
+
+/* The centre-mark glyph — the site's one identity mark — blown up and bled
+   off the corner as the band's own atmosphere, instead of a borrowed motif. */
+.forest-band::before {
+	content: '';
+	position: absolute;
+	z-index: 0;
+	top: -20%;
+	right: -16%;
+	width: min(44rem, 60vw);
+	aspect-ratio: 1;
+	pointer-events: none;
+	background-image:
+		radial-gradient(
+			circle at center,
+			transparent calc(50% - 1.5px),
+			color-mix(in srgb, var(--on-field) 8%, transparent) calc(50% - 1.5px),
+			color-mix(in srgb, var(--on-field) 8%, transparent) calc(50% + 1.5px),
+			transparent calc(50% + 1.5px)
+		),
+		linear-gradient(color-mix(in srgb, var(--on-field) 8%, transparent), color-mix(in srgb, var(--on-field) 8%, transparent));
+	background-repeat: no-repeat;
+	background-size:
+		100% 100%,
+		1.5px 100%;
+	background-position:
+		center,
+		center;
+}
+
+.forest-band > * {
+	position: relative;
+	z-index: 1;
 }
 
 .forest-band .label {
@@ -305,10 +364,10 @@ a {
 	letter-spacing: -0.005em;
 	cursor: pointer;
 	transition:
-		background-color 0.18s var(--ease),
-		border-color 0.18s var(--ease),
-		color 0.18s var(--ease),
-		transform 0.12s var(--ease);
+		background-color var(--dur-hover) var(--ease),
+		border-color var(--dur-hover) var(--ease),
+		color var(--dur-hover) var(--ease),
+		transform calc(var(--dur-hover) * 0.7) var(--ease);
 }
 
 .btn:active:not(:disabled) {
@@ -372,15 +431,81 @@ a {
 /* Below-the-fold sections fade up once, on the way into view. */
 .reveal {
 	opacity: 0;
-	transform: translateY(18px);
+	transform: translateY(14px);
 	transition:
-		opacity 0.6s var(--ease),
-		transform 0.6s var(--ease);
+		opacity var(--dur-reveal) var(--ease),
+		transform var(--dur-reveal) var(--ease);
 }
 
 .reveal-in {
 	opacity: 1;
 	transform: translateY(0);
+}
+
+/* ----------------------------------------------------- ambient ledger ----
+   The signature background: the site's real mechanism (a grid of court-hour
+   cells quietly turning from free to held and back) run at whisper scale,
+   full-viewport, behind everything. Three copies of the same rectangular-
+   cell pattern, phase-shifted, crossfade on opacity only — never repainted,
+   never re-laid-out, just three numbers drifting on the compositor. */
+.ambient-ledger {
+	position: fixed;
+	inset: 0;
+	z-index: -1;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.ambient-ledger span {
+	position: absolute;
+	inset: -40px;
+	background-image: repeating-linear-gradient(
+		to right,
+		var(--line) 0 2px,
+		transparent 2px 46px
+	),
+	repeating-linear-gradient(to bottom, var(--line) 0 2px, transparent 2px 30px);
+	background-repeat: repeat;
+	animation: amb-breathe var(--amb-a) ease-in-out infinite;
+	will-change: opacity;
+}
+
+.ambient-ledger span:nth-child(2) {
+	background-image: repeating-linear-gradient(
+		to right,
+		var(--pine-wash) 0 2px,
+		transparent 2px 46px
+	),
+	repeating-linear-gradient(to bottom, var(--pine-wash) 0 2px, transparent 2px 30px);
+	background-position: 23px 15px;
+	animation-duration: var(--amb-b);
+	animation-delay: -3200ms;
+}
+
+.ambient-ledger span:nth-child(3) {
+	background-image: repeating-linear-gradient(
+		to right,
+		var(--sand-line) 0 2px,
+		transparent 2px 46px
+	),
+	repeating-linear-gradient(to bottom, var(--sand-line) 0 2px, transparent 2px 30px);
+	background-position: 11px 22px;
+	animation-duration: var(--amb-c);
+	animation-delay: -5400ms;
+}
+
+@keyframes amb-breathe {
+	0%,
+	100% {
+		opacity: 0.03;
+	}
+	50% {
+		opacity: 0.1;
+	}
+}
+
+.ambient-ledger.paused span {
+	animation-play-state: paused;
 }
 
 /* A countdown or price that is about to expire gets a heartbeat, not a
@@ -406,7 +531,7 @@ a {
 	text-decoration-thickness: 1px;
 	text-underline-offset: 0.22em;
 	text-decoration-color: color-mix(in srgb, var(--pine) 35%, transparent);
-	transition: text-decoration-color 0.18s var(--ease);
+	transition: text-decoration-color var(--dur-hover) var(--ease);
 }
 
 .link:hover,
@@ -436,5 +561,11 @@ a {
 		animation-duration: 0.01ms !important;
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
+	}
+
+	/* Not "faster" — off. The ambient loop disappears entirely rather than
+	   settling on a flickering last frame. */
+	.ambient-ledger {
+		display: none;
 	}
 }

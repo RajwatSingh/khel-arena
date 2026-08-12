@@ -167,7 +167,7 @@
 		font-size: 1.0625rem;
 		font-weight: 600;
 		letter-spacing: -0.012em;
-		transition: color 0.18s var(--ease);
+		transition: color var(--dur-hover) var(--ease);
 	}
 
 	.side a:hover .venue {

@@ -142,10 +142,6 @@
 </section>
 
 <style>
-	.auth {
-		padding-block: clamp(3rem, 6vw, 5.5rem);
-	}
-
 	.split {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);

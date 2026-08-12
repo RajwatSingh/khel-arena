@@ -90,7 +90,7 @@
 	.foot-link {
 		font-size: 0.9375rem;
 		color: var(--muted);
-		transition: color 0.18s var(--ease);
+		transition: color var(--dur-hover) var(--ease);
 	}
 
 	.foot-link:hover {

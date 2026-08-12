@@ -39,10 +39,10 @@
 		text-align: left;
 		cursor: pointer;
 		transition:
-			border-color 0.18s var(--ease),
-			background-color 0.18s var(--ease),
-			color 0.18s var(--ease),
-			transform 0.12s var(--ease);
+			border-color var(--dur-hover) var(--ease),
+			background-color var(--dur-hover) var(--ease),
+			color var(--dur-hover) var(--ease),
+			transform calc(var(--dur-hover) * 0.7) var(--ease);
 	}
 
 	.day:hover:not(.on) {

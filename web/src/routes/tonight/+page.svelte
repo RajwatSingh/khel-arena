@@ -111,10 +111,6 @@
 </section>
 
 <style>
-	.head {
-		padding-block: clamp(2.5rem, 5vw, 4rem);
-	}
-
 	h1 {
 		margin-top: 0.6rem;
 	}

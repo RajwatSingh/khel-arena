@@ -75,7 +75,7 @@
 	/>
 </svelte:head>
 
-<section class="hero">
+<section class="hero forest-band">
 	<div class="shell">
 		<p class="label live">Kathmandu &amp; Lalitpur · {formatDateLong(data.date)}</p>
 
@@ -214,9 +214,8 @@
 
 <style>
 	.hero {
-		background: var(--forest);
 		padding-block: clamp(3rem, 6vw, 5.5rem) clamp(2.5rem, 5vw, 4rem);
-		animation: fade-up 0.5s var(--ease) backwards;
+		animation: fade-up var(--dur-load) var(--ease) backwards;
 	}
 
 	.hero h1,
@@ -233,19 +232,19 @@
 	.hero .lede,
 	.hero .search-wrap,
 	.hero .from {
-		animation: fade-up 0.6s var(--ease) backwards;
+		animation: fade-up var(--dur-load) var(--ease) backwards;
 	}
 
 	.hero .lede {
-		animation-delay: 0.08s;
+		animation-delay: var(--dur-load-step);
 	}
 
 	.hero .search-wrap {
-		animation-delay: 0.16s;
+		animation-delay: calc(var(--dur-load-step) * 2);
 	}
 
 	.hero .from {
-		animation-delay: 0.24s;
+		animation-delay: calc(var(--dur-load-step) * 3);
 	}
 
 	@keyframes fade-up {

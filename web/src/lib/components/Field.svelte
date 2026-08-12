@@ -57,8 +57,8 @@
 		background: var(--surface);
 		font-size: 1rem;
 		transition:
-			border-color 0.18s var(--ease),
-			box-shadow 0.18s var(--ease);
+			border-color var(--dur-hover) var(--ease),
+			box-shadow var(--dur-hover) var(--ease);
 	}
 
 	input::placeholder {

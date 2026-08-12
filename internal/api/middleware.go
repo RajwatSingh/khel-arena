@@ -15,6 +15,10 @@ import (
 
 type Middleware func(http.Handler) http.Handler
 
+type Authenticator interface {
+	Authenticate(accessToken string) (uuid.UUID, domain.AccountType, error)
+}
+
 type statusRecorder struct {
 	http.ResponseWriter
 	status int

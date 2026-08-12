@@ -45,8 +45,8 @@
 	--brick-wash: #f2e0d8;
 
 	/* Type */
-	--display: 'Archivo', 'Arial Black', system-ui, sans-serif;
-	--sans: 'Public Sans', system-ui, -apple-system, sans-serif;
+	--display: 'Inter', 'Arial Black', system-ui, sans-serif;
+	--sans: 'Inter', system-ui, -apple-system, sans-serif;
 
 	/* Shape */
 	--r-sm: 10px;

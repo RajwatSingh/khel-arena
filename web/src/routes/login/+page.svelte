@@ -3,6 +3,7 @@
 	import { ApiError } from '$lib/api/index.js';
 	import { session } from '$lib/session.svelte.js';
 	import Field from '$lib/components/Field.svelte';
+	import CentreMark from '$lib/components/CentreMark.svelte';
 
 	let email = $state('');
 	let password = $state('');
@@ -29,21 +30,24 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<section class="auth">
+<section class="auth forest-band">
 	<div class="shell split">
 		<div class="say">
-			<h1 class="display display-l">Sign in</h1>
-			<p class="lede">
+			<h1 class="display display-l fade-up">Sign in</h1>
+			<div class="pitch-mark fade-up fade-up-1">
+				<CentreMark wide />
+			</div>
+			<p class="lede fade-up fade-up-2">
 				An hour held without a name is just an hour. Sign in and the court comes off the board in
 				yours.
 			</p>
-			<p class="demo small">
+			<p class="demo small fade-up fade-up-3">
 				Nothing is wired to a server yet. Try <strong>rajwat@khelarena.np</strong> with
 				<strong>kathmandu2026</strong>.
 			</p>
 		</div>
 
-		<form class="card" onsubmit={submit} novalidate>
+		<form class="card fade-up fade-up-1" onsubmit={submit} novalidate>
 			<Field
 				name="email"
 				label="Email"
@@ -66,7 +70,7 @@
 				<p class="error" role="alert">{error}</p>
 			{/if}
 
-			<button class="btn btn-primary" type="submit" disabled={busy}>
+			<button class="btn btn-primary" class:loading={busy} type="submit" disabled={busy}>
 				{busy ? 'Checking…' : 'Sign in'}
 			</button>
 
@@ -88,13 +92,8 @@
 		align-items: start;
 	}
 
-	.say h1 {
-		color: var(--on-field);
-	}
-
 	.say .lede {
 		margin-top: 1.1rem;
-		color: var(--on-field-muted);
 	}
 
 	.demo {
@@ -102,11 +101,12 @@
 		padding: 0.9rem 1.1rem;
 		border-radius: var(--r-sm);
 		background: var(--sand);
-		color: #6d5320;
+		color: #7a3b22;
 		max-width: 44ch;
 	}
 
 	.demo strong {
+		color: inherit;
 		font-weight: 600;
 	}
 

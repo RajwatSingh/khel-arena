@@ -4,6 +4,8 @@
 	import { session } from '$lib/session.svelte.js';
 	import DateRail from '$lib/components/DateRail.svelte';
 	import HoldPanel from '$lib/components/HoldPanel.svelte';
+	import CentreMark from '$lib/components/CentreMark.svelte';
+	import { reveal } from '$lib/actions/reveal.js';
 	import { formatNPR, formatTime } from '$lib/time.js';
 
 	let { data } = $props();
@@ -97,15 +99,15 @@
 	<meta name="description" content={arena.description} />
 </svelte:head>
 
-<section class="masthead">
+<section class="masthead forest-band">
 	<div class="shell">
-		<nav class="crumbs small" aria-label="Breadcrumb">
+		<nav class="crumbs small fade-up" aria-label="Breadcrumb">
 			<a class="link" href="/arenas">Arenas</a>
 			<span aria-hidden="true">›</span>
 			<span>{arena.area}, {arena.city}</span>
 		</nav>
 
-		<div class="title">
+		<div class="title fade-up">
 			<h1 class="display display-xl">{arena.name}</h1>
 			<span class="rating num">
 				<svg viewBox="0 0 12 12" aria-hidden="true"
@@ -116,7 +118,11 @@
 			</span>
 		</div>
 
-		<div class="intro">
+		<div class="pitch-mark fade-up fade-up-1">
+			<CentreMark wide />
+		</div>
+
+		<div class="intro fade-up fade-up-2">
 			<p class="prose">{arena.description}</p>
 
 			<dl class="vitals card">
@@ -145,8 +151,8 @@
 
 <section class="booking">
 	<div class="shell">
-		<h2 class="label section-label">Choose a court</h2>
-		<div class="courts" role="group" aria-label="Choose a court">
+		<h2 class="label section-label" use:reveal>Choose a court</h2>
+		<div class="courts" role="group" aria-label="Choose a court" use:reveal={{ delay: 60 }}>
 			{#each arena.courts as c (c.id)}
 				<button
 					type="button"
@@ -165,8 +171,10 @@
 			{/each}
 		</div>
 
-		<h2 class="label section-label">Choose a day</h2>
-		<DateRail {dates} selected={date} onselect={switchDate} />
+		<h2 class="label section-label" use:reveal>Choose a day</h2>
+		<div use:reveal={{ delay: 60 }}>
+			<DateRail {dates} selected={date} onselect={switchDate} />
+		</div>
 
 		<div class="split">
 			<div>
@@ -175,8 +183,8 @@
 					{freeCount === 1 ? 'hour' : 'hours'} free
 				</h2>
 				<ul class="hours">
-					{#each grid.slots as s (s.starts_at)}
-						<li>
+					{#each grid.slots as s, i (s.starts_at)}
+						<li style="--i: {Math.min(i, 10)}">
 							{#if s.available}
 								<button
 									type="button"
@@ -221,7 +229,7 @@
 
 <style>
 	.masthead {
-		padding-block: clamp(1.75rem, 3vw, 2.5rem) clamp(2.5rem, 5vw, 3.5rem);
+		padding-block: clamp(2rem, 4vw, 3rem) clamp(2.5rem, 5vw, 3.5rem);
 	}
 
 	.crumbs {
@@ -247,10 +255,6 @@
 		flex-wrap: wrap;
 		gap: 0.75rem 1.25rem;
 		margin-top: 0.9rem;
-	}
-
-	.title h1 {
-		color: var(--on-field);
 	}
 
 	.rating {
@@ -300,6 +304,12 @@
 		grid-column: 1 / -1;
 	}
 
+	/* The vitals card is white regardless of the dark band it sits on —
+	   its own label needs the light-surface colour back. */
+	.vitals dt.label {
+		color: var(--faint);
+	}
+
 	dd {
 		margin: 0;
 		margin-top: 0.3rem;
@@ -325,12 +335,11 @@
 	/* ----------------------------------------------------------- booking --- */
 
 	.booking {
-		padding-bottom: var(--band);
+		padding-block: clamp(2rem, 4vw, 3rem) var(--band);
 	}
 
 	.section-label {
 		margin-bottom: 0.8rem;
-		color: var(--on-field-faint);
 	}
 
 	.courts {
@@ -348,11 +357,16 @@
 		cursor: pointer;
 		transition:
 			border-color 0.18s var(--ease),
-			box-shadow 0.18s var(--ease);
+			box-shadow 0.18s var(--ease),
+			transform 0.12s var(--ease);
 	}
 
 	.court:hover:not(.on) {
 		border-color: var(--line-strong);
+	}
+
+	.court:active {
+		transform: scale(0.98);
 	}
 
 	.court.on {
@@ -401,6 +415,18 @@
 		gap: 0.6rem;
 	}
 
+	.hours li {
+		animation: hour-in 0.3s var(--ease) backwards;
+		animation-delay: calc(var(--i) * 30ms);
+	}
+
+	@keyframes hour-in {
+		from {
+			opacity: 0;
+			transform: translateY(6px);
+		}
+	}
+
 	.hour {
 		display: grid;
 		gap: 0.1rem;
@@ -414,11 +440,17 @@
 		transition:
 			border-color 0.15s var(--ease),
 			background-color 0.15s var(--ease),
-			color 0.15s var(--ease);
+			color 0.15s var(--ease),
+			transform 0.12s var(--ease);
 	}
 
 	.hour:hover:not(.on):not(.off) {
 		border-color: var(--pine);
+		transform: translateY(-2px);
+	}
+
+	.hour:active:not(.off) {
+		transform: scale(0.97);
 	}
 
 	.hour.peak {
@@ -430,6 +462,13 @@
 		background: var(--pine);
 		border-color: var(--pine);
 		color: #ffffff;
+		animation: settle-in 0.2s var(--ease);
+	}
+
+	@keyframes settle-in {
+		from {
+			transform: scale(0.95);
+		}
 	}
 
 	.at {

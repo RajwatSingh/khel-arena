@@ -36,7 +36,10 @@
 			</div>
 		</div>
 
-		<p class="colophon small">Kathmandu · UTC+05:45 · Khel Arena {new Date().getFullYear()}</p>
+		<div class="colophon">
+			<p class="small">Kathmandu · UTC+05:45 · Khel Arena {new Date().getFullYear()}</p>
+			<p class="tagline small">Made for the game.</p>
+		</div>
 	</div>
 </footer>
 
@@ -103,10 +106,22 @@
 	}
 
 	.colophon {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.5rem 1.5rem;
 		margin-top: 3rem;
 		padding-top: 1.5rem;
 		border-top: 1px solid var(--line);
 		color: var(--faint);
+	}
+
+	.tagline {
+		font-family: var(--display);
+		font-weight: 700;
+		font-style: italic;
+		color: var(--pine);
 	}
 
 	@media (max-width: 760px) {

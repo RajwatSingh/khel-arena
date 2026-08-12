@@ -1,4 +1,5 @@
 <script>
+	import { fly } from 'svelte/transition';
 	import { clock } from '$lib/session.svelte.js';
 	import { formatCountdown, formatDateLong, formatNPR, formatTime } from '$lib/time.js';
 
@@ -26,9 +27,26 @@
 		hold?.hold_expires_at ? new Date(hold.hold_expires_at).getTime() - ticking.now : 0
 	);
 	const lapsed = $derived(hold?.status === 'pending' && remaining <= 0);
+
+	// What the panel is showing right now, not how it got there — used only
+	// to key the transition below, so a status change slides the panel's
+	// content rather than snapping it.
+	const stateKey = $derived(
+		hold && hold.status === 'confirmed'
+			? 'confirmed'
+			: hold && lapsed
+				? 'lapsed'
+				: hold
+					? 'held'
+					: slot
+						? 'selected'
+						: 'empty'
+	);
 </script>
 
 <aside class="card panel" aria-live="polite">
+{#key stateKey}
+<div in:fly={{ y: 10, duration: 260 }}>
 	{#if hold && hold.status === 'confirmed'}
 		<p class="label">Confirmed</p>
 		<p class="headline display num">{hold.reference}</p>
@@ -48,7 +66,11 @@
 		<button class="btn btn-secondary wide" onclick={onrelease}>Start over</button>
 	{:else if hold}
 		<p class="label">Held for you</p>
-		<p class="headline display num" class:urgent={remaining < 120_000}>
+		<p
+			class="headline display num"
+			class:urgent={remaining < 120_000}
+			class:pulse-urgent={remaining < 120_000}
+		>
 			{formatCountdown(remaining)}
 		</p>
 		<p class="body">
@@ -63,7 +85,7 @@
 		{/if}
 
 		<div class="actions">
-			<button class="btn btn-primary grow" onclick={onpay} disabled={busy}>
+			<button class="btn btn-primary grow" class:loading={busy} onclick={onpay} disabled={busy}>
 				{busy ? 'Talking to eSewa…' : `Pay NPR ${formatNPR(hold.price_npr)}`}
 			</button>
 			<button class="btn btn-secondary" onclick={onrelease} disabled={busy}>Release</button>
@@ -86,7 +108,7 @@
 		{/if}
 
 		{#if signedIn}
-			<button class="btn btn-primary wide" onclick={onhold} disabled={busy}>
+			<button class="btn btn-primary wide" class:loading={busy} onclick={onhold} disabled={busy}>
 				{busy ? 'Taking the hour…' : 'Hold this hour'}
 			</button>
 			<p class="body dim">
@@ -106,6 +128,8 @@
 			already taken; hatched ones have been and gone.
 		</p>
 	{/if}
+</div>
+{/key}
 </aside>
 
 <style>

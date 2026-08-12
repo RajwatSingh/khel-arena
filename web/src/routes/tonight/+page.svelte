@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { api, SPORT_LABELS } from '$lib/api/index.js';
 	import HourLedger from '$lib/components/HourLedger.svelte';
+	import HourPulse from '$lib/components/HourPulse.svelte';
 	import DateRail from '$lib/components/DateRail.svelte';
 	import { formatDateLong, formatNPR } from '$lib/time.js';
 
@@ -34,11 +35,14 @@
 	/>
 </svelte:head>
 
-<section class="head">
+<section class="head forest-band">
 	<div class="shell">
-		<p class="label">The board</p>
-		<h1 class="display display-l">{formatDateLong(date)}</h1>
-		<p class="lede">
+		<p class="label fade-up">The board</p>
+		<h1 class="display display-l fade-up">{formatDateLong(date)}</h1>
+		<div class="pulse-wrap fade-up fade-up-1">
+			<HourPulse />
+		</div>
+		<p class="lede fade-up fade-up-2">
 			{#if ledger.open_hours > 0}
 				<strong class="num">{ledger.open_hours}</strong>
 				free {ledger.open_hours === 1 ? 'hour' : 'hours'} on
@@ -57,9 +61,11 @@
 
 <section class="controls">
 	<div class="shell">
-		<DateRail dates={data.dates} selected={date} onselect={(d) => set({ date: d })} />
+		<div class="fade-up fade-up-2">
+			<DateRail dates={data.dates} selected={date} onselect={(d) => set({ date: d })} />
+		</div>
 
-		<div class="filters">
+		<div class="filters fade-up fade-up-3">
 			<div class="group" role="group" aria-label="Filter by sport">
 				{#each data.sports as s (s)}
 					<button
@@ -92,7 +98,7 @@
 		{#if ledger.rows.length}
 			<HourLedger {ledger} />
 		{:else}
-			<div class="card empty">
+			<div class="card empty fade-up">
 				<h2 class="display display-m">Nothing here yet</h2>
 				<p class="small">
 					No {sportName} courts in {area === 'all' ? 'the valley' : area}. Widen the area or pick another
@@ -106,27 +112,25 @@
 
 <style>
 	.head {
-		padding-block: clamp(2.5rem, 5vw, 4rem) 1.75rem;
-	}
-
-	.head .label {
-		color: var(--on-field-faint);
+		padding-block: clamp(2.5rem, 5vw, 4rem);
 	}
 
 	h1 {
 		margin-top: 0.6rem;
-		color: var(--on-field);
 	}
 
 	.head .lede {
 		margin-top: 1rem;
 		max-width: 56ch;
-		color: var(--on-field-muted);
 	}
 
-	.head strong {
-		color: var(--on-field);
-		font-weight: 600;
+	.pulse-wrap {
+		margin-top: 1.4rem;
+		max-width: 26rem;
+	}
+
+	.controls {
+		padding-block: clamp(2rem, 4vw, 3rem) 0.5rem;
 	}
 
 	.controls .shell {
@@ -160,12 +164,17 @@
 		transition:
 			border-color 0.18s var(--ease),
 			background-color 0.18s var(--ease),
-			color 0.18s var(--ease);
+			color 0.18s var(--ease),
+			transform 0.12s var(--ease);
 	}
 
 	.chip:hover:not(.on) {
 		border-color: var(--line-strong);
 		color: var(--ink);
+	}
+
+	.chip:active {
+		transform: scale(0.96);
 	}
 
 	.chip.on {
@@ -174,8 +183,29 @@
 		color: #ffffff;
 	}
 
+	.area {
+		position: relative;
+		display: inline-flex;
+	}
+
+	.area::after {
+		content: '';
+		position: absolute;
+		right: 1rem;
+		top: 50%;
+		width: 7px;
+		height: 7px;
+		border-right: 1.5px solid var(--muted);
+		border-bottom: 1.5px solid var(--muted);
+		transform: translateY(-65%) rotate(45deg);
+		pointer-events: none;
+	}
+
 	.area select {
-		padding: 0.5rem 1rem;
+		appearance: none;
+		-webkit-appearance: none;
+		-moz-appearance: none;
+		padding: 0.5rem 2.25rem 0.5rem 1rem;
 		border: 1px solid var(--line);
 		border-radius: var(--r-pill);
 		background: var(--surface);

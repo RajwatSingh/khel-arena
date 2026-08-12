@@ -25,8 +25,8 @@
 		top: -4rem;
 		z-index: 100;
 		padding: 0.6rem 1rem;
-		background: var(--sodium);
-		color: #17190f;
+		background: var(--pine);
+		color: #ffffff;
 		font-size: 0.8125rem;
 		font-weight: 600;
 		transition: top 0.2s var(--ease);

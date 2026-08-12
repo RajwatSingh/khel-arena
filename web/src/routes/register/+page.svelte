@@ -3,6 +3,7 @@
 	import { ApiError } from '$lib/api/index.js';
 	import { session } from '$lib/session.svelte.js';
 	import Field from '$lib/components/Field.svelte';
+	import CentreMark from '$lib/components/CentreMark.svelte';
 
 	let form = $state({
 		full_name: '',
@@ -52,17 +53,20 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<section class="auth">
+<section class="auth forest-band">
 	<div class="shell split">
 		<div class="say">
-			<h1 class="display display-l">Make a player card</h1>
-			<p class="lede">
+			<h1 class="display display-l fade-up">Make a player card</h1>
+			<div class="pitch-mark fade-up fade-up-1">
+				<CentreMark wide />
+			</div>
+			<p class="lede fade-up fade-up-2">
 				Name, email, password. The rest is how other players find you when someone is a man short —
 				leave it blank and fill it in later.
 			</p>
 		</div>
 
-		<form class="card" onsubmit={submit} novalidate>
+		<form class="card fade-up fade-up-1" onsubmit={submit} novalidate>
 			<Field
 				name="full_name"
 				label="Full name"
@@ -128,7 +132,7 @@
 				<p class="error" role="alert">{error}</p>
 			{/if}
 
-			<button class="btn btn-primary" type="submit" disabled={busy}>
+			<button class="btn btn-primary" class:loading={busy} type="submit" disabled={busy}>
 				{busy ? 'Creating…' : 'Create account'}
 			</button>
 
@@ -149,13 +153,8 @@
 		align-items: start;
 	}
 
-	.say h1 {
-		color: var(--on-field);
-	}
-
 	.say .lede {
 		margin-top: 1.1rem;
-		color: var(--on-field-muted);
 	}
 
 	form {
@@ -193,11 +192,16 @@
 		transition:
 			border-color 0.18s var(--ease),
 			background-color 0.18s var(--ease),
-			color 0.18s var(--ease);
+			color 0.18s var(--ease),
+			transform 0.12s var(--ease);
 	}
 
 	.chip:hover:not(.on) {
 		color: var(--ink);
+	}
+
+	.chip:active {
+		transform: scale(0.96);
 	}
 
 	.chip.on {

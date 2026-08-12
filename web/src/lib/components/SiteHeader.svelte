@@ -54,7 +54,7 @@
 		position: sticky;
 		top: 0;
 		z-index: 40;
-		background: color-mix(in srgb, var(--field) 88%, transparent);
+		background: color-mix(in srgb, var(--field) 92%, transparent);
 		backdrop-filter: blur(12px);
 		border-bottom: 1px solid var(--line);
 	}
@@ -71,15 +71,20 @@
 		align-items: center;
 		gap: 0.65rem;
 		font-family: var(--display);
-		font-size: 1.375rem;
-		font-weight: 500;
+		font-size: 1.3125rem;
+		font-weight: 800;
 		letter-spacing: -0.02em;
 		white-space: nowrap;
-		color: var(--on-field);
+		color: var(--ink);
 	}
 
 	.mark :global(svg) {
-		color: var(--accent-on-field);
+		color: var(--pine);
+		transition: transform 0.5s var(--ease);
+	}
+
+	.mark:hover :global(svg) {
+		transform: rotate(180deg);
 	}
 
 	nav {
@@ -92,16 +97,16 @@
 		padding: 0.5rem 0.95rem;
 		border-radius: var(--r-pill);
 		font-size: 0.9375rem;
-		font-weight: 500;
-		color: var(--on-field-muted);
+		font-weight: 600;
+		color: var(--muted);
 		transition:
 			background-color 0.18s var(--ease),
 			color 0.18s var(--ease);
 	}
 
 	.tab:hover {
-		background: var(--surface);
-		color: var(--ink);
+		background: var(--pine-wash);
+		color: var(--pine-deep);
 	}
 
 	.tab[aria-current='page'] {
@@ -118,7 +123,7 @@
 
 	.clock {
 		font-size: 0.875rem;
-		color: var(--on-field-faint);
+		color: var(--faint);
 		white-space: nowrap;
 	}
 
@@ -142,6 +147,20 @@
 			margin-right: 0;
 			overflow-x: auto;
 			padding-bottom: 0.15rem;
+			-webkit-mask-image: linear-gradient(
+				to right,
+				transparent,
+				#000 1.25rem,
+				#000 calc(100% - 1.25rem),
+				transparent
+			);
+			mask-image: linear-gradient(
+				to right,
+				transparent,
+				#000 1.25rem,
+				#000 calc(100% - 1.25rem),
+				transparent
+			);
 		}
 
 		.right {

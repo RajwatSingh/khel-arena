@@ -54,7 +54,20 @@
 	.wide {
 		width: 100%;
 		height: 24px;
-		color: var(--line);
+		color: inherit;
+	}
+
+	/* Marked out like a pitch would be: the halfway line first, then the
+	   circle traced round, the spot dropped last — quick enough to read as
+	   a flourish, not a loading state. */
+	.wide line {
+		stroke-dasharray: 560;
+		stroke-dashoffset: 560;
+		animation: draw 0.9s var(--ease) forwards;
+	}
+
+	.wide line:last-child {
+		animation-delay: 0.12s;
 	}
 
 	.badge {
@@ -64,6 +77,35 @@
 		transform: translateX(-50%);
 		width: 40px;
 		height: 24px;
-		color: var(--line-bright);
+		color: inherit;
+	}
+
+	.badge circle:not(.spot) {
+		stroke-dasharray: 63;
+		stroke-dashoffset: 63;
+		animation: draw 0.6s var(--ease) 0.45s forwards;
+	}
+
+	.badge line {
+		stroke-dasharray: 24;
+		stroke-dashoffset: 24;
+		animation: draw 0.35s var(--ease) 0.85s forwards;
+	}
+
+	.badge .spot {
+		opacity: 0;
+		animation: dot-in 0.25s var(--ease) 1.05s forwards;
+	}
+
+	@keyframes draw {
+		to {
+			stroke-dashoffset: 0;
+		}
+	}
+
+	@keyframes dot-in {
+		to {
+			opacity: 1;
+		}
 	}
 </style>

@@ -1,5 +1,7 @@
 <script>
 	import { api, ApiError } from '$lib/api/index.js';
+	import CentreMark from '$lib/components/CentreMark.svelte';
+	import { reveal } from '$lib/actions/reveal.js';
 	import { clock, session } from '$lib/session.svelte.js';
 	import { formatCountdown, formatDate, formatNPR, formatTime } from '$lib/time.js';
 
@@ -56,23 +58,26 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<section class="head">
+<section class="head forest-band">
 	<div class="shell">
-		<p class="label">Your hours</p>
-		<h1 class="display display-l">My bookings</h1>
+		<p class="label fade-up">Your hours</p>
+		<h1 class="display display-l fade-up">My bookings</h1>
+		<div class="pitch-mark fade-up fade-up-1">
+			<CentreMark wide />
+		</div>
 	</div>
 </section>
 
 <section class="body">
 	<div class="shell">
 		{#if !session.signedIn}
-			<div class="card notice">
+			<div class="card notice fade-up">
 				<h2 class="display display-m">Sign in to see your hours</h2>
 				<p>Bookings are tied to your account, so we need to know whose name to look under.</p>
 				<a class="btn btn-primary" href="/login">Sign in</a>
 			</div>
 		{:else if bookings.length === 0}
-			<div class="card notice">
+			<div class="card notice fade-up">
 				<h2 class="display display-m">Nothing booked yet</h2>
 				<p>
 					The board shows every free hour in the valley. Pick one and it is yours for fifteen
@@ -85,13 +90,13 @@
 				<p class="error" role="alert">{error}</p>
 			{/if}
 			<ul class="rows">
-				{#each bookings as booking (booking.id)}
+				{#each bookings as booking, i (booking.id)}
 					{@const remaining =
 						booking.status === 'pending'
 							? new Date(booking.hold_expires_at).getTime() - ticking.now
 							: 0}
 					{@const done = booking.status === 'cancelled' || booking.status === 'expired'}
-					<li class="card row" class:done>
+					<li class="card row" class:done use:reveal={{ delay: Math.min(i, 6) * 60 }}>
 						<div class="when">
 							<span class="time num">
 								{formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}
@@ -115,7 +120,11 @@
 								{STATUS[booking.status] ?? booking.status}
 							</span>
 							{#if booking.status === 'pending' && remaining > 0}
-								<span class="note num" class:urgent={remaining < 120_000}>
+								<span
+									class="note num"
+									class:urgent={remaining < 120_000}
+									class:pulse-urgent={remaining < 120_000}
+								>
 									{formatCountdown(remaining)} left to pay
 								</span>
 							{:else if booking.status === 'confirmed'}
@@ -142,20 +151,15 @@
 
 <style>
 	.head {
-		padding-block: clamp(2.5rem, 5vw, 4rem) 1.75rem;
-	}
-
-	.head .label {
-		color: var(--on-field-faint);
+		padding-block: clamp(2.5rem, 5vw, 4rem);
 	}
 
 	h1 {
 		margin-top: 0.6rem;
-		color: var(--on-field);
 	}
 
 	.body {
-		padding-bottom: var(--band);
+		padding-block: clamp(2rem, 4vw, 3rem) var(--band);
 	}
 
 	.notice {
@@ -232,7 +236,7 @@
 
 	.badge.waiting {
 		background: var(--sand);
-		color: #7a5a1a;
+		color: #7a3b22;
 	}
 
 	.note {

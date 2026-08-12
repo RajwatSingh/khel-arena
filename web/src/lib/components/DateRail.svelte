@@ -41,17 +41,29 @@
 		transition:
 			border-color 0.18s var(--ease),
 			background-color 0.18s var(--ease),
-			color 0.18s var(--ease);
+			color 0.18s var(--ease),
+			transform 0.12s var(--ease);
 	}
 
 	.day:hover:not(.on) {
 		border-color: var(--line-strong);
 	}
 
+	.day:active {
+		transform: scale(0.96);
+	}
+
 	.day.on {
 		background: var(--pine);
 		border-color: var(--pine);
 		color: #ffffff;
+		animation: settle-in 0.22s var(--ease);
+	}
+
+	@keyframes settle-in {
+		from {
+			transform: scale(0.94);
+		}
 	}
 
 	.when {

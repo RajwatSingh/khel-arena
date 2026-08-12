@@ -3,6 +3,7 @@
 	import HourPulse from '$lib/components/HourPulse.svelte';
 	import ArenaRecord from '$lib/components/ArenaRecord.svelte';
 	import AvailabilitySearch from '$lib/components/AvailabilitySearch.svelte';
+	import { reveal } from '$lib/actions/reveal.js';
 	import { formatDateLong, formatNPR, formatTime } from '$lib/time.js';
 
 	let { data } = $props();
@@ -135,7 +136,7 @@
 
 <section class="band how">
 	<div class="shell">
-		<header class="section-head">
+		<header class="section-head" use:reveal>
 			<div>
 				<h2 class="display display-l">Fifteen minutes to get your five to answer</h2>
 				<p class="lede">
@@ -146,8 +147,8 @@
 		</header>
 
 		<ol class="steps">
-			{#each steps as step (step.at)}
-				<li class="card">
+			{#each steps as step, i (step.at)}
+				<li class="card" use:reveal={{ delay: i * 80 }}>
 					<p class="when">{step.at}</p>
 					<h3 class="display display-m">{step.title}</h3>
 					<p class="small">{step.body}</p>
@@ -159,7 +160,7 @@
 
 <section class="band arenas-band">
 	<div class="shell">
-		<header class="section-head">
+		<header class="section-head" use:reveal>
 			<div>
 				<h2 class="display display-l">Four arenas, nine courts</h2>
 				<p class="lede">
@@ -170,8 +171,8 @@
 		</header>
 
 		<ul class="arenas">
-			{#each data.arenas as arena (arena.id)}
-				<li><ArenaRecord {arena} /></li>
+			{#each data.arenas as arena, i (arena.id)}
+				<li use:reveal={{ delay: i * 70 }}><ArenaRecord {arena} /></li>
 			{/each}
 		</ul>
 	</div>
@@ -180,7 +181,7 @@
 <section class="band">
 	<div class="shell">
 		<div class="promises">
-			<div class="promise card">
+			<div class="promise card" use:reveal>
 				<h2 class="display display-l">Two teams can never be sold the same hour</h2>
 				<div class="prose">
 					<p>
@@ -197,7 +198,7 @@
 				<a class="btn btn-primary" href="/tonight">Find an hour</a>
 			</div>
 
-			<div class="promise-light card">
+			<div class="promise-light card" use:reveal={{ delay: 90 }}>
 				<h2 class="display display-m">The arena's price is the price</h2>
 				<div class="prose">
 					<p>
@@ -213,7 +214,9 @@
 
 <style>
 	.hero {
+		background: var(--forest);
 		padding-block: clamp(3rem, 6vw, 5.5rem) clamp(2.5rem, 5vw, 4rem);
+		animation: fade-up 0.5s var(--ease) backwards;
 	}
 
 	.hero h1,
@@ -224,6 +227,32 @@
 	.hero .lede,
 	.hero .from {
 		color: var(--on-field-muted);
+	}
+
+	.hero :global(.hourpulse),
+	.hero .lede,
+	.hero .search-wrap,
+	.hero .from {
+		animation: fade-up 0.6s var(--ease) backwards;
+	}
+
+	.hero .lede {
+		animation-delay: 0.08s;
+	}
+
+	.hero .search-wrap {
+		animation-delay: 0.16s;
+	}
+
+	.hero .from {
+		animation-delay: 0.24s;
+	}
+
+	@keyframes fade-up {
+		from {
+			opacity: 0;
+			transform: translateY(10px);
+		}
 	}
 
 	.label.live {
@@ -290,17 +319,7 @@
 	}
 
 	.board {
-		padding-bottom: var(--band);
-	}
-
-	.board .section-head h2,
-	.arenas-band .section-head h2 {
-		color: var(--on-field);
-	}
-
-	.board .section-head .lede,
-	.arenas-band .section-head .lede {
-		color: var(--on-field-muted);
+		padding-block: clamp(2.25rem, 4vw, 3.25rem) var(--band);
 	}
 
 	.section-head {
@@ -336,7 +355,12 @@
 	.steps li {
 		padding: 1.6rem;
 		background: var(--field);
-		border-color: transparent;
+		border-color: var(--line);
+		transition: transform 0.2s var(--ease);
+	}
+
+	.steps li:hover {
+		transform: translateY(-3px);
 	}
 
 	/* The markers are the clock, not 01/02/03 — the hold window is the content. */
@@ -353,11 +377,11 @@
 
 	.steps h3 {
 		margin-bottom: 0.5rem;
-		color: var(--on-field);
+		color: var(--ink);
 	}
 
 	.steps p {
-		color: var(--on-field-muted);
+		color: var(--muted);
 	}
 
 	/* ------------------------------------------------------------ arenas --- */
@@ -397,7 +421,7 @@
 
 	.promise .prose {
 		margin-top: 1.5rem;
-		color: rgba(255, 255, 255, 0.82);
+		color: rgba(255, 255, 255, 0.92);
 		font-size: 1.0625rem;
 	}
 

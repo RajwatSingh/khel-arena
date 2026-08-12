@@ -199,7 +199,8 @@
 		transition:
 			background-color 0.15s var(--ease),
 			border-color 0.15s var(--ease),
-			color 0.15s var(--ease);
+			color 0.15s var(--ease),
+			transform 0.15s var(--ease);
 	}
 
 	.open .price {
@@ -219,6 +220,7 @@
 		background: var(--pine);
 		border-color: var(--pine);
 		color: #ffffff;
+		transform: translateY(-2px);
 	}
 
 	.taken {
@@ -251,7 +253,7 @@
 		flex-wrap: wrap;
 		gap: 0.6rem 1.75rem;
 		margin-top: 1.25rem;
-		color: var(--on-field-muted);
+		color: var(--muted);
 	}
 
 	.key li {

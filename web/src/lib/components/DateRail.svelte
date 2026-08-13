@@ -57,12 +57,13 @@
 		background: var(--pine);
 		border-color: var(--pine);
 		color: #ffffff;
-		animation: settle-in 0.22s var(--ease);
+		animation: settle-in 0.34s var(--ease-reveal);
 	}
 
 	@keyframes settle-in {
 		from {
 			transform: scale(0.94);
+			filter: blur(4px);
 		}
 	}
 

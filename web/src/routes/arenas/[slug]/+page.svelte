@@ -125,7 +125,7 @@
 		<div class="intro fade-up fade-up-2">
 			<p class="prose">{arena.description}</p>
 
-			<dl class="vitals card">
+			<dl class="vitals">
 				<div>
 					<dt class="label">Open daily</dt>
 					<dd class="num">{arena.opens_at} – {arena.closes_at}</dd>
@@ -156,14 +156,15 @@
 			{#each arena.courts as c (c.id)}
 				<button
 					type="button"
-					class="court card"
+					class="court"
 					class:on={c.id === court.id}
 					aria-pressed={c.id === court.id}
 					onclick={() => switchCourt(c.id)}
 				>
-					<span class="court-name display display-m">{c.name}</span>
-					<span class="court-meta small">{SPORT_LABELS[c.sport]} · {c.format}</span>
-					<span class="court-surface small">{c.surface}</span>
+					<span class="who">
+						<span class="court-name display display-m">{c.name}</span>
+						<span class="court-meta small">{SPORT_LABELS[c.sport]} · {c.format} · {c.surface}</span>
+					</span>
 					<span class="court-price small">
 						from <strong class="num">NPR {formatNPR(c.base_price_npr)}</strong> / hour
 					</span>
@@ -289,28 +290,29 @@
 		line-height: 1.65;
 	}
 
+	/* Read straight off the dark band, like a scoreboard readout — a hairline
+	   rule at top stands in for the box the numbers used to sit in. */
 	.vitals {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 1.25rem;
-		padding: 1.5rem;
+		gap: 1.25rem 1.5rem;
+		padding-top: 1.25rem;
+		border-top: 1px solid color-mix(in srgb, var(--on-field) 20%, transparent);
 	}
 
 	.vitals .wide {
 		grid-column: 1 / -1;
 	}
 
-	/* The vitals card is white regardless of the dark band it sits on —
-	   its own label needs the light-surface colour back. */
 	.vitals dt.label {
-		color: var(--faint);
+		color: var(--on-field-faint);
 	}
 
 	dd {
 		margin: 0;
 		margin-top: 0.3rem;
 		font-size: 1rem;
-		color: var(--ink);
+		color: var(--on-field);
 	}
 
 	.amenities {
@@ -322,10 +324,10 @@
 
 	.amenities li {
 		padding: 0.25rem 0.7rem;
-		border: 1px solid var(--line);
+		border: 1px solid color-mix(in srgb, var(--on-field) 24%, transparent);
 		border-radius: var(--r-pill);
 		font-size: 0.8125rem;
-		color: var(--muted);
+		color: var(--on-field-muted);
 	}
 
 	/* ----------------------------------------------------------- booking --- */
@@ -338,39 +340,47 @@
 		margin-bottom: 0.8rem;
 	}
 
+	/* A pick-list, not a rack of tiles: rows in a register, told apart by a
+	   left rule that lights up pine when a court is picked. */
 	.courts {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-		gap: 0.75rem;
 		margin-bottom: 2rem;
+		border-top: 1px solid var(--line);
 	}
 
 	.court {
-		display: grid;
-		gap: 0.2rem;
-		padding: 1.25rem;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 0.4rem 2rem;
+		width: 100%;
+		padding: 1.1rem 0.9rem 1.1rem 1.1rem;
+		border-bottom: 1px solid var(--line);
+		border-left: 3px solid transparent;
 		text-align: left;
 		cursor: pointer;
 		transition:
 			border-color 0.18s var(--ease),
-			box-shadow 0.18s var(--ease),
-			transform 0.12s var(--ease);
+			background-color 0.18s var(--ease);
 	}
 
 	.court:hover:not(.on) {
-		border-color: var(--line-strong);
+		border-left-color: var(--line-strong);
+		background: var(--surface);
 	}
 
 	.court:active {
-		transform: scale(0.98);
+		background: var(--surface-sunk);
 	}
 
 	.court.on {
-		border-color: var(--pine);
-		box-shadow: 0 0 0 1px var(--pine);
+		border-left-color: var(--pine);
+		background: var(--pine-wash);
 	}
 
 	.court-name {
+		display: block;
 		transition: color 0.18s var(--ease);
 	}
 
@@ -378,17 +388,14 @@
 		color: var(--pine);
 	}
 
-	.court-meta,
-	.court-surface {
+	.court-meta {
+		display: block;
+		margin-top: 0.15rem;
 		color: var(--muted);
 	}
 
-	.court-surface {
-		color: var(--faint);
-	}
-
 	.court-price {
-		margin-top: 0.5rem;
+		flex-shrink: 0;
 		color: var(--muted);
 	}
 

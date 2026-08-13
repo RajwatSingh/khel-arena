@@ -9,12 +9,13 @@
 	const rest = $derived(arena.amenities.length - shown.length);
 </script>
 
-<a class="card record" href="/arenas/{arena.slug}">
-	<div class="head">
-		<div>
+<a class="record" href="/arenas/{arena.slug}">
+	<div class="line-1">
+		<div class="who">
 			<h3 class="display display-m">{arena.name}</h3>
 			<p class="where small">{arena.area}, {arena.city}</p>
 		</div>
+
 		<span class="rating num" aria-label="Rated {arena.rating} out of 5 from {arena.review_count} reviews">
 			<svg viewBox="0 0 12 12" aria-hidden="true"
 				><path
@@ -24,7 +25,24 @@
 			{arena.rating}
 			<span class="reviews">({arena.review_count})</span>
 		</span>
+
+		<p class="price">
+			<span class="from">from</span>
+			<strong class="num">NPR {formatNPR(arena.from_price_npr)}</strong>
+			<span class="per">/ hour</span>
+		</p>
 	</div>
+
+	<dl class="vitals">
+		<div>
+			<dt class="label">Courts</dt>
+			<dd>{arena.court_count} · {sports.join(', ')}</dd>
+		</div>
+		<div>
+			<dt class="label">Open</dt>
+			<dd class="num">{arena.opens_at}–{arena.closes_at}</dd>
+		</div>
+	</dl>
 
 	<p class="blurb">{arena.description}</p>
 
@@ -36,48 +54,36 @@
 			<li class="more">+{rest} more</li>
 		{/if}
 	</ul>
-
-	<div class="foot">
-		<dl>
-			<div>
-				<dt class="label">Courts</dt>
-				<dd>{arena.court_count} · {sports.join(', ')}</dd>
-			</div>
-			<div>
-				<dt class="label">Open</dt>
-				<dd class="num">{arena.opens_at}–{arena.closes_at}</dd>
-			</div>
-		</dl>
-		<p class="price">
-			<span class="from">from</span>
-			<strong class="num">NPR {formatNPR(arena.from_price_npr)}</strong>
-			<span class="per">/ hour</span>
-		</p>
-	</div>
 </a>
 
 <style>
+	/* A record in the register, not a tile in a grid: one hairline rule opens
+	   the row, the row itself carries no surface, border, or shadow of its
+	   own. The rule brightens to pine on hover — the same "line goes live"
+	   read as picking a row on the board. */
 	.record {
-		display: flex;
-		flex-direction: column;
-		gap: 1.15rem;
-		height: 100%;
-		padding: clamp(1.4rem, 2.5vw, 1.85rem);
-		transition:
-			border-color var(--dur-hover) var(--ease),
-			transform var(--dur-hover) var(--ease);
+		display: block;
+		padding-block: 1.5rem;
+		border-top: 1px solid var(--line);
+		transition: border-color var(--dur-hover) var(--ease);
 	}
 
 	.record:hover,
 	.record:focus-visible {
-		transform: translateY(-2px);
+		border-top-color: var(--pine);
 	}
 
-	.head {
+	.line-1 {
 		display: flex;
-		align-items: flex-start;
+		flex-wrap: wrap;
+		align-items: center;
 		justify-content: space-between;
-		gap: 1rem;
+		column-gap: 1.75rem;
+		row-gap: 0.5rem;
+	}
+
+	.who {
+		flex-shrink: 0;
 	}
 
 	h3 {
@@ -98,10 +104,7 @@
 		align-items: center;
 		gap: 0.3rem;
 		flex-shrink: 0;
-		padding: 0.3rem 0.65rem;
-		border-radius: var(--r-pill);
-		background: var(--pine-wash);
-		color: var(--pine);
+		color: var(--faint);
 		font-size: 0.875rem;
 		font-weight: 600;
 	}
@@ -109,7 +112,7 @@
 	.rating svg {
 		width: 12px;
 		height: 12px;
-		fill: currentColor;
+		fill: var(--pine);
 	}
 
 	.reviews {
@@ -117,60 +120,52 @@
 		opacity: 0.7;
 	}
 
+	.vitals {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem 1.75rem;
+		margin-top: 0.7rem;
+	}
+
+	.vitals dd {
+		margin: 0;
+		margin-top: 0.15rem;
+		font-size: 0.9375rem;
+		color: var(--ink);
+	}
+
 	.blurb {
+		margin-top: 0.85rem;
+		max-width: 60ch;
 		color: var(--muted);
 		font-size: 1rem;
 		line-height: 1.6;
-		display: -webkit-box;
-		-webkit-line-clamp: 3;
-		line-clamp: 3;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
 	}
 
 	.amenities {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.4rem;
+		gap: 0.4rem 1.1rem;
+		margin-top: 0.85rem;
 	}
 
 	.amenities li {
-		padding: 0.25rem 0.7rem;
-		border: 1px solid var(--line);
-		border-radius: var(--r-pill);
-		color: var(--muted);
+		color: var(--faint);
 		font-size: 0.8125rem;
 	}
 
+	.amenities li:not(:last-child)::after {
+		content: '·';
+		margin-left: 1.1rem;
+		color: var(--line-strong);
+	}
+
 	.amenities .more {
-		border-style: dashed;
-		color: var(--faint);
-	}
-
-	.foot {
-		display: flex;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: 1rem;
-		margin-top: auto;
-		padding-top: 1.15rem;
-		border-top: 1px solid var(--line);
-	}
-
-	dl {
-		display: flex;
-		gap: 1.75rem;
-	}
-
-	dd {
-		margin: 0;
-		margin-top: 0.2rem;
-		font-size: 0.9375rem;
-		color: var(--ink);
+		color: var(--muted);
 	}
 
 	.price {
-		text-align: right;
+		flex-shrink: 0;
 		white-space: nowrap;
 	}
 
@@ -187,14 +182,10 @@
 		letter-spacing: -0.02em;
 	}
 
-	@media (max-width: 520px) {
-		.foot {
+	@media (max-width: 640px) {
+		.line-1 {
 			flex-direction: column;
 			align-items: flex-start;
-		}
-
-		.price {
-			text-align: left;
 		}
 	}
 </style>

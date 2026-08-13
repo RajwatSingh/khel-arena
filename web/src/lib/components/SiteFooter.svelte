@@ -1,8 +1,9 @@
 <script>
 	import CentreMark from './CentreMark.svelte';
+	import { reveal } from '$lib/actions/reveal.js';
 </script>
 
-<footer>
+<footer use:reveal>
 	<div class="shell">
 		<div class="grid">
 			<div class="about">

@@ -3,16 +3,29 @@
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import AmbientLedger from '$lib/components/AmbientLedger.svelte';
+	import DotGridSpotlight from '$lib/components/DotGridSpotlight.svelte';
 	import { session } from '$lib/session.svelte.js';
+	import { haptic } from '$lib/haptic.js';
 
 	let { children } = $props();
 
 	// The server renders signed-out; the browser knows better as soon as it has
 	// the stored session in hand.
 	$effect(() => session.restore());
+
+	// One delegated listener catches every button on the site, present and
+	// future, rather than wiring haptic() into each one by hand — a tap on
+	// a touch device gets a buzz back, a click anywhere else is a no-op.
+	function onClick(e) {
+		const button = e.target.closest('button');
+		if (button && !button.disabled) haptic();
+	}
 </script>
 
+<svelte:window onclick={onClick} />
+
 <AmbientLedger />
+<DotGridSpotlight />
 <a class="skip" href="#main">Skip to content</a>
 <SiteHeader />
 <main id="main">

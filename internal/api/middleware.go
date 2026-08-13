@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/RajwatSingh/khel-arena/internal/domain"
-	"github.com/RajwatSingh/khel-arena/internal/service"
 	"github.com/google/uuid"
 )
 
@@ -107,7 +106,7 @@ func withTimeout(d time.Duration) Middleware {
 	}
 }
 
-func withAuth(authService *service.AuthService) Middleware {
+func withAuth(authService Authenticator) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := bearerToken(r)

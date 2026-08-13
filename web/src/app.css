@@ -63,12 +63,18 @@
 	--band: clamp(4rem, 8vw, 7rem);
 
 	--ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+	/* An even, unhurried pull with no snap at the start — the curve under
+	   every blur-in entrance, distinct from the snappier UI --ease. Gentler
+	   than an easeOutExpo: motion is still building through the middle of
+	   the duration instead of front-loaded into the first frames. */
+	--ease-reveal: cubic-bezier(0.22, 0.61, 0.36, 1);
 
 	/* Motion scale */
 	--dur-hover: 140ms; /* hover micro-interactions */
 	--dur-load: 460ms; /* page-load reveal, per element */
 	--dur-load-step: 70ms; /* stagger interval between load elements */
-	--dur-reveal: 520ms; /* scroll-triggered section entry */
+	--dur-reveal: 900ms; /* scroll-triggered section entry */
+	--reveal-rise: 18px; /* how far a section travels as it enters */
 	--amb-a: 6400ms; /* ambient ledger, three desynced breathing rates */
 	--amb-b: 8600ms;
 	--amb-c: 10800ms;
@@ -467,18 +473,25 @@ a.card:focus-visible,
 	}
 }
 
-/* Below-the-fold sections fade up once, on the way into view. */
+/* Below-the-fold sections arrive once, the moment they're first scrolled
+   to: out of focus and a few pixels low, settling up into sharp focus on a
+   slow decelerating pull. Never re-triggers — scrolling back past a
+   section that has already landed leaves it exactly as it is. */
 .reveal {
 	opacity: 0;
-	transform: translateY(14px);
+	transform: translateY(var(--reveal-rise));
+	filter: blur(10px);
 	transition:
-		opacity var(--dur-reveal) var(--ease),
-		transform var(--dur-reveal) var(--ease);
+		opacity var(--dur-reveal) var(--ease-reveal),
+		transform var(--dur-reveal) var(--ease-reveal),
+		filter var(--dur-reveal) var(--ease-reveal);
+	transition-delay: var(--reveal-delay, 0ms);
 }
 
 .reveal-in {
 	opacity: 1;
-	transform: translateY(0);
+	transform: none;
+	filter: blur(0);
 }
 
 /* ----------------------------------------------------- ambient ledger ----

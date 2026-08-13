@@ -148,7 +148,7 @@
 
 		<ol class="steps">
 			{#each steps as step, i (step.at)}
-				<li class="card" use:reveal={{ delay: i * 80 }}>
+				<li use:reveal={{ delay: i * 80 }}>
 					<p class="when">{step.at}</p>
 					<h3 class="display display-m">{step.title}</h3>
 					<p class="small">{step.body}</p>
@@ -181,7 +181,7 @@
 <section class="band">
 	<div class="shell">
 		<div class="promises">
-			<div class="promise card" use:reveal>
+			<div class="promise" use:reveal>
 				<h2 class="display display-l">Two teams can never be sold the same hour</h2>
 				<div class="prose">
 					<p>
@@ -198,7 +198,7 @@
 				<a class="btn btn-primary" href="/tonight">Find an hour</a>
 			</div>
 
-			<div class="promise-light card" use:reveal={{ delay: 90 }}>
+			<div class="promise-light" use:reveal={{ delay: 90 }}>
 				<h2 class="display display-m">The arena's price is the price</h2>
 				<div class="prose">
 					<p>
@@ -352,14 +352,13 @@
 	}
 
 	.steps li {
-		padding: 1.6rem;
-		background: var(--field);
-		border-color: var(--line);
-		transition: transform 0.2s var(--ease);
+		padding-top: 1.4rem;
+		border-top: 2px solid var(--line);
+		transition: border-color 0.2s var(--ease);
 	}
 
 	.steps li:hover {
-		transform: translateY(-3px);
+		border-top-color: var(--pine);
 	}
 
 	/* The markers are the clock, not 01/02/03 — the hold window is the content. */
@@ -387,8 +386,6 @@
 
 	.arenas {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(23rem, 1fr));
-		gap: 1rem;
 	}
 
 	/* ----------------------------------------------------------- promise --- */
@@ -409,7 +406,6 @@
 
 	.promise {
 		background: var(--pine);
-		border-color: var(--pine);
 		color: #ffffff;
 	}
 
@@ -440,7 +436,6 @@
 	.promise-light {
 		justify-content: center;
 		background: var(--sand);
-		border-color: var(--sand-line);
 	}
 
 	.promise-light h2 {
@@ -457,9 +452,4 @@
 		}
 	}
 
-	@media (max-width: 560px) {
-		.arenas {
-			grid-template-columns: minmax(0, 1fr);
-		}
-	}
 </style>

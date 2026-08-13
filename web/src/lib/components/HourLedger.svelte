@@ -1,5 +1,6 @@
 <script>
 	import { formatNPR, formatTime } from '$lib/time.js';
+	import MiddleTruncation from './MiddleTruncation.svelte';
 
 	/**
 	 * The board: every court down the side, the hours of one day across the top,
@@ -32,12 +33,18 @@
 	function href(row, slot) {
 		return `/arenas/${row.arena_slug}?court=${row.court_id}&date=${ledger.date}&at=${encodeURIComponent(slot.starts_at)}`;
 	}
+
+	// Day, sport and area all end up changing which courts are listed, when,
+	// or both — so one key covering court set + date is enough to catch a
+	// switch on any of the three and re-mount the whole board for it.
+	const boardKey = $derived(`${ledger.date}:${ledger.rows.map((r) => r.court_id).join(',')}`);
 </script>
 
 <div class="ledger">
 	<!-- A scrollable region has to be reachable by keyboard, which is exactly
 	     what this lint rule assumes it is not. -->
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+	{#key boardKey}
 	<div class="card scroll" role="region" aria-label="Court availability by hour" tabindex="0">
 		<table>
 			<caption class="sr-only">
@@ -52,12 +59,15 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each byHour as { row, map }, r (row.court_id)}
+				{#each byHour as { row, map }, r (`${row.court_id}:${ledger.date}`)}
 					<tr style="--row: {r}">
 						<th scope="row" class="side">
 							<a href="/arenas/{row.arena_slug}">
-								<span class="venue">{row.arena_name}</span>
-								<span class="court">{row.court_name} · {row.format} · {row.arena_area}</span>
+								<MiddleTruncation class="venue" text={row.arena_name} />
+								<MiddleTruncation
+									class="court"
+									text="{row.court_name} · {row.format} · {row.arena_area}"
+								/>
 							</a>
 						</th>
 						{#each hours as hour (hour)}
@@ -88,6 +98,7 @@
 			</tbody>
 		</table>
 	</div>
+	{/key}
 
 	<ul class="key small">
 		<li><span class="chip free"></span>Free — price per hour, NPR</li>
@@ -101,6 +112,15 @@
 	.scroll {
 		overflow-x: auto;
 		scrollbar-width: thin;
+		animation: card-in 0.62s var(--ease-reveal) backwards;
+	}
+
+	@keyframes card-in {
+		from {
+			opacity: 0;
+			transform: translateY(10px);
+			filter: blur(10px);
+		}
 	}
 
 	table {
@@ -116,15 +136,19 @@
 		font-weight: 400;
 	}
 
+	/* Plays on first paint and again on every re-key — a court switching day,
+	   sport or area is a new row, not an edit to the old one, so the board
+	   re-settles exactly as it did when it first loaded. */
 	tbody tr {
-		animation: settle 0.4s var(--ease) backwards;
-		animation-delay: calc(var(--row) * 55ms);
+		animation: settle 0.52s var(--ease-reveal) backwards;
+		animation-delay: calc(var(--row) * 45ms);
 	}
 
 	@keyframes settle {
 		from {
 			opacity: 0;
-			transform: translateY(5px);
+			transform: translateY(7px);
+			filter: blur(8px);
 		}
 	}
 
@@ -158,20 +182,31 @@
 		border-top: 1px solid var(--line);
 	}
 
-	.venue {
+	/* The truncation spans need a real, definite width to measure and
+	   constrain themselves against — an inline <a> won't give its block
+	   children one on its own, so this makes the link itself a block that
+	   fills the column, letting width: 100% below resolve to something. */
+	.side a {
 		display: block;
+	}
+
+	/* .venue/.court are rendered inside MiddleTruncation's own template now,
+	   not this one, so Svelte's scoped-class hash never reaches them —
+	   :global() is what lets these rules still find them by class name,
+	   kept under .side so the rule can't leak to unrelated "venue"/"court"
+	   classes elsewhere in the app. */
+	.side :global(.venue) {
 		font-size: 1.0625rem;
 		font-weight: 600;
 		letter-spacing: -0.012em;
 		transition: color var(--dur-hover) var(--ease);
 	}
 
-	.side a:hover .venue {
+	.side a:hover :global(.venue) {
 		color: var(--pine);
 	}
 
-	.court {
-		display: block;
+	.side :global(.court) {
 		margin-top: 0.1rem;
 		font-size: 0.8125rem;
 		line-height: 1.4;
@@ -296,7 +331,7 @@
 			padding-inline: 0.9rem;
 		}
 
-		.venue {
+		.side :global(.venue) {
 			font-size: 0.9375rem;
 		}
 	}

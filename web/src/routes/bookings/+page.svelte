@@ -71,13 +71,13 @@
 <section class="body">
 	<div class="shell">
 		{#if !session.signedIn}
-			<div class="card notice fade-up">
+			<div class="notice fade-up">
 				<h2 class="display display-m">Sign in to see your hours</h2>
 				<p>Bookings are tied to your account, so we need to know whose name to look under.</p>
 				<a class="btn btn-primary" href="/login">Sign in</a>
 			</div>
 		{:else if bookings.length === 0}
-			<div class="card notice fade-up">
+			<div class="notice fade-up">
 				<h2 class="display display-m">Nothing booked yet</h2>
 				<p>
 					The board shows every free hour in the valley. Pick one and it is yours for fifteen
@@ -96,7 +96,7 @@
 							? new Date(booking.hold_expires_at).getTime() - ticking.now
 							: 0}
 					{@const done = booking.status === 'cancelled' || booking.status === 'expired'}
-					<li class="card row" class:done use:reveal={{ delay: Math.min(i, 6) * 60 }}>
+					<li class="row" class:done use:reveal={{ delay: Math.min(i, 6) * 60 }}>
 						<div class="when">
 							<span class="time num">
 								{formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}
@@ -162,7 +162,8 @@
 		display: grid;
 		justify-items: start;
 		gap: 0.75rem;
-		padding: clamp(2rem, 5vw, 3.5rem);
+		padding-block: clamp(2.5rem, 6vw, 4rem);
+		border-top: 1px solid var(--line);
 	}
 
 	.notice p {
@@ -176,7 +177,7 @@
 
 	.rows {
 		display: grid;
-		gap: 0.75rem;
+		border-top: 1px solid var(--line);
 	}
 
 	.row {
@@ -184,7 +185,13 @@
 		grid-template-columns: 11rem minmax(0, 1fr) 13rem 8rem auto;
 		align-items: center;
 		gap: 1rem 1.75rem;
-		padding: 1.25rem 1.5rem;
+		padding: 1.35rem 0.25rem;
+		border-bottom: 1px solid var(--line);
+		transition: background-color var(--dur-hover) var(--ease);
+	}
+
+	.row:hover {
+		background: var(--surface);
 	}
 
 	.row.done {

@@ -4,6 +4,9 @@
 	import HourLedger from '$lib/components/HourLedger.svelte';
 	import HourPulse from '$lib/components/HourPulse.svelte';
 	import DateRail from '$lib/components/DateRail.svelte';
+	import Listbox from '$lib/components/Listbox.svelte';
+	import SportIcon from '$lib/components/SportIcon.svelte';
+	import { iconSwap } from '$lib/transitions/iconSwap.js';
 	import { formatDateLong, formatNPR } from '$lib/time.js';
 
 	let { data } = $props();
@@ -16,6 +19,11 @@
 
 	const ledger = $derived(api.cityLedger(date, { sport, area }));
 	const sportName = $derived(SPORT_LABELS[sport].toLowerCase());
+
+	const areaOptions = $derived([
+		{ value: 'all', label: 'Anywhere in the valley' },
+		...data.areas.map((a) => ({ value: a, label: a }))
+	]);
 
 	function set(changes) {
 		const next = { date, sport, area, ...changes };
@@ -67,6 +75,13 @@
 
 		<div class="filters fade-up fade-up-3">
 			<div class="group" role="group" aria-label="Filter by sport">
+				<span class="sport-badge" aria-hidden="true">
+					{#key sport}
+						<span class="sport-badge-icon" in:iconSwap out:iconSwap>
+							<SportIcon {sport} size={16} />
+						</span>
+					{/key}
+				</span>
 				{#each data.sports as s (s)}
 					<button
 						type="button"
@@ -80,15 +95,12 @@
 				{/each}
 			</div>
 
-			<label class="area">
-				<span class="sr-only">Filter by area</span>
-				<select value={area} onchange={(e) => set({ area: e.currentTarget.value })}>
-					<option value="all">Anywhere in the valley</option>
-					{#each data.areas as value (value)}
-						<option {value}>{value}</option>
-					{/each}
-				</select>
-			</label>
+			<Listbox
+				label="Filter by area"
+				value={area}
+				options={areaOptions}
+				onselect={(v) => set({ area: v })}
+			/>
 		</div>
 	</div>
 </section>
@@ -98,7 +110,7 @@
 		{#if ledger.rows.length}
 			<HourLedger {ledger} />
 		{:else}
-			<div class="card empty fade-up">
+			<div class="empty fade-up">
 				<h2 class="display display-m">Nothing here yet</h2>
 				<p class="small">
 					No {sportName} courts in {area === 'all' ? 'the valley' : area}. Widen the area or pick another
@@ -145,7 +157,32 @@
 	.group {
 		display: flex;
 		flex-wrap: wrap;
+		align-items: center;
 		gap: 0.4rem;
+	}
+
+	/* The one glyph that names whatever's currently filtered — it swaps in
+	   place each time the sport changes instead of sitting still while the
+	   chips underneath do all the work. */
+	.sport-badge {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.85rem;
+		height: 1.85rem;
+		margin-right: 0.3rem;
+		border-radius: 50%;
+		background: var(--pine-wash);
+		color: var(--pine);
+	}
+
+	.sport-badge-icon {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.chip {
@@ -177,38 +214,14 @@
 		background: var(--pine);
 		border-color: var(--pine);
 		color: #ffffff;
+		animation: settle-in 0.34s var(--ease-reveal);
 	}
 
-	.area {
-		position: relative;
-		display: inline-flex;
-	}
-
-	.area::after {
-		content: '';
-		position: absolute;
-		right: 1rem;
-		top: 50%;
-		width: 7px;
-		height: 7px;
-		border-right: 1.5px solid var(--muted);
-		border-bottom: 1.5px solid var(--muted);
-		transform: translateY(-65%) rotate(45deg);
-		pointer-events: none;
-	}
-
-	.area select {
-		appearance: none;
-		-webkit-appearance: none;
-		-moz-appearance: none;
-		padding: 0.5rem 2.25rem 0.5rem 1rem;
-		border: 1px solid var(--line);
-		border-radius: var(--r-pill);
-		background: var(--surface);
-		font-size: 0.9375rem;
-		font-weight: 500;
-		color: var(--muted);
-		cursor: pointer;
+	@keyframes settle-in {
+		from {
+			transform: scale(0.94);
+			filter: blur(4px);
+		}
 	}
 
 	.board {
@@ -219,7 +232,8 @@
 		display: grid;
 		justify-items: start;
 		gap: 0.75rem;
-		padding: clamp(2rem, 5vw, 3.5rem);
+		padding-block: clamp(2.5rem, 6vw, 4rem);
+		border-top: 1px solid var(--line);
 	}
 
 	.empty p {

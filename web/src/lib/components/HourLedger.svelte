@@ -38,7 +38,7 @@
 	<!-- A scrollable region has to be reachable by keyboard, which is exactly
 	     what this lint rule assumes it is not. -->
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-	<div class="scroll" role="region" aria-label="Court availability by hour" tabindex="0">
+	<div class="card scroll" role="region" aria-label="Court availability by hour" tabindex="0">
 		<table>
 			<caption class="sr-only">
 				Free hours and the price per hour in Nepali rupees for every court, {ledger.date}
@@ -100,10 +100,6 @@
 <style>
 	.scroll {
 		overflow-x: auto;
-		background: var(--surface);
-		border: 1px solid var(--line);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow);
 		scrollbar-width: thin;
 	}
 

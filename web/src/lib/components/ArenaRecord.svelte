@@ -65,14 +65,11 @@
 		padding: clamp(1.4rem, 2.5vw, 1.85rem);
 		transition:
 			border-color var(--dur-hover) var(--ease),
-			box-shadow var(--dur-hover) var(--ease),
 			transform var(--dur-hover) var(--ease);
 	}
 
 	.record:hover,
 	.record:focus-visible {
-		border-color: var(--line-strong);
-		box-shadow: var(--shadow);
 		transform: translateY(-2px);
 	}
 

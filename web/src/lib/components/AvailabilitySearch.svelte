@@ -60,7 +60,6 @@
 		align-items: end;
 		gap: 0.5rem 0.25rem;
 		padding: 0.75rem 0.75rem 0.75rem 0.35rem;
-		box-shadow: var(--shadow);
 	}
 
 	.pick {

@@ -137,7 +137,6 @@
 		position: sticky;
 		top: 100px;
 		padding: 1.75rem;
-		box-shadow: var(--shadow);
 	}
 
 	.headline {

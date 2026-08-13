@@ -341,10 +341,49 @@ a {
 	padding-block: var(--band);
 }
 
+/* Every panel on the site used to be the same move: white rounded box,
+   hairline border, soft drop shadow — the one tell every templated layout
+   shares. Courts and pitches already mark their own boundaries with a
+   corner, not a halo, so panels here do the same: a flat surface, square
+   corners, and four short brackets picking out the corners the way lime
+   paint picks out a court's. No shadow at rest — the surface tone against
+   --field is the only lift a panel gets until it's interactive. */
 .card {
+	--corner-c: var(--line-strong);
+	--corner-len: 15px;
+	--corner-w: 2px;
+	position: relative;
 	background: var(--surface);
 	border: 1px solid var(--line);
-	border-radius: var(--r-lg);
+	border-radius: 3px;
+	background-image:
+		linear-gradient(var(--corner-c), var(--corner-c)), linear-gradient(var(--corner-c), var(--corner-c)),
+		linear-gradient(var(--corner-c), var(--corner-c)), linear-gradient(var(--corner-c), var(--corner-c)),
+		linear-gradient(var(--corner-c), var(--corner-c)), linear-gradient(var(--corner-c), var(--corner-c)),
+		linear-gradient(var(--corner-c), var(--corner-c)), linear-gradient(var(--corner-c), var(--corner-c));
+	background-repeat: no-repeat;
+	background-size:
+		var(--corner-len) var(--corner-w), var(--corner-w) var(--corner-len),
+		var(--corner-len) var(--corner-w), var(--corner-w) var(--corner-len),
+		var(--corner-len) var(--corner-w), var(--corner-w) var(--corner-len),
+		var(--corner-len) var(--corner-w), var(--corner-w) var(--corner-len);
+	background-position:
+		0 0, 0 0,
+		100% 0, 100% 0,
+		0 100%, 0 100%,
+		100% 100%, 100% 100%;
+	transition:
+		border-color var(--dur-hover) var(--ease),
+		transform var(--dur-hover) var(--ease);
+}
+
+/* Interactive cards — links, forms on focus — pick their corners out in
+   pine and lift a hair, the same read as a highlighted line on a board. */
+a.card:hover,
+a.card:focus-visible,
+.card:focus-within {
+	--corner-c: var(--pine);
+	border-color: var(--line-strong);
 }
 
 /* ------------------------------------------------------------ controls ---- */

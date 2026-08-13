@@ -157,7 +157,6 @@
 		display: grid;
 		gap: 1.35rem;
 		padding: clamp(1.5rem, 3vw, 2rem);
-		box-shadow: var(--shadow);
 	}
 
 	.field {

@@ -1,6 +1,7 @@
 <script>
 	import { api, ApiError } from '$lib/api/index.js';
 	import CentreMark from '$lib/components/CentreMark.svelte';
+	import TextAnimate from '$lib/components/TextAnimate.svelte';
 	import { reveal } from '$lib/actions/reveal.js';
 	import { clock, session } from '$lib/session.svelte.js';
 	import { formatCountdown, formatDate, formatNPR, formatTime } from '$lib/time.js';
@@ -61,7 +62,7 @@
 <section class="head forest-band">
 	<div class="shell">
 		<p class="label fade-up">Your hours</p>
-		<h1 class="display display-l fade-up">My bookings</h1>
+		<h1 class="display display-l"><TextAnimate text="My bookings" /></h1>
 		<div class="pitch-mark fade-up fade-up-1">
 			<CentreMark wide />
 		</div>

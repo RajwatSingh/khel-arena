@@ -234,42 +234,78 @@ a {
 	/* The one dimension every non-home band shares — only the homepage hero
 	   is allowed to set its own padding-block after this. */
 	padding-block: clamp(2.5rem, 5vw, 4rem);
-	/* Two floodlights, not one even wash — the accent green from the far
-	   corner, the pine from the near one, the way two pitch lights never
-	   land the same. */
-	background:
-		radial-gradient(60% 85% at 6% -20%, color-mix(in srgb, var(--accent-on-field) 22%, transparent), transparent 62%),
-		radial-gradient(55% 80% at 106% 18%, color-mix(in srgb, var(--pine) 50%, transparent), transparent 58%),
-		var(--forest);
+	background: var(--forest);
 }
 
-/* The centre-mark glyph — the site's one identity mark — blown up and bled
-   off the corner as the band's own atmosphere, instead of a borrowed motif. */
+/* Two floodlights, not one even wash — the accent green from the far
+   corner, the pine from the near one, the way two pitch lights never land
+   the same. Pushed brighter and wider than a static wash would sit, and
+   breathing on the ambient background's own clock, so the band never
+   reads as flat. Lives on ::after — ::before is the pitch grid below. */
+.forest-band::after {
+	content: '';
+	position: absolute;
+	z-index: 0;
+	inset: 0;
+	pointer-events: none;
+	background:
+		radial-gradient(58% 100% at 4% -22%, color-mix(in srgb, var(--accent-on-field) 40%, transparent), transparent 65%),
+		radial-gradient(54% 96% at 104% 22%, color-mix(in srgb, var(--pine) 78%, transparent), transparent 60%);
+	animation: floodlight-breathe var(--amb-a) ease-in-out infinite;
+}
+
+@keyframes floodlight-breathe {
+	0%,
+	100% {
+		opacity: 0.78;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+/* Every forest-band reads as the pitch under floodlights at night: the
+   ground lines of a court, laid flat and receding to a horizon, the way
+   the eye actually meets a lit field after dark. Wide-set lines and a
+   shallow tilt keep it a horizon, not a floor pressed up against the
+   copy — the same unhurried pull as the rest of the site's motion
+   (--ease-reveal), never a snap. */
 .forest-band::before {
 	content: '';
 	position: absolute;
 	z-index: 0;
-	top: -20%;
-	right: -16%;
-	width: min(44rem, 60vw);
-	aspect-ratio: 1;
+	left: -20%;
+	right: -20%;
+	bottom: -4%;
+	height: 150%;
 	pointer-events: none;
+	--grid-cell: clamp(88px, 9vw, 132px);
 	background-image:
-		radial-gradient(
-			circle at center,
-			transparent calc(50% - 1.5px),
-			color-mix(in srgb, var(--on-field) 8%, transparent) calc(50% - 1.5px),
-			color-mix(in srgb, var(--on-field) 8%, transparent) calc(50% + 1.5px),
-			transparent calc(50% + 1.5px)
+		repeating-linear-gradient(
+			to right,
+			color-mix(in srgb, var(--on-field) 18%, transparent) 0 1px,
+			transparent 1px var(--grid-cell)
 		),
-		linear-gradient(color-mix(in srgb, var(--on-field) 8%, transparent), color-mix(in srgb, var(--on-field) 8%, transparent));
-	background-repeat: no-repeat;
-	background-size:
-		100% 100%,
-		1.5px 100%;
-	background-position:
-		center,
-		center;
+		repeating-linear-gradient(
+			to bottom,
+			color-mix(in srgb, var(--on-field) 18%, transparent) 0 1px,
+			transparent 1px var(--grid-cell)
+		);
+	background-size: var(--grid-cell) var(--grid-cell);
+	transform: perspective(760px) rotateX(56deg);
+	transform-origin: bottom center;
+	mask-image: linear-gradient(to top, black 0%, black 18%, transparent 80%);
+	-webkit-mask-image: linear-gradient(to top, black 0%, black 18%, transparent 80%);
+	animation: pitch-grid-drift 10s linear infinite;
+}
+
+@keyframes pitch-grid-drift {
+	from {
+		background-position: 0 0, 0 0;
+	}
+	to {
+		background-position: 0 var(--grid-cell), 0 var(--grid-cell);
+	}
 }
 
 .forest-band > * {

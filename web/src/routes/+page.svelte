@@ -1,6 +1,8 @@
 <script>
 	import HourLedger from '$lib/components/HourLedger.svelte';
 	import HourPulse from '$lib/components/HourPulse.svelte';
+	import CentreMark from '$lib/components/CentreMark.svelte';
+	import TextAnimate from '$lib/components/TextAnimate.svelte';
 	import ArenaRecord from '$lib/components/ArenaRecord.svelte';
 	import AvailabilitySearch from '$lib/components/AvailabilitySearch.svelte';
 	import { reveal } from '$lib/actions/reveal.js';
@@ -81,11 +83,11 @@
 
 		{#if freeTonight > 0}
 			<h1 class="display display-xl">
-				<span class="count num">{animatedCount ?? freeTonight}</span> court-hours are still free
-				tonight.
+				<span class="count num">{animatedCount ?? freeTonight}</span>
+				<TextAnimate text="court-hours are still free tonight." delay={90} />
 			</h1>
 		{:else}
-			<h1 class="display display-xl">Tonight is played out.</h1>
+			<h1 class="display display-xl"><TextAnimate text="Tonight is played out." /></h1>
 		{/if}
 
 		<HourPulse />
@@ -99,6 +101,10 @@
 				slots are still open.
 			{/if}
 		</p>
+
+		<div class="pitch-mark fade-up fade-up-3">
+			<CentreMark wide />
+		</div>
 
 		<div class="search-wrap">
 			<AvailabilitySearch

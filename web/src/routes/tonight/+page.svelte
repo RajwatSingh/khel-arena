@@ -3,10 +3,11 @@
 	import { api, SPORT_LABELS } from '$lib/api/index.js';
 	import HourLedger from '$lib/components/HourLedger.svelte';
 	import HourPulse from '$lib/components/HourPulse.svelte';
+	import CentreMark from '$lib/components/CentreMark.svelte';
+	import TextAnimate from '$lib/components/TextAnimate.svelte';
 	import DateRail from '$lib/components/DateRail.svelte';
 	import Listbox from '$lib/components/Listbox.svelte';
 	import SportIcon from '$lib/components/SportIcon.svelte';
-	import { iconSwap } from '$lib/transitions/iconSwap.js';
 	import { formatDateLong, formatNPR } from '$lib/time.js';
 
 	let { data } = $props();
@@ -24,6 +25,8 @@
 		{ value: 'all', label: 'Anywhere in the valley' },
 		...data.areas.map((a) => ({ value: a, label: a }))
 	]);
+
+	const sportOptions = $derived(data.sports.map((s) => ({ value: s, label: SPORT_LABELS[s] })));
 
 	function set(changes) {
 		const next = { date, sport, area, ...changes };
@@ -46,7 +49,7 @@
 <section class="head forest-band">
 	<div class="shell">
 		<p class="label fade-up">The board</p>
-		<h1 class="display display-l fade-up">{formatDateLong(date)}</h1>
+		<h1 class="display display-l">{#key date}<TextAnimate text={formatDateLong(date)} />{/key}</h1>
 		<div class="pulse-wrap fade-up fade-up-1">
 			<HourPulse />
 		</div>
@@ -64,6 +67,9 @@
 				No {sportName} courts are listed in that area yet.
 			{/if}
 		</p>
+		<div class="pitch-mark fade-up fade-up-3">
+			<CentreMark wide />
+		</div>
 	</div>
 </section>
 
@@ -74,33 +80,25 @@
 		</div>
 
 		<div class="filters fade-up fade-up-3">
-			<div class="group" role="group" aria-label="Filter by sport">
-				<span class="sport-badge" aria-hidden="true">
-					{#key sport}
-						<span class="sport-badge-icon" in:iconSwap out:iconSwap>
-							<SportIcon {sport} size={16} />
-						</span>
-					{/key}
-				</span>
-				{#each data.sports as s (s)}
-					<button
-						type="button"
-						class="chip"
-						class:on={sport === s}
-						aria-pressed={sport === s}
-						onclick={() => set({ sport: s })}
-					>
-						{SPORT_LABELS[s]}
-					</button>
-				{/each}
-			</div>
+			<div class="group">
+				<Listbox
+					label="Filter by sport"
+					value={sport}
+					options={sportOptions}
+					onselect={(v) => set({ sport: v })}
+				>
+					{#snippet icon(v)}
+						<SportIcon sport={v} size={16} />
+					{/snippet}
+				</Listbox>
 
-			<Listbox
-				label="Filter by area"
-				value={area}
-				options={areaOptions}
-				onselect={(v) => set({ area: v })}
-			/>
+				<Listbox
+					label="Filter by area"
+					value={area}
+					options={areaOptions}
+					onselect={(v) => set({ area: v })}
+				/>
+			</div>
 		</div>
 	</div>
 </section>
@@ -150,78 +148,17 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		justify-content: space-between;
 		gap: 0.75rem;
 	}
 
+	/* Both filters read as one control now — what, then where — sat
+	   together on the same edge instead of pulled to opposite ends of the
+	   row, so the eye takes them in as a pair. */
 	.group {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.4rem;
-	}
-
-	/* The one glyph that names whatever's currently filtered — it swaps in
-	   place each time the sport changes instead of sitting still while the
-	   chips underneath do all the work. */
-	.sport-badge {
-		position: relative;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 1.85rem;
-		height: 1.85rem;
-		margin-right: 0.3rem;
-		border-radius: 50%;
-		background: var(--pine-wash);
-		color: var(--pine);
-	}
-
-	.sport-badge-icon {
-		position: absolute;
-		inset: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.chip {
-		padding: 0.5rem 1rem;
-		border: 1px solid var(--line);
-		border-radius: var(--r-pill);
-		background: var(--surface);
-		font-size: 0.9375rem;
-		font-weight: 500;
-		color: var(--muted);
-		cursor: pointer;
-		transition:
-			border-color 0.18s var(--ease),
-			background-color 0.18s var(--ease),
-			color 0.18s var(--ease),
-			transform 0.12s var(--ease);
-	}
-
-	.chip:hover:not(.on) {
-		border-color: var(--line-strong);
-		color: var(--ink);
-	}
-
-	.chip:active {
-		transform: scale(0.96);
-	}
-
-	.chip.on {
-		background: var(--pine);
-		border-color: var(--pine);
-		color: #ffffff;
-		animation: settle-in 0.34s var(--ease-reveal);
-	}
-
-	@keyframes settle-in {
-		from {
-			transform: scale(0.94);
-			filter: blur(4px);
-		}
+		gap: 0.5rem;
 	}
 
 	.board {

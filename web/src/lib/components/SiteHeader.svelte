@@ -54,12 +54,54 @@
 		position: sticky;
 		top: 0;
 		z-index: 40;
-		background: color-mix(in srgb, var(--field) 92%, transparent);
+		overflow: hidden;
+		/* The one dark band moves to the top of every page: same forest
+		   ground as .forest-band, just compressed into a bar instead of a
+		   hero. The two floodlights live on ::before/::after below so each
+		   can breathe on its own clock, the way two pitch lights never
+		   dim and brighten in step. */
+		background: var(--forest);
 		backdrop-filter: blur(12px);
-		border-bottom: 1px solid var(--line);
+		border-bottom: 1px solid color-mix(in srgb, var(--on-field) 14%, transparent);
+	}
+
+	header::before,
+	header::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		z-index: 0;
+		width: 58%;
+		pointer-events: none;
+		animation: floodlight-breathe var(--amb-a) ease-in-out infinite;
+	}
+
+	header::before {
+		left: 0;
+		background: radial-gradient(65% 260% at 0% 0%, color-mix(in srgb, var(--accent-on-field) 38%, transparent), transparent 75%);
+	}
+
+	header::after {
+		right: 0;
+		background: radial-gradient(60% 260% at 100% 100%, color-mix(in srgb, var(--pine) 85%, transparent), transparent 70%);
+		animation-duration: var(--amb-b);
+		animation-delay: calc(var(--amb-a) * -0.5);
+	}
+
+	@keyframes floodlight-breathe {
+		0%,
+		100% {
+			opacity: 0.7;
+		}
+		50% {
+			opacity: 1;
+		}
 	}
 
 	.bar {
+		position: relative;
+		z-index: 1;
 		display: flex;
 		align-items: center;
 		gap: clamp(0.75rem, 2.5vw, 1.5rem);
@@ -76,12 +118,12 @@
 		font-weight: 800;
 		letter-spacing: -0.02em;
 		white-space: nowrap;
-		color: var(--ink);
+		color: var(--on-field);
 		flex-shrink: 0;
 	}
 
 	.mark :global(svg) {
-		color: var(--pine);
+		color: var(--accent-on-field);
 		transition: transform 0.5s var(--ease);
 	}
 
@@ -101,7 +143,7 @@
 		border-radius: var(--r-pill);
 		font-size: 0.9375rem;
 		font-weight: 600;
-		color: var(--muted);
+		color: var(--on-field-muted);
 		white-space: nowrap;
 		flex-shrink: 0;
 		transition:
@@ -110,14 +152,14 @@
 	}
 
 	.tab:hover {
-		background: var(--pine-wash);
-		color: var(--pine-deep);
+		background: color-mix(in srgb, var(--on-field) 10%, transparent);
+		color: var(--on-field);
 	}
 
 	.tab[aria-current='page'] {
-		background: var(--surface);
-		color: var(--ink);
-		box-shadow: var(--shadow-sm);
+		background: color-mix(in srgb, var(--on-field) 15%, transparent);
+		color: var(--on-field);
+		box-shadow: none;
 	}
 
 	.right {
@@ -132,6 +174,31 @@
 		white-space: nowrap;
 	}
 
+	/* .btn-quiet / .btn-primary are tuned for the light --field ground
+	   everywhere else on the site; here, on --forest, they need the
+	   inverse treatment — a plain on-field link and a bright contrast
+	   pill, the same high-contrast pairing the reference bar uses, just
+	   in Khel Arena's own greens instead of black-on-white. */
+	.right :global(.btn-quiet) {
+		border-color: color-mix(in srgb, var(--on-field) 26%, transparent);
+		background: transparent;
+		color: var(--on-field-muted);
+	}
+
+	.right :global(.btn-quiet:hover:not(:disabled)) {
+		border-color: color-mix(in srgb, var(--on-field) 50%, transparent);
+		color: var(--on-field);
+	}
+
+	.right :global(.btn-primary) {
+		background: var(--on-field);
+		color: var(--forest);
+	}
+
+	.right :global(.btn-primary:hover:not(:disabled)) {
+		background: var(--accent-on-field);
+	}
+
 	.username {
 		max-width: 12rem;
 		overflow: hidden;
@@ -140,7 +207,7 @@
 
 	.clock {
 		font-size: 0.875rem;
-		color: var(--faint);
+		color: var(--on-field-faint);
 		white-space: nowrap;
 		flex-shrink: 0;
 	}

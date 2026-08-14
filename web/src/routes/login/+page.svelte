@@ -4,6 +4,7 @@
 	import { session } from '$lib/session.svelte.js';
 	import Field from '$lib/components/Field.svelte';
 	import CentreMark from '$lib/components/CentreMark.svelte';
+	import TextAnimate from '$lib/components/TextAnimate.svelte';
 
 	let email = $state('');
 	let password = $state('');
@@ -33,7 +34,7 @@
 <section class="auth forest-band">
 	<div class="shell split">
 		<div class="say">
-			<h1 class="display display-l fade-up">Sign in</h1>
+			<h1 class="display display-l"><TextAnimate text="Sign in" /></h1>
 			<div class="pitch-mark fade-up fade-up-1">
 				<CentreMark wide />
 			</div>

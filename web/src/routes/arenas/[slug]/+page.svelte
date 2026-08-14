@@ -5,6 +5,7 @@
 	import DateRail from '$lib/components/DateRail.svelte';
 	import HoldPanel from '$lib/components/HoldPanel.svelte';
 	import CentreMark from '$lib/components/CentreMark.svelte';
+	import TextAnimate from '$lib/components/TextAnimate.svelte';
 	import { reveal } from '$lib/actions/reveal.js';
 	import { formatNPR, formatTime } from '$lib/time.js';
 
@@ -107,9 +108,9 @@
 			<span>{arena.area}, {arena.city}</span>
 		</nav>
 
-		<div class="title fade-up">
-			<h1 class="display display-xl">{arena.name}</h1>
-			<span class="rating num">
+		<div class="title">
+			<h1 class="display display-xl">{#key arena.slug}<TextAnimate text={arena.name} />{/key}</h1>
+			<span class="rating num fade-up fade-up-1">
 				<svg viewBox="0 0 12 12" aria-hidden="true"
 					><path d="M6 .8l1.6 3.3 3.6.5-2.6 2.5.6 3.6L6 9l-3.2 1.7.6-3.6L.8 4.6l3.6-.5z" /></svg
 				>

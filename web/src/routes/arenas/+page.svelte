@@ -1,6 +1,7 @@
 <script>
 	import ArenaRecord from '$lib/components/ArenaRecord.svelte';
 	import CentreMark from '$lib/components/CentreMark.svelte';
+	import TextAnimate from '$lib/components/TextAnimate.svelte';
 	import { reveal } from '$lib/actions/reveal.js';
 
 	let { data } = $props();
@@ -19,7 +20,7 @@
 <section class="head forest-band">
 	<div class="shell">
 		<p class="label fade-up">The register</p>
-		<h1 class="display display-l fade-up">Where the valley plays</h1>
+		<h1 class="display display-l"><TextAnimate text="Where the valley plays" /></h1>
 		<p class="lede fade-up fade-up-1">
 			<strong class="num">{data.arenas.length}</strong> arenas, <strong class="num"
 				>{courtCount}</strong

@@ -1,6 +1,11 @@
 <script>
 	import CentreMark from './CentreMark.svelte';
+	import TypingAnimation from './TypingAnimation.svelte';
 	import { reveal } from '$lib/actions/reveal.js';
+
+	const madeBy = 'Made by Rajwat';
+	const madeFor = 'Made for the game.';
+	const typeSpeed = 38;
 </script>
 
 <footer use:reveal>
@@ -39,7 +44,18 @@
 
 		<div class="colophon">
 			<p class="small">Kathmandu · UTC+05:45 · Khel Arena {new Date().getFullYear()}</p>
-			<p class="tagline small">Made for the game.</p>
+			<div class="tagline">
+				<p class="small">
+					<TypingAnimation text={madeFor} speed={typeSpeed} />
+				</p>
+				<p class="small">
+					<TypingAnimation
+						text={madeBy}
+						speed={typeSpeed}
+						startDelay={madeFor.length * typeSpeed + 320}
+					/>
+				</p>
+			</div>
 		</div>
 	</div>
 </footer>
@@ -109,7 +125,7 @@
 	.colophon {
 		display: flex;
 		flex-wrap: wrap;
-		align-items: baseline;
+		align-items: center;
 		justify-content: space-between;
 		gap: 0.5rem 1.5rem;
 		margin-top: 3rem;
@@ -119,9 +135,18 @@
 	}
 
 	.tagline {
-		font-family: var(--display);
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+	}
+
+	.tagline .small {
+		font-family: var(--sans);
+		font-size: 0.8125rem;
 		font-weight: 700;
-		font-style: italic;
+		font-style: normal;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
 		color: var(--pine);
 	}
 
@@ -132,6 +157,10 @@
 
 		.about {
 			grid-column: 1 / -1;
+		}
+
+		.tagline {
+			align-items: flex-start;
 		}
 	}
 </style>

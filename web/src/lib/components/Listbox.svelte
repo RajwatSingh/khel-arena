@@ -6,7 +6,9 @@
 	 * three itself, in the same bordered-surface language as every other
 	 * panel here (--surface, --line, --r-md, --shadow).
 	 */
-	let { value, options, label, onselect } = $props();
+	import { iconSwap } from '$lib/transitions/iconSwap.js';
+
+	let { value, options, label, onselect, icon } = $props();
 
 	let open = $state(false);
 	let root;
@@ -28,6 +30,23 @@
 			root?.querySelector('.trigger')?.focus();
 		}
 	}
+
+	/* The same blur-clears-as-it-lands language as the rest of the site's
+	   motion (.reveal in app.css), just resolved on a dropdown's clock
+	   instead of a scroll-in's — quick enough not to make someone wait on
+	   a filter, silky enough not to just snap. Runs identically on the way
+	   out, so closing reads as deliberate as opening instead of a cut. */
+	function panelPop(node, { duration = 200 } = {}) {
+		return {
+			duration,
+			easing: (t) => 1 - Math.pow(1 - t, 3),
+			css: (t, u) => `
+				opacity: ${t};
+				transform: scale(${0.96 + 0.04 * t}) translateY(${u * -5}px);
+				filter: blur(${u * 5}px);
+			`
+		};
+	}
 </script>
 
 <svelte:window onclick={onDocClick} onkeydown={onKeydown} />
@@ -40,12 +59,28 @@
 		aria-expanded={open}
 		onclick={() => (open = !open)}
 	>
+		{#if icon}
+			<span class="trigger-icon">
+				{#key selected.value}
+					<span class="trigger-icon-inner" in:iconSwap out:iconSwap>
+						{@render icon(selected.value)}
+					</span>
+				{/key}
+			</span>
+		{/if}
 		<span class="sr-only">{label}</span>
-		{selected.label}
+		<span class="trigger-text">
+			<span class="trigger-text-sizer" aria-hidden="true">
+				{#each options as opt (opt.value)}
+					<span>{opt.label}</span>
+				{/each}
+			</span>
+			<span class="trigger-text-value">{selected.label}</span>
+		</span>
 	</button>
 
 	{#if open}
-		<ul class="panel" role="listbox" aria-label={label}>
+		<ul class="panel" role="listbox" aria-label={label} transition:panelPop>
 			{#each options as opt (opt.value)}
 				<li>
 					<button
@@ -56,7 +91,12 @@
 						class:on={opt.value === value}
 						onclick={() => choose(opt.value)}
 					>
-						{opt.label}
+						<span class="option-main">
+							{#if icon}
+								<span class="option-icon">{@render icon(opt.value)}</span>
+							{/if}
+							{opt.label}
+						</span>
 						{#if opt.value === value}
 							<svg class="check" viewBox="0 0 16 16" aria-hidden="true">
 								<path d="M3 8.5 6.2 12 13 4" />
@@ -79,6 +119,7 @@
 		position: relative;
 		display: inline-flex;
 		align-items: center;
+		gap: 0.5rem;
 		padding: 0.5rem 2.25rem 0.5rem 1rem;
 		border: 1px solid var(--line);
 		border-radius: var(--r-pill);
@@ -90,6 +131,47 @@
 		transition:
 			border-color var(--dur-hover) var(--ease),
 			color var(--dur-hover) var(--ease);
+	}
+
+	/* Reserves the width of the widest option, so the pill never resizes
+	   as the selection changes ("Futsal" and "Cricket net" sit in the same
+	   slot) — the invisible stack sets the box's true width, the value on
+	   top just paints over it. */
+	.trigger-text {
+		position: relative;
+		display: inline-block;
+	}
+
+	.trigger-text-sizer {
+		display: grid;
+		visibility: hidden;
+	}
+
+	.trigger-text-sizer span {
+		grid-area: 1 / 1;
+		white-space: nowrap;
+	}
+
+	.trigger-text-value {
+		position: absolute;
+		inset: 0;
+		white-space: nowrap;
+	}
+
+	.trigger-icon {
+		position: relative;
+		display: inline-flex;
+		width: 1.2em;
+		height: 1.2em;
+		color: var(--pine);
+	}
+
+	.trigger-icon-inner {
+		position: absolute;
+		inset: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.trigger:hover {
@@ -124,14 +206,6 @@
 		border-radius: var(--r-md);
 		box-shadow: var(--shadow);
 		transform-origin: top right;
-		animation: panel-in 0.16s var(--ease) backwards;
-	}
-
-	@keyframes panel-in {
-		from {
-			opacity: 0;
-			transform: scale(0.97) translateY(-4px);
-		}
 	}
 
 	/* Rows are told apart by a single hairline underneath, not a boxed
@@ -171,6 +245,18 @@
 	.option.on {
 		color: var(--pine);
 		font-weight: 600;
+	}
+
+	.option-main {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.55rem;
+	}
+
+	.option-icon {
+		display: inline-flex;
+		flex-shrink: 0;
+		color: var(--pine);
 	}
 
 	.check {

@@ -1,12 +1,15 @@
 <script>
 	import { page } from '$app/state';
 	import CentreMark from '$lib/components/CentreMark.svelte';
+	import TextAnimate from '$lib/components/TextAnimate.svelte';
 </script>
 
 <section class="forest-band">
 	<div class="shell box">
 		<p class="label num fade-up">Error {page.status}</p>
-		<h1 class="display display-l fade-up">{page.error?.message ?? 'That page is not here'}</h1>
+		<h1 class="display display-l">
+			<TextAnimate text={page.error?.message ?? 'That page is not here'} />
+		</h1>
 		<div class="pitch-mark fade-up fade-up-1">
 			<CentreMark wide />
 		</div>

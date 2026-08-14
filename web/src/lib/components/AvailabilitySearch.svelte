@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { SPORT_LABELS } from '$lib/api/index.js';
 	import { formatDate } from '$lib/time.js';
+	import Listbox from './Listbox.svelte';
 
 	/**
 	 * The one control on the home page. Three answers — what, where, when — and
@@ -15,6 +16,18 @@
 
 	const date = $derived(day ?? dates[0]);
 
+	const sportOptions = $derived(sports.map((value) => ({ value, label: SPORT_LABELS[value] })));
+	const areaOptions = $derived([
+		{ value: 'all', label: 'Anywhere in the valley' },
+		...areas.map((value) => ({ value, label: value }))
+	]);
+	const dateOptions = $derived(
+		dates.map((value, i) => ({
+			value,
+			label: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : formatDate(value)
+		}))
+	);
+
 	function show(event) {
 		event.preventDefault();
 		goto(`/tonight?date=${date}&sport=${sport}&area=${encodeURIComponent(area)}`);
@@ -23,31 +36,18 @@
 
 <form class="card search" onsubmit={show}>
 	<div class="pick">
-		<label class="label" for="s-sport">Playing</label>
-		<select id="s-sport" bind:value={sport}>
-			{#each sports as value (value)}
-				<option {value}>{SPORT_LABELS[value]}</option>
-			{/each}
-		</select>
+		<span class="label">Playing</span>
+		<Listbox label="Playing" value={sport} options={sportOptions} onselect={(v) => (sport = v)} fill />
 	</div>
 
 	<div class="pick">
-		<label class="label" for="s-area">Where</label>
-		<select id="s-area" bind:value={area}>
-			<option value="all">Anywhere in the valley</option>
-			{#each areas as value (value)}
-				<option {value}>{value}</option>
-			{/each}
-		</select>
+		<span class="label">Where</span>
+		<Listbox label="Where" value={area} options={areaOptions} onselect={(v) => (area = v)} fill />
 	</div>
 
 	<div class="pick">
-		<label class="label" for="s-date">When</label>
-		<select id="s-date" value={date} onchange={(e) => (day = e.currentTarget.value)}>
-			{#each dates as value, i (value)}
-				<option {value}>{i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : formatDate(value)}</option>
-			{/each}
-		</select>
+		<span class="label">When</span>
+		<Listbox label="When" value={date} options={dateOptions} onselect={(v) => (day = v)} fill />
 	</div>
 
 	<button class="btn btn-primary" type="submit">Show free hours</button>
@@ -73,30 +73,13 @@
 		border-right: 0;
 	}
 
-	select {
-		width: 100%;
-		padding: 0;
-		border: 0;
-		background: none;
-		font-size: 1.0625rem;
-		font-weight: 500;
-		letter-spacing: -0.01em;
-		color: var(--ink);
-		cursor: pointer;
-	}
-
-	select:focus-visible {
-		outline: 2px solid var(--pine);
-		outline-offset: 4px;
-	}
-
 	.btn {
 		padding-block: 0.95em;
 	}
 
 	@media (max-width: 860px) {
 		.search {
-			grid-template-columns: 1fr 1fr;
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 			padding: 0.75rem;
 			gap: 0.75rem;
 		}

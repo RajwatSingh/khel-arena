@@ -15,6 +15,15 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+type emailDTO struct {
+	Email string `json:"email"`
+}
+
+type newPassword struct {
+	Token string `json:"token"`
+	NewPassword string `json:"new_password"`
+}
+
 type bookingInput struct {
 	CourtID  uuid.UUID  `json:"court_id"`
 	StartsAt time.Time  `json:"starts_at"`

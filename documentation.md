@@ -35,6 +35,7 @@ out - those explanations are the point of the document, not padding.
 11. [Testing](#11-testing)
 12. [What is not built yet](#12-what-is-not-built-yet)
 13. [File map](#13-file-map)
+14. [The HTTP API — refresh token transport](#14-the-http-api--refresh-token-transport)
 
 ---
 
@@ -1361,6 +1362,127 @@ internal/platform/
   token/password.go            Argon2id hashing, timing-safe comparison
   token/jwt.go                 Access tokens, refresh token generation
 ```
+
+---
+
+## 14. The HTTP API — refresh token transport
+
+Section 8.1 covers how `AuthService` issues and rotates refresh tokens. It
+does not say how one gets from the server to the browser and back — that is a
+transport decision, made in `internal/api`, not a service-layer one. This
+section explains it, because the "obvious" choice (put the token in the JSON
+response body, next to the access token) is not the one this codebase makes,
+and the reason why is worth understanding rather than taking on faith.
+
+### The question
+
+`AuthService.Login` (and `Register`, and `Refresh`) hand back a
+`service.Session`, which carries both an access token and a refresh token.
+The access token is short-lived (15 minutes) and goes straight in the JSON
+body — nothing sensitive happens if a script on the page can read it, because
+it is dead again in a quarter of an hour. The refresh token is different: it
+lives 30 days by default (`REFRESH_TOKEN_TTL`) and can mint a fresh session
+indefinitely. Where it lives between requests decides how bad it is if
+something goes wrong.
+
+**Two places a token can live in a browser:**
+
+| | httpOnly cookie | JSON body (client stores it) |
+|---|---|---|
+| Readable by page JavaScript | No | Yes, wherever the client puts it (typically `localStorage`) |
+| Exposure if the page has an XSS bug | Confined to the open tab's session | The token itself can be exfiltrated and replayed for up to 30 days |
+| CORS | Requires `credentials: 'include'` and an explicit origin allowlist | Ordinary, no special handling |
+| CSRF | A new problem, needs `SameSite` to close | Not applicable — nothing is sent automatically |
+
+**Why this leans toward the cookie here, specifically:** `web/src/lib/api/client.js` already sends `credentials: 'include'` on every
+request — that only does anything useful if the server is issuing a cookie.
+The frontend was written expecting this transport before the Go server
+existed to provide it. Fighting that (switching to a JSON body and rewriting
+`client.js` to stash it in `localStorage`) trades away the one property that
+matters most for a credential this long-lived — that an XSS bug can't walk
+off with it — to save a small amount of `curl` testing friction. **Decision:
+httpOnly cookie.**
+
+### The cookie, attribute by attribute
+
+Go models a cookie with `http.Cookie` and sets it with `http.SetCookie(w, &http.Cookie{...})`. Each field here is a separate security decision, not a
+default to accept blindly:
+
+```go
+http.SetCookie(w, &http.Cookie{
+    Name:     "refresh_token",
+    Value:    session.RefreshToken,
+    HttpOnly: true,
+    Secure:   cfg.IsProduction(),
+    SameSite: http.SameSiteLaxMode,
+    Path:     "/",
+    Expires:  session.RefreshTokenExpiresAt,
+})
+```
+
+**`HttpOnly: true`** — the entire point of choosing this transport.
+`document.cookie` in the browser's console simply will not show this value.
+An XSS payload running on the page can make requests as the logged-in user
+(the cookie still rides along automatically) but cannot read the token out
+and carry it somewhere else to replay later.
+
+**`Secure: cfg.IsProduction()`** — tells the browser to withhold the cookie
+entirely on a plain HTTP connection. This can't be a bare `true`: local
+development serves the API over `http://localhost:8080`, and a browser will
+silently refuse to send a `Secure` cookie over that connection — the refresh
+flow would appear to work at login (the cookie gets set) and then mysteriously
+fail the moment anything tries to read it back, with no error to point at.
+Tying it to `cfg.IsProduction()` (already on `Config` — see §10) means the
+real production deployment, which is HTTPS-only, gets the protection, while
+local testing over HTTP is unaffected.
+
+**`SameSite: Lax`** — this is what closes the CSRF hole a cookie opens that a
+JSON-body token never had. A browser attaches cookies to a request
+automatically, regardless of which site's HTML triggered that request — that
+is exactly the CSRF vector: a malicious page elsewhere on the internet could
+otherwise fire a `POST /v1/auth/refresh` and have the browser attach a
+Khel Arena visitor's cookie to it without their knowledge. `Lax` still allows
+the cookie on ordinary top-level navigation and on same-site calls (the
+SvelteKit frontend calling its own API), but withholds it on a cross-site
+`fetch`/`POST` — precisely the pattern an attacker's page would need.
+
+**`Path: "/"`** — the cookie rides along on every request to the API, not
+just the `/v1/auth/refresh` and `/v1/auth/logout` calls that actually read
+it. The alternative (scoping to `/v1/auth/`) shrinks what gets attached to
+unrelated calls like `POST /v1/bookings`, at the cost of one more thing to
+keep in sync if an endpoint that reads the cookie ever moves. Simplicity was
+chosen deliberately over that marginal reduction in attack surface.
+
+**`Expires: session.RefreshTokenExpiresAt`** — the cookie's own lifetime is
+set to match the token's real, server-side expiry (the same timestamp
+`AuthService` already computed and stored in `refresh_tokens.expires_at`, per
+§5.4). This keeps the browser from holding onto and sending a cookie for a
+token that the server has already forgotten about — client and server agree
+on the token's lifetime because they are reading the same value, not two
+independently-computed ones that could drift.
+
+### Why this needs two small, shared functions
+
+Three handlers end up touching this cookie: `Register` and `Login` both
+*write* it (a successful signup or signin both start a session), and
+`Refresh` *both reads and rewrites it* (it consumes the old token and issues
+a new one via rotation — see §8.1's "rotation is single-use"). `Logout` only
+*reads* it, to know which session to revoke.
+
+Rather than repeating the `http.SetCookie` literal above in three places, and
+the `r.Cookie("refresh_token")` read in two, the plan calls for isolating
+each direction into one function:
+
+```go
+func readRefreshToken(r *http.Request) string { ... }
+func (s *Server) writeSession(w http.ResponseWriter, session service.Session, status int) { ... }
+```
+
+The value of this is not DRY for its own sake — it is that the transport
+decision above is now recorded in exactly one place each way. If it ever
+changed (say, a mobile client shows up later and needs the JSON-body variant
+for just one route), there are two functions to edit, not four handlers to
+hunt down and get subtly out of sync with each other.
 
 ---
 

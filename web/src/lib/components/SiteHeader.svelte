@@ -231,6 +231,7 @@
 			width: 100%;
 			margin-right: 0;
 			overflow-x: auto;
+			scrollbar-width: thin;
 			padding-bottom: 0.15rem;
 			-webkit-mask-image: linear-gradient(
 				to right,

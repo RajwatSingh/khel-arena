@@ -8,7 +8,7 @@
 	 */
 	import { iconSwap } from '$lib/transitions/iconSwap.js';
 
-	let { value, options, label, onselect, icon } = $props();
+	let { value, options, label, onselect, icon, fill = false } = $props();
 
 	let open = $state(false);
 	let root;
@@ -51,10 +51,11 @@
 
 <svelte:window onclick={onDocClick} onkeydown={onKeydown} />
 
-<div class="listbox" bind:this={root}>
+<div class="listbox" class:fill bind:this={root}>
 	<button
 		type="button"
 		class="trigger"
+		class:fill
 		aria-haspopup="listbox"
 		aria-expanded={open}
 		onclick={() => (open = !open)}
@@ -80,7 +81,7 @@
 	</button>
 
 	{#if open}
-		<ul class="panel" role="listbox" aria-label={label} transition:panelPop>
+		<ul class="panel" class:fill role="listbox" aria-label={label} transition:panelPop>
 			{#each options as opt (opt.value)}
 				<li>
 					<button
@@ -113,6 +114,72 @@
 	.listbox {
 		position: relative;
 		display: inline-flex;
+	}
+
+	/* The AvailabilitySearch variant: stands in for a bare, borderless
+	   <select> sitting flush in its own column, not a pill sitting in a row
+	   of other controls — full width, no border/background of its own,
+	   larger text to match what it's replacing. */
+	.listbox.fill {
+		display: block;
+		width: 100%;
+		/* Whatever grid/flex context this sits in, it needs to actually
+		   shrink to the space it's given rather than growing to fit its
+		   selected option's text — grid/flex items default to min-width:
+		   auto, which fights that at every level up the tree otherwise. */
+		min-width: 0;
+	}
+
+	.trigger.fill {
+		width: 100%;
+		justify-content: space-between;
+		padding: 0 1.6rem 0 0;
+		border: none;
+		border-radius: 0;
+		background: none;
+		font-size: 1.0625rem;
+		font-weight: 500;
+		letter-spacing: -0.01em;
+		color: var(--ink);
+	}
+
+	.trigger.fill:hover {
+		border-color: transparent;
+	}
+
+	.trigger.fill::after {
+		right: 0.15rem;
+	}
+
+	/* The pill variant reserves the widest option's width so it never
+	   resizes on selection — wrong goal for a full-width trigger, which
+	   should instead just fill its column and ellipsize if content doesn't
+	   fit, the way the <select> it replaces would have. */
+	.trigger.fill .trigger-text {
+		display: block;
+		width: 100%;
+		min-width: 0;
+	}
+
+	.trigger.fill .trigger-text-sizer {
+		display: none;
+	}
+
+	.trigger.fill .trigger-text-value {
+		position: static;
+		display: block;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	/* A narrow trigger column shouldn't force the panel down to the same
+	   narrow width — it opens at a sensible reading width instead, anchored
+	   to the trigger's left edge rather than its right. */
+	.panel.fill {
+		right: auto;
+		left: 0;
+		min-width: max(100%, 12rem);
+		max-width: min(18rem, calc(100vw - 2rem));
 	}
 
 	.trigger {

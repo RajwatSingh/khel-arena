@@ -144,6 +144,14 @@
 		gap: 1rem;
 	}
 
+	/* Grid items default to min-width: auto, which lets a row that wants to
+	   be wider than the viewport (the date rail, the filter chips) push the
+	   whole page into horizontal scroll instead of clipping/scrolling
+	   itself the way its own overflow-x: auto says it should. */
+	.controls .shell > * {
+		min-width: 0;
+	}
+
 	.filters {
 		display: flex;
 		flex-wrap: wrap;

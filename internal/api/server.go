@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -14,7 +15,12 @@ import (
 
 type AuthAPI interface {
 	Login(ctx context.Context, email, password string, sc postgres.SessionContext) (service.Session, error)
+	Register(ctx context.Context, reg domain.Registration, sc postgres.SessionContext) (service.Session, error)
+	Logout(ctx context.Context, refreshToken string) error
 	Authenticate(accessToken string) (uuid.UUID, domain.AccountType, error)
+	Refresh(ctx context.Context, refreshToken string, sc postgres.SessionContext) (service.Session, error)
+	BeginPasswordReset(ctx context.Context, email string) (string, domain.User, error)
+	CompletePasswordReset(ctx context.Context, resetToken, newPassword string) error
 }
 
 type BookingAPI interface {
@@ -26,6 +32,8 @@ type Server struct {
 	bookingAPI     BookingAPI
 	pinger         Pinger
 	allowedOrigins []string
+	secureCookies  bool
+	logResetTokens bool
 }
 
 func chain(h http.Handler, mws ...Middleware) http.Handler {
@@ -61,8 +69,123 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := sessionDTOFromDomain(session)
-	encode(w, http.StatusOK, resp)
+	s.writeSession(w, session, http.StatusOK)
+}
+
+func (s *Server) register(w http.ResponseWriter, r *http.Request) {
+	resp, err := decode[domain.Registration](w, r)
+
+	if err != nil {
+		writeError(w, r, err)
+		return 
+	}
+
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	sc := postgres.SessionContext{
+		UserAgent: r.UserAgent(),
+		IP:        host,
+	}
+
+	session, err := s.authAPI.Register(r.Context(), resp, sc)
+
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	s.writeSession(w, session, http.StatusCreated)
+}
+
+func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	token := readRefreshToken(r)
+	err := s.authAPI.Logout(r.Context(), token)
+
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name: "refresh_token",
+		Value: "",
+		Path: "/",
+		MaxAge: -1,
+		Expires: time.Unix(0, 0),
+		HttpOnly: true,
+	})
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
+	token := readRefreshToken(r)
+
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	sc := postgres.SessionContext{
+		UserAgent: r.UserAgent(),
+		IP: host,
+	}
+
+	session, err := s.authAPI.Refresh(r.Context(), token, sc)
+
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	s.writeSession(w, session, http.StatusOK)
+}
+
+func (s *Server) beginForgotPassword(w http.ResponseWriter, r *http.Request) {
+	email, err := decode[emailDTO](w, r)
+
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	resetToken, user, err := s.authAPI.BeginPasswordReset(r.Context(), email.Email)
+	
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	if s.logResetTokens {
+		slog.Info("Logging the reset", "user", user.Username, "email", email.Email, "token", resetToken)
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func (s *Server) completePasswordReset(w http.ResponseWriter, r *http.Request) {
+	resp, err := decode[newPassword](w, r)
+
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	err = s.authAPI.CompletePasswordReset(r.Context(), resp.Token, resp.NewPassword)
+
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) createBooking(w http.ResponseWriter, r *http.Request) {
@@ -101,12 +224,14 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request) {
 	encode(w, http.StatusCreated, resp)
 }
 
-func NewServer(authAPI AuthAPI, bookingAPI BookingAPI, pinger Pinger, allowedOrigins []string) *Server {
+func NewServer(authAPI AuthAPI, bookingAPI BookingAPI, pinger Pinger, allowedOrigins []string, secureCookies bool, logResetTokens bool) *Server {
 	return &Server{
 		authAPI:        authAPI,
 		bookingAPI:     bookingAPI,
 		pinger:         pinger,
 		allowedOrigins: allowedOrigins,
+		secureCookies:  secureCookies,
+		logResetTokens: logResetTokens,
 	}
 }
 
@@ -114,6 +239,11 @@ func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /v1/auth/login", s.login)
+	mux.HandleFunc("POST /v1/auth/register", s.register)
+	mux.HandleFunc("POST /v1/auth/refresh", s.refresh)
+	mux.HandleFunc("POST /v1/auth/logout", s.logout)
+	mux.HandleFunc("POST /v1/auth/password/forgot", s.beginForgotPassword)
+	mux.HandleFunc("POST /v1/auth/password/reset", s.completePasswordReset)
 
 	protected := http.NewServeMux()
 	protected.HandleFunc("POST /v1/bookings", s.createBooking)
@@ -125,7 +255,7 @@ func (s *Server) routes() http.Handler {
 		withRecovery,
 		withRequestID,
 		withLogging,
-		withCORS(s.allowedOrigins), // only if you decide you need it
+		withCORS(s.allowedOrigins), 
 		withTimeout(10*time.Second),
 	)
 }

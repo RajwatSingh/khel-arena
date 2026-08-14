@@ -137,11 +137,11 @@ func ValidatePhone(phone string) error {
 
 // Registration is a validated signup request, ready to be persisted.
 type Registration struct {
-	Email       string
-	Username    string
-	FullName    string
-	AccountType AccountType
-	Password    string
+	Email       string `json:"email"`
+	Username    string `json:"username"`
+	FullName    string `json:"full_name"`
+	AccountType AccountType `json:"account_type"`
+	Password    string `json:"password"`
 }
 
 // Validate checks everything about a signup at once, so the person filling in

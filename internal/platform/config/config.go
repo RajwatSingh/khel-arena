@@ -30,7 +30,21 @@ type Config struct {
 	Booking  Booking
 	Mail     Mail
 	Payment  Payment
+	Media    Media
 }
+
+// Media configures where uploaded images are kept.
+//
+// A directory on disk, served by this process. That is the right shape at this
+// size and the wrong one behind more than one instance -- see
+// internal/platform/media for the decision written out. An empty Dir turns
+// uploads off rather than half-enabling them.
+type Media struct {
+	Dir    string
+	Prefix string
+}
+
+func (m Media) Configured() bool { return m.Dir != "" }
 
 // Mail configures transactional email. With no SMTP host set, cmd/api uses a
 // sender that logs instead -- fine for development, and refused in production.
@@ -137,6 +151,11 @@ func Load() (Config, error) {
 	cfg.Auth.RefreshTokenTTL = durEnvOr("REFRESH_TOKEN_TTL", 30*24*time.Hour, fail)
 
 	cfg.Booking.HoldWindow = durEnvOr("BOOKING_HOLD_WINDOW", 15*time.Minute, fail)
+
+	cfg.Media = Media{
+		Dir:    os.Getenv("MEDIA_DIR"),
+		Prefix: envOr("MEDIA_URL_PREFIX", "/media"),
+	}
 
 	tzName := envOr("ARENA_TIMEZONE", "Asia/Kathmandu")
 	tz, err := time.LoadLocation(tzName)

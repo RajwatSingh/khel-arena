@@ -293,6 +293,36 @@ func (s *Server) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handlePlayer — GET /v1/players/{username}
+//
+// Somebody's public card, with their highlight reel. Deliberately a different
+// shape from /v1/me: that one returns the account, this one returns the
+// player. Email and verification state are on the account and stop here.
+//
+// The clips come back with the card rather than behind a second request: the
+// page wants both, and the id-addressed highlights endpoint exists for callers
+// that already know who they are asking about.
+func (s *Server) handlePlayer(w http.ResponseWriter, r *http.Request) {
+	user, err := s.profiles.ByUsername(r.Context(), r.PathValue("username"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	dto := playerDTOFromDomain(user)
+
+	if s.reviews != nil {
+		highlights, err := s.reviews.ListHighlights(r.Context(), user.ID)
+		if err != nil {
+			writeError(w, r, err)
+			return
+		}
+		dto.Highlights = highlightDTOsFromDomain(highlights)
+	}
+
+	encode(w, http.StatusOK, dto)
+}
+
 // handleMe — GET /v1/me (authenticated)
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	userID, ok := s.currentUser(w, r)

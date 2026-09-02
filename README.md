@@ -55,7 +55,7 @@ one type — `SessionContext`, which the service layer's own signatures require.
 
 ## The API
 
-Seventy-six endpoints.
+Seventy-nine endpoints.
 Errors are one envelope (`{"error": {code, message, fields}}`) mapped from
 `domain.Code` in a single place, so no handler picks a status itself.
 
@@ -253,6 +253,12 @@ rating is a number the listing shows and a booking decision turns on, and the
 booking history is right there to check it against. The cost is deliberate: a
 venue's first review can only come from its first paying customer, afterwards.
 
+**A dispute is a counter-report, not a rejection.** A captain who thinks the
+score is wrong files their version; `reported_by` moves to them, so the next
+confirmation has to come from the other side. Two people who keep disagreeing
+keep passing it back, which is the honest model of an argument about a
+scoreline — and it terminates the moment they agree.
+
 **A result counts only when both captains agree it.** One captain files a
 score, the other confirms; `matches.reported_by` records who filed it so the
 reporter cannot wave through their own. The standings view reads `verified`
@@ -285,6 +291,7 @@ services; the janitor; rate limiting; and the HTTP API over all of them, with
 /teams                  squads, rosters, invite codes
 /tournaments            brackets and entries
 /standings              the table -- agreed results only
+/players/{username}     a player's card, with their clips
 /manage                 the back office: venues, courts, rates, gallery, the till
 ```
 
@@ -294,18 +301,33 @@ confirmed from a team's page.
 Every table in the schema has a repository, a service and endpoints over it,
 and nothing in `internal/domain` is unreachable from the API.
 
-What is left is smaller than what is here:
+Nothing in the schema or the domain is unreachable, and every surface has a
+screen. What remains is operational rather than unbuilt:
 
-1. **A player page.** `/v1/players/{id}/highlights` answers and
-   `POST /v1/me/highlights` writes, but there is no profile screen to put a
-   reel on -- the player card exists in the database and nowhere in the
-   interface.
-2. **Photo uploads.** Galleries take a URL you already host. Somewhere to put
-   the file is a storage decision (object store, signed uploads, a size cap)
-   rather than a missing endpoint.
-3. **Disputes.** A captain can withdraw an unagreed result, which is enough
-   for a typo. Two captains who genuinely disagree about a score have no
-   route but to talk to each other.
+- **Object storage**, when this outgrows one machine. `media.Store` is the
+  seam.
+- **A shared rate-limit counter**, when it outgrows one process.
+- **One real payment**, through each provider's sandbox, before taking money.
+
+The first two are the same shape: both are in-process today because one
+process is what runs, and both have an interface where the replacement goes.
+
+## Uploads
+
+Images go to a directory on disk, served by this process at `/media`. That is
+the right shape at this size and the wrong one behind more than one instance
+or in front of a CDN — `media.Store` is an interface so that swapping in S3 or
+R2 later is one implementation, not a rewrite.
+
+Three things the caller does not get to decide: **the filename** (random, so
+an upload cannot escape the directory or overwrite another), **the type**
+(sniffed from the bytes, never read from the request — storing a script
+because it claimed to be a PNG is how an upload directory becomes an execution
+surface), and **the size** (capped before anything is written).
+
+Uploads are optional. With `MEDIA_DIR` unset, galleries still take a URL you
+host elsewhere and the upload endpoint reports itself unavailable rather than
+half-working.
 
 Three things to know before this serves real traffic:
 

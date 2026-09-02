@@ -103,6 +103,31 @@ func (r *MatchRepo) Confirm(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+// Recount replaces a disputed score and hands the result back to the other
+// captain.
+//
+// `reported_by` moves to whoever countered, which is what makes the next
+// confirmation have to come from the original reporter. The `and not verified`
+// predicate stops a result being rewritten after both sides agreed it.
+func (r *MatchRepo) Recount(ctx context.Context, id uuid.UUID, homeScore, awayScore int, byUserID uuid.UUID) error {
+	const q = `
+		update matches
+		   set home_score = $2, away_score = $3, reported_by = $4
+		 where id = $1 and not verified`
+
+	tag, err := r.pool.Exec(ctx, q, id, homeScore, awayScore, byUserID)
+	if err != nil {
+		if isCheckViolation(err) {
+			return domain.Invalid("home_score", "Scores can't be negative.")
+		}
+		return domain.Internal(err, "disputing match %s", id)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.Conflict("Both captains agreed that result. It stands.")
+	}
+	return nil
+}
+
 func (r *MatchRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	tag, err := r.pool.Exec(ctx, `delete from matches where id = $1`, id)
 	if err != nil {

@@ -22,6 +22,11 @@
 
 	let newCourt = $state({ name: '', format: '', side_count: 5, base_price_npr: 1200 });
 	let newPhoto = $state({ url: '', caption: '', sort_order: 0 });
+	let file = $state(null);
+
+	function pickFile(event) {
+		file = event.currentTarget.files?.[0] ?? null;
+	}
 	let busy = $state(false);
 	let error = $state(null);
 	let fieldErrors = $state({});
@@ -81,6 +86,23 @@
 
 	const received = (payment) => act(() => api.markCashReceived(payment.id));
 	const removePhoto = (id) => act(() => api.deletePhoto(id));
+
+	async function upload(event) {
+		event.preventDefault();
+		if (!file) return;
+
+		const ok = await act(() =>
+			api.uploadPhoto(arena.id, file, { caption: newPhoto.caption })
+		);
+		if (ok) {
+			newPhoto = { url: '', caption: '', sort_order: 0 };
+			file = null;
+			// The input keeps its selection otherwise, which reads as though
+			// the upload had not happened.
+			const input = document.getElementById('photo-file');
+			if (input) input.value = '';
+		}
+	}
 
 	async function addPhoto(event) {
 		event.preventDefault();
@@ -257,8 +279,20 @@
 			<p class="small quiet none-inline">No photographs yet.</p>
 		{/if}
 
+		<form class="card" onsubmit={upload}>
+			<h3 class="display display-m">Upload a photograph</h3>
+			<label class="pick" for="photo-file">
+				<span class="label">Image file</span>
+				<input id="photo-file" type="file" accept="image/*" onchange={pickFile} />
+				<span class="small quiet">JPEG, PNG, WebP or GIF, up to 5 MB.</span>
+			</label>
+			<Field name="upload-caption" label="Caption" bind:value={newPhoto.caption}
+				maxlength="120" placeholder="The covered court, looking east" />
+			<button class="btn btn-primary" class:loading={busy} disabled={busy || !file}>Upload</button>
+		</form>
+
 		<form class="card" onsubmit={addPhoto}>
-			<h3 class="display display-m">Add a photograph</h3>
+			<h3 class="display display-m">…or link one you host</h3>
 			<Field name="photo-url" label="Image address" bind:value={newPhoto.url}
 				error={fieldErrors.url} required placeholder="https://…/dhuku-court-a.jpg" />
 			<Field name="photo-caption" label="Caption" bind:value={newPhoto.caption}

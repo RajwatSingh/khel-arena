@@ -150,7 +150,13 @@
 			{#each reviews as review (review.id)}
 				<li>
 					<div class="head">
-						<strong>{review.author?.full_name || review.author?.username || 'A player'}</strong>
+						{#if review.author?.username}
+							<a class="byline" href="/players/{review.author.username}">
+								{review.author.full_name || review.author.username}
+							</a>
+						{:else}
+							<strong>A player</strong>
+						{/if}
 						<span class="score" aria-label="{review.rating} out of 5">{stars(review.rating)}</span>
 					</div>
 					{#if review.comment}<p class="comment">{review.comment}</p>{/if}
@@ -235,6 +241,8 @@
 		gap: 1rem;
 	}
 
+	.byline { font-weight: 600; color: inherit; text-decoration: none; }
+	.byline:hover { color: var(--pine-deep); }
 	.score { color: var(--pine); letter-spacing: 0.1em; }
 	.comment { margin: 0.5rem 0 0; }
 	.when { margin: 0.4rem 0 0; color: var(--faint); }

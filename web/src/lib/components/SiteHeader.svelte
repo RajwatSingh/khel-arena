@@ -45,7 +45,9 @@
 			<span class="clock num">Kathmandu {kathmandu}</span>
 			{#if session.signedIn}
 				<button class="btn btn-quiet" onclick={() => session.signOut()}>Sign out</button>
-				<a class="btn btn-primary username" href="/bookings">{session.user.username}</a>
+				<a class="btn btn-primary username" href="/players/{session.user.username}">
+					{session.user.username}
+				</a>
 			{:else}
 				<a class="btn btn-quiet" href="/login">Sign in</a>
 				<a class="btn btn-primary" href="/tonight">Book a court</a>

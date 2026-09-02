@@ -104,10 +104,16 @@ function fallbackCode(status) {
  * endpoint itself, so a genuinely dead session ends as a 401 rather than a
  * loop.
  */
-async function request(path, { method = 'GET', body, auth = false, fetch: given, retry = true } = {}) {
+async function request(
+	path,
+	{ method = 'GET', body, rawBody, auth = false, fetch: given, retry = true } = {}
+) {
 	const doFetch = resolveFetch(given);
 
 	const headers = {};
+	// rawBody is passed through untouched — a FormData upload has to keep the
+	// boundary the browser generates, and setting Content-Type here would
+	// replace it with one that has none.
 	if (body !== undefined) headers['Content-Type'] = 'application/json';
 	if (auth && accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
@@ -120,7 +126,7 @@ async function request(path, { method = 'GET', body, auth = false, fetch: given,
 			// are included. Same-origin in both environments, so this is not a
 			// cross-site grant.
 			credentials: 'include',
-			body: body === undefined ? undefined : JSON.stringify(body)
+			body: rawBody ?? (body === undefined ? undefined : JSON.stringify(body))
 		});
 	} catch {
 		// DNS failure, connection refused, offline. There is no status and no
@@ -131,6 +137,11 @@ async function request(path, { method = 'GET', body, auth = false, fetch: given,
 	if (response.status === 401 && auth && retry && path !== '/auth/refresh') {
 		const refreshed = await refreshQuietly(doFetch);
 		if (refreshed) {
+			// rawBody is not replayed: a FormData stream has already been
+			// consumed by the first attempt, and re-sending it would send
+			// nothing. An upload that lands on an expired token is retried by
+			// the person, not by us.
+			if (rawBody) throw toApiError(await response.json().catch(() => null), 401);
 			return request(path, { method, body, auth, fetch: given, retry: false });
 		}
 	}
@@ -249,6 +260,16 @@ export const reportMatch = (input, opts) =>
 export const confirmMatch = (id, opts) =>
 	request(`/matches/${id}/confirm`, { method: 'POST', auth: true, ...opts });
 
+/** Countering with your version of the score. The result goes back to the
+ *  other captain to agree or counter again. */
+export const disputeMatch = (id, homeScore, awayScore, opts) =>
+	request(`/matches/${id}/dispute`, {
+		method: 'POST',
+		body: { home_score: homeScore, away_score: awayScore },
+		auth: true,
+		...opts
+	});
+
 export const withdrawMatch = (id, opts) =>
 	request(`/matches/${id}`, { method: 'DELETE', auth: true, ...opts });
 
@@ -270,6 +291,26 @@ export const arenaPhotos = (arenaId, opts) => request(`/arenas/${arenaId}/photos
 export const addPhoto = (arenaId, input, opts) =>
 	request(`/owner/arenas/${arenaId}/photos`, { method: 'POST', body: input, auth: true, ...opts });
 
+/**
+ * Uploads an image to a venue's gallery.
+ *
+ * Multipart, so no Content-Type is set by hand: the browser has to add the
+ * boundary, and a header set here would replace it with one that has none.
+ */
+export async function uploadPhoto(arenaId, file, { caption = '', sortOrder = 0, ...opts } = {}) {
+	const body = new FormData();
+	body.append('file', file);
+	body.append('caption', caption);
+	body.append('sort_order', String(sortOrder));
+
+	return request(`/owner/arenas/${arenaId}/photos/upload`, {
+		method: 'POST',
+		rawBody: body,
+		auth: true,
+		...opts
+	});
+}
+
 export const deletePhoto = (photoId, opts) =>
 	request(`/owner/photos/${photoId}`, { method: 'DELETE', auth: true, ...opts });
 
@@ -280,6 +321,10 @@ export const copyPricingRules = (toCourtId, fromCourtId, opts) =>
 		auth: true,
 		...opts
 	});
+
+/** Somebody's public card, with their highlight reel. */
+export const player = (username, opts) =>
+	request(`/players/${encodeURIComponent(username)}`, opts);
 
 export const playerHighlights = (userId, opts) => request(`/players/${userId}/highlights`, opts);
 

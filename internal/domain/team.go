@@ -166,6 +166,19 @@ func (m Match) CanBeConfirmedBy(actorID, teamID uuid.UUID) error {
 	return nil
 }
 
+// CanBeDisputedBy states whether the captain of teamID may counter this
+// result with a different score.
+//
+// A dispute is a re-report, not a rejection: you say what you think the score
+// was, and the ball goes back to the other captain to agree or counter again.
+// That is why the rule is the same as confirming -- the other side, on an
+// unagreed result -- rather than a separate permission. Two captains who keep
+// disagreeing keep passing it back, which is the honest model of an argument
+// about a score.
+func (m Match) CanBeDisputedBy(actorID, teamID uuid.UUID) error {
+	return m.CanBeConfirmedBy(actorID, teamID)
+}
+
 // CanBeWithdrawnBy states whether a captain may delete a result.
 //
 // Either side, and only while it is unagreed: once both captains have said the

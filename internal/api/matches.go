@@ -102,6 +102,39 @@ func (s *Server) handleConfirmMatch(w http.ResponseWriter, r *http.Request) {
 	encode(w, http.StatusOK, matchDTOFromDomain(match))
 }
 
+// handleDisputeMatch — POST /v1/matches/{matchID}/dispute (authenticated)
+//
+// Countering with a different score. The result goes back to the other
+// captain, who can agree or counter again — two people who keep disagreeing
+// keep passing it back, which is the honest model of an argument about a
+// scoreline.
+func (s *Server) handleDisputeMatch(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := s.currentUser(w, r)
+	if !ok {
+		return
+	}
+
+	matchID, err := uuid.Parse(r.PathValue("matchID"))
+	if err != nil {
+		writeError(w, r, domain.Invalid("match_id", "That isn't a result."))
+		return
+	}
+
+	req, err := decode[disputeRequest](w, r)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	match, err := s.matches.Dispute(r.Context(), matchID, actorID, req.HomeScore, req.AwayScore)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	encode(w, http.StatusOK, matchDTOFromDomain(match))
+}
+
 // handleWithdrawMatch — DELETE /v1/matches/{matchID} (authenticated)
 //
 // Either captain, and only while the result is unagreed. Once both have said

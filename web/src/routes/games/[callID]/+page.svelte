@@ -78,7 +78,14 @@
 
 			<dl class="facts">
 				<div><dt class="label">Standard</dt><dd>{SKILL_LABELS[call.skill] ?? call.skill}</dd></div>
-				<div><dt class="label">Posted by</dt><dd>{call.author.full_name || call.author.username}</dd></div>
+				<div>
+					<dt class="label">Posted by</dt>
+					<dd>
+						<a href="/players/{call.author.username}">
+							{call.author.full_name || call.author.username}
+						</a>
+					</dd>
+				</div>
 				<div>
 					<dt class="label">Court</dt>
 					<dd>{call.booking_id ? 'Booked and paid for' : 'Not booked yet'}</dd>
@@ -95,7 +102,9 @@
 					{#each call.responses as response (response.user_id)}
 						<li>
 							<div class="responder">
-								<strong>{response.responder.full_name || response.responder.username}</strong>
+								<a href="/players/{response.responder.username}">
+									<strong>{response.responder.full_name || response.responder.username}</strong>
+								</a>
 								<span class="small">@{response.responder.username}</span>
 								{#if response.message}<p class="small note">“{response.message}”</p>{/if}
 							</div>
@@ -225,6 +234,9 @@
 		border-radius: var(--r-md);
 		background: var(--surface);
 	}
+
+	.responder a { color: inherit; text-decoration: none; }
+	.responder a:hover strong { color: var(--pine-deep); }
 
 	.responder span {
 		display: block;

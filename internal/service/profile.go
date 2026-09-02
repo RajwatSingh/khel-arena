@@ -13,6 +13,7 @@ import (
 // nothing here should be able to touch credentials.
 type ProfileStore interface {
 	ByID(ctx context.Context, id uuid.UUID) (domain.User, error)
+	ByUsername(ctx context.Context, username string) (domain.User, error)
 	UpdateProfile(ctx context.Context, userID uuid.UUID, p domain.ProfileUpdate) (domain.User, error)
 }
 
@@ -40,6 +41,20 @@ func (s *ProfileService) Me(ctx context.Context, userID uuid.UUID) (domain.User,
 		return domain.User{}, domain.Unauthenticated("Please sign in.")
 	}
 	return s.users.ByID(ctx, userID)
+}
+
+// ByUsername loads somebody's public card.
+//
+// Addressed by username rather than id because that is what a person shares
+// and types. The transport layer decides what of the returned user is public
+// -- this hands back the whole row, and `playerDTO` is where email and
+// verification state are dropped.
+func (s *ProfileService) ByUsername(ctx context.Context, username string) (domain.User, error) {
+	username = domain.NormalizeUsername(username)
+	if username == "" {
+		return domain.User{}, domain.Invalid("username", "Which player?")
+	}
+	return s.users.ByUsername(ctx, username)
 }
 
 // Update changes the caller's own player card and returns the account as it

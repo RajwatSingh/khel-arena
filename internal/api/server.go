@@ -13,6 +13,7 @@ package api
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -143,6 +144,7 @@ type TournamentAPI interface {
 type MatchAPI interface {
 	Report(ctx context.Context, actorID uuid.UUID, m domain.Match) (domain.Match, error)
 	Confirm(ctx context.Context, matchID, actorID uuid.UUID) (domain.Match, error)
+	Dispute(ctx context.Context, matchID, actorID uuid.UUID, homeScore, awayScore int) (domain.Match, error)
 	Withdraw(ctx context.Context, matchID, actorID uuid.UUID) error
 	ListForTeam(ctx context.Context, teamID uuid.UUID, limit int) ([]domain.Match, error)
 	Standings(ctx context.Context, limit int) ([]domain.Standing, error)
@@ -164,6 +166,13 @@ type ReviewAPI interface {
 	DeleteHighlight(ctx context.Context, highlightID, userID uuid.UUID) error
 }
 
+// MediaStore is the file storage uploads land in. Two methods, because a
+// gallery only ever adds one and removes one.
+type MediaStore interface {
+	Save(r io.Reader) (string, error)
+	Delete(urlPath string) error
+}
+
 // Mailer sends the reset link. One method, because that is the only message
 // this layer triggers.
 type Mailer interface {
@@ -173,6 +182,7 @@ type Mailer interface {
 // ProfileAPI is the part of service.ProfileService the handlers reach for.
 type ProfileAPI interface {
 	Me(ctx context.Context, userID uuid.UUID) (domain.User, error)
+	ByUsername(ctx context.Context, username string) (domain.User, error)
 	Update(ctx context.Context, userID uuid.UUID, p domain.ProfileUpdate) (domain.User, error)
 }
 
@@ -196,6 +206,11 @@ type Options struct {
 	// Mailer delivers the password-reset link. Optional: with none, the token
 	// is only logged (see LogResetTokens), which is the development path.
 	Mailer Mailer
+
+	// Media stores uploaded images. Optional: with none, galleries still take
+	// a URL you host elsewhere and the upload endpoint reports itself
+	// unavailable rather than half-working.
+	Media MediaStore
 
 	// Pinger backs /readyz. Optional: leave it nil and readiness reports the
 	// process alone, which is the honest answer when there is nothing else to
@@ -251,6 +266,7 @@ type Server struct {
 	tournaments TournamentAPI
 	matches     MatchAPI
 	reviews     ReviewAPI
+	media       MediaStore
 	mailer      Mailer
 	pinger      Pinger
 
@@ -284,6 +300,7 @@ func NewServer(opts Options) *Server {
 		tournaments:    opts.Tournaments,
 		matches:        opts.Matches,
 		reviews:        opts.Reviews,
+		media:          opts.Media,
 		mailer:         opts.Mailer,
 		pinger:         opts.Pinger,
 		appURL:         strings.TrimRight(opts.AppURL, "/"),
@@ -332,6 +349,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /v1/teams/{teamID}/matches", s.handleTeamMatches)
 	mux.HandleFunc("GET /v1/arenas/{arenaID}/reviews", s.handleListReviews)
 	mux.HandleFunc("GET /v1/arenas/{arenaID}/photos", s.handleListPhotos)
+	mux.HandleFunc("GET /v1/players/{username}", s.handlePlayer)
 	mux.HandleFunc("GET /v1/players/{userID}/highlights", s.handleListHighlights)
 	mux.HandleFunc("GET /v1/tournaments", s.handleListTournaments)
 	mux.HandleFunc("GET /v1/tournaments/{slug}", s.handleGetTournament)
@@ -409,6 +427,7 @@ func (s *Server) routes() http.Handler {
 	// Results. One captain files, the other agrees.
 	mux.Handle("POST /v1/matches", protected(s.handleReportMatch))
 	mux.Handle("POST /v1/matches/{matchID}/confirm", protected(s.handleConfirmMatch))
+	mux.Handle("POST /v1/matches/{matchID}/dispute", protected(s.handleDisputeMatch))
 	mux.Handle("DELETE /v1/matches/{matchID}", protected(s.handleWithdrawMatch))
 
 	// Reviews, galleries and player highlights.
@@ -416,6 +435,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("PUT /v1/arenas/{arenaID}/reviews/mine", protected(s.handleReviewArena))
 	mux.Handle("DELETE /v1/arenas/{arenaID}/reviews/mine", protected(s.handleDeleteReview))
 	mux.Handle("POST /v1/owner/arenas/{arenaID}/photos", protected(s.handleAddPhoto))
+	mux.Handle("POST /v1/owner/arenas/{arenaID}/photos/upload", protected(s.handleUploadPhoto))
 	mux.Handle("DELETE /v1/owner/photos/{photoID}", protected(s.handleDeletePhoto))
 	mux.Handle("POST /v1/me/highlights", protected(s.handleAddHighlight))
 	mux.Handle("DELETE /v1/me/highlights/{highlightID}", protected(s.handleDeleteHighlight))

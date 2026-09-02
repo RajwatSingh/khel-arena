@@ -97,6 +97,24 @@
 	const confirm = (id) => act(() => api.confirmMatch(id));
 	const withdraw = (id) => act(() => api.withdrawMatch(id));
 
+	// Disputing is countering with your version, not rejecting theirs: the
+	// result goes back to the other captain to agree or counter again.
+	let disputing = $state(null);
+	let counter = $state({ home_score: 0, away_score: 0 });
+
+	function openDispute(match) {
+		disputing = match.id;
+		counter = { home_score: match.home_score, away_score: match.away_score };
+	}
+
+	async function sendDispute(event) {
+		event.preventDefault();
+		const ok = await act(() =>
+			api.disputeMatch(disputing, Number(counter.home_score), Number(counter.away_score))
+		);
+		if (ok) disputing = null;
+	}
+
 	/** Whose turn it is on an unagreed result. */
 	function awaiting(match) {
 		if (match.verified) return null;
@@ -136,8 +154,8 @@
 							<button class="btn btn-secondary" disabled={busy} onclick={() => confirm(match.id)}>
 								Confirm
 							</button>
-							<button class="btn btn-quiet" disabled={busy} onclick={() => withdraw(match.id)}>
-								Dispute
+							<button class="btn btn-quiet" disabled={busy} onclick={() => openDispute(match)}>
+								Wrong score
 							</button>
 						{:else if turn === 'them'}
 							<span class="chip chip-quiet">Waiting on them</span>
@@ -150,6 +168,28 @@
 							<span class="chip chip-quiet">Unconfirmed</span>
 						{/if}
 					</span>
+					{#if disputing === match.id}
+						<form class="counter" onsubmit={sendDispute}>
+							<p class="small quiet">
+								What was the score? It goes back to them to agree.
+							</p>
+							<div class="counter-scores">
+								<label>
+									<span class="label">{match.home_tag}</span>
+									<input type="number" min="0" bind:value={counter.home_score} required />
+								</label>
+								<span class="dash">–</span>
+								<label>
+									<span class="label">{match.away_tag}</span>
+									<input type="number" min="0" bind:value={counter.away_score} required />
+								</label>
+								<button class="btn btn-secondary" disabled={busy}>Send</button>
+								<button type="button" class="btn btn-quiet" onclick={() => (disputing = null)}>
+									Cancel
+								</button>
+							</div>
+						</form>
+					{/if}
 				</li>
 			{/each}
 		</ul>
@@ -293,6 +333,38 @@
 	}
 
 	.chip-quiet { background: var(--surface-sunk); color: var(--faint); }
+
+	/* The counter-form drops beneath the row it belongs to rather than
+	   replacing it: you want to see the score you are arguing with. */
+	.counter {
+		flex-basis: 100%;
+		display: grid;
+		gap: 0.5rem;
+		padding-top: 0.75rem;
+		margin-top: 0.25rem;
+		border-top: 1px dashed var(--line-strong);
+	}
+
+	.counter-scores {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: 0.5rem;
+	}
+
+	.counter-scores label { display: grid; gap: 0.2rem; }
+
+	.counter-scores input {
+		width: 4rem;
+		padding: 0.4rem 0.5rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-sm);
+		background: var(--surface);
+		font: inherit;
+		text-align: center;
+	}
+
+	.dash { align-self: center; color: var(--faint); }
 
 	form {
 		display: grid;

@@ -85,7 +85,9 @@
 				{#each team.members as member (member.user_id)}
 					<li>
 						<div class="player">
-							<strong>{member.full_name || member.username}</strong>
+							<a href="/players/{member.username}">
+								<strong>{member.full_name || member.username}</strong>
+							</a>
 							<span class="small">@{member.username} · joined {formatDate(member.joined_at)}</span>
 						</div>
 
@@ -201,6 +203,9 @@
 		border-radius: var(--r-md);
 		background: var(--surface);
 	}
+
+	.player a { color: inherit; text-decoration: none; }
+	.player a:hover strong { color: var(--pine-deep); }
 
 	.player span {
 		display: block;

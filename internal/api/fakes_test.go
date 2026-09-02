@@ -159,8 +159,9 @@ func (f *fakeBookings) Cancel(ctx context.Context, bookingID, userID uuid.UUID) 
 type fakeProfiles struct {
 	t *testing.T
 
-	me     func(context.Context, uuid.UUID) (domain.User, error)
-	update func(context.Context, uuid.UUID, domain.ProfileUpdate) (domain.User, error)
+	me         func(context.Context, uuid.UUID) (domain.User, error)
+	byUsername func(context.Context, string) (domain.User, error)
+	update     func(context.Context, uuid.UUID, domain.ProfileUpdate) (domain.User, error)
 
 	gotUpdate domain.ProfileUpdate
 	updated   bool
@@ -171,6 +172,13 @@ func (f *fakeProfiles) Me(ctx context.Context, userID uuid.UUID) (domain.User, e
 		f.t.Fatal("handler called ProfileAPI.Me, which this test did not expect")
 	}
 	return f.me(ctx, userID)
+}
+
+func (f *fakeProfiles) ByUsername(ctx context.Context, username string) (domain.User, error) {
+	if f.byUsername == nil {
+		f.t.Fatal("handler called ProfileAPI.ByUsername, which this test did not expect")
+	}
+	return f.byUsername(ctx, username)
 }
 
 func (f *fakeProfiles) Update(ctx context.Context, userID uuid.UUID, p domain.ProfileUpdate) (domain.User, error) {
@@ -523,6 +531,7 @@ type fakeMatches struct {
 
 	report      func(context.Context, uuid.UUID, domain.Match) (domain.Match, error)
 	confirm     func(context.Context, uuid.UUID, uuid.UUID) (domain.Match, error)
+	dispute     func(context.Context, uuid.UUID, uuid.UUID, int, int) (domain.Match, error)
 	withdraw    func(context.Context, uuid.UUID, uuid.UUID) error
 	listForTeam func(context.Context, uuid.UUID, int) ([]domain.Match, error)
 	standings   func(context.Context, int) ([]domain.Standing, error)
@@ -544,6 +553,13 @@ func (f *fakeMatches) Confirm(ctx context.Context, matchID, actorID uuid.UUID) (
 	}
 	f.gotActor = actorID
 	return f.confirm(ctx, matchID, actorID)
+}
+
+func (f *fakeMatches) Dispute(ctx context.Context, matchID, actorID uuid.UUID, home, away int) (domain.Match, error) {
+	if f.dispute == nil {
+		f.t.Fatal("handler called MatchAPI.Dispute, which this test did not expect")
+	}
+	return f.dispute(ctx, matchID, actorID, home, away)
 }
 
 func (f *fakeMatches) Withdraw(ctx context.Context, matchID, actorID uuid.UUID) error {

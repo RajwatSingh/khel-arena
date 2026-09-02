@@ -13,6 +13,7 @@ type MatchStore interface {
 	Create(ctx context.Context, m domain.Match) (domain.Match, error)
 	ByID(ctx context.Context, id uuid.UUID) (domain.Match, error)
 	Confirm(ctx context.Context, id uuid.UUID) error
+	Recount(ctx context.Context, id uuid.UUID, homeScore, awayScore int, byUserID uuid.UUID) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	ListForTeam(ctx context.Context, teamID uuid.UUID, limit int) ([]domain.Match, error)
 	Standings(ctx context.Context, limit int) ([]domain.Standing, error)
@@ -87,6 +88,48 @@ func (s *MatchService) Confirm(ctx context.Context, matchID, actorID uuid.UUID) 
 	}
 
 	if err := s.matches.Confirm(ctx, matchID); err != nil {
+		return domain.Match{}, err
+	}
+	return s.matches.ByID(ctx, matchID)
+}
+
+// Dispute counters a result with a different score.
+//
+// Not a rejection: the disputer says what they think happened, and the result
+// goes back to the other captain to agree or counter again. `reported_by`
+// moves with it, so the next confirmation has to come from the other side --
+// the same rule as before, applied to the new score.
+//
+// This is what a captain does when the score is wrong. Withdrawing is for
+// when the whole result is: a fixture that never happened, or the wrong
+// opponent.
+func (s *MatchService) Dispute(ctx context.Context, matchID, actorID uuid.UUID, homeScore, awayScore int) (domain.Match, error) {
+	if actorID == uuid.Nil {
+		return domain.Match{}, domain.Unauthenticated("Sign in to dispute a result.")
+	}
+	if homeScore < 0 || awayScore < 0 {
+		return domain.Match{}, domain.Invalid("home_score", "Scores can't be negative.")
+	}
+
+	match, err := s.matches.ByID(ctx, matchID)
+	if err != nil {
+		return domain.Match{}, err
+	}
+
+	teamID, err := s.captainedTeam(ctx, actorID, match)
+	if err != nil {
+		return domain.Match{}, err
+	}
+	if err := match.CanBeDisputedBy(actorID, teamID); err != nil {
+		return domain.Match{}, err
+	}
+	if match.HomeScore == homeScore && match.AwayScore == awayScore {
+		// Agreeing with the score is confirming it, not disputing it.
+		return domain.Match{}, domain.Invalid("home_score",
+			"That's the score already filed. Confirm it instead.")
+	}
+
+	if err := s.matches.Recount(ctx, matchID, homeScore, awayScore, actorID); err != nil {
 		return domain.Match{}, err
 	}
 	return s.matches.ByID(ctx, matchID)

@@ -1326,3 +1326,55 @@ type myReviewDTO struct {
 	CanReview bool       `json:"can_review"`
 	Review    *reviewDTO `json:"review"`
 }
+
+// playerDTO is somebody's public card.
+//
+// Deliberately not userDTO: that one is the account, returned to its owner,
+// and carries an email address. This is the player, returned to anybody, and
+// carries what a squad list or a review byline needs. The two being separate
+// types is what stops an email reaching a page it has no business on.
+type playerDTO struct {
+	ID             uuid.UUID        `json:"id"`
+	Username       string           `json:"username"`
+	FullName       string           `json:"full_name"`
+	AvatarURL      string           `json:"avatar_url"`
+	City           string           `json:"city"`
+	Bio            string           `json:"bio"`
+	Skill          domain.SkillTier `json:"skill"`
+	Position       *domain.Position `json:"position"`
+	JerseyNumber   *int             `json:"jersey_number"`
+	PreferredFoot  *domain.Foot     `json:"preferred_foot"`
+	MatchesPlayed  int              `json:"matches_played"`
+	MatchesWon     int              `json:"matches_won"`
+	CommunityScore int              `json:"community_score"`
+	JoinedAt       time.Time        `json:"joined_at"`
+	Highlights     []highlightDTO   `json:"highlights"`
+}
+
+func playerDTOFromDomain(u domain.User) playerDTO {
+	return playerDTO{
+		ID:             u.ID,
+		Username:       u.Username,
+		FullName:       u.FullName,
+		AvatarURL:      u.AvatarURL,
+		City:           u.City,
+		Bio:            u.Bio,
+		Skill:          u.Skill,
+		Position:       u.Position,
+		JerseyNumber:   u.JerseyNumber,
+		PreferredFoot:  u.PreferredFoot,
+		MatchesPlayed:  u.MatchesPlayed,
+		MatchesWon:     u.MatchesWon,
+		CommunityScore: u.CommunityScore,
+		JoinedAt:       u.CreatedAt,
+		Highlights:     []highlightDTO{},
+	}
+}
+
+// disputeRequest is a captain's version of the score. Home and away are the
+// match's, not the disputer's — which team was at home was settled when the
+// result was filed and is not what is in dispute.
+type disputeRequest struct {
+	HomeScore int `json:"home_score"`
+	AwayScore int `json:"away_score"`
+}

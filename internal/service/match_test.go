@@ -19,6 +19,7 @@ type stubMatches struct {
 	confirms int
 	deletes  int
 	creates  int
+	recounts int
 }
 
 func (s *stubMatches) Create(_ context.Context, m domain.Match) (domain.Match, error) {
@@ -31,6 +32,11 @@ func (s *stubMatches) ByID(context.Context, uuid.UUID) (domain.Match, error) { r
 func (s *stubMatches) Confirm(context.Context, uuid.UUID) error {
 	s.confirms++
 	s.match.Verified = true
+	return nil
+}
+func (s *stubMatches) Recount(_ context.Context, _ uuid.UUID, home, away int, by uuid.UUID) error {
+	s.recounts++
+	s.match.HomeScore, s.match.AwayScore, s.match.ReportedBy = home, away, by
 	return nil
 }
 func (s *stubMatches) Delete(context.Context, uuid.UUID) error { s.deletes++; return nil }
@@ -251,4 +257,105 @@ func TestATeamCannotPlayItself(t *testing.T) {
 	if domain.CodeOf(err) != domain.CodeInvalid {
 		t.Errorf("code = %q, want invalid", domain.CodeOf(err))
 	}
+}
+
+// A dispute is a counter-report, not a rejection: you say what you think the
+// score was and the ball goes back to the other captain.
+func TestDispute(t *testing.T) {
+	t.Run("hands the result back with the new score", func(t *testing.T) {
+		matches, teams, m := matchFixture()
+		svc := NewMatchService(matches, teams, fixedClock{now})
+		_, _ = svc.Report(context.Background(), homeCaptain, m)
+
+		disputed, err := svc.Dispute(context.Background(), matches.match.ID, awayCaptain, 2, 2)
+		if err != nil {
+			t.Fatalf("disputing: %v", err)
+		}
+
+		if disputed.HomeScore != 2 || disputed.AwayScore != 2 {
+			t.Errorf("score = %d-%d, want 2-2", disputed.HomeScore, disputed.AwayScore)
+		}
+		// The ball is now in the original reporter's court: reported_by moved,
+		// so the next confirmation has to come from them.
+		if disputed.ReportedBy != awayCaptain {
+			t.Errorf("reported_by = %v, want the disputer", disputed.ReportedBy)
+		}
+		if disputed.Verified {
+			t.Error("a disputed result was treated as agreed")
+		}
+	})
+
+	t.Run("and the original reporter can then agree", func(t *testing.T) {
+		matches, teams, m := matchFixture()
+		svc := NewMatchService(matches, teams, fixedClock{now})
+		_, _ = svc.Report(context.Background(), homeCaptain, m)
+		_, _ = svc.Dispute(context.Background(), matches.match.ID, awayCaptain, 2, 2)
+
+		confirmed, err := svc.Confirm(context.Background(), matches.match.ID, homeCaptain)
+		if err != nil {
+			t.Fatalf("confirming after a dispute: %v", err)
+		}
+		if !confirmed.Verified {
+			t.Error("the countered score was not agreed")
+		}
+	})
+
+	// Whoever last put a score on the record cannot dispute it — that would
+	// be arguing with yourself, and the flow would never terminate.
+	t.Run("the reporter cannot dispute their own", func(t *testing.T) {
+		matches, teams, m := matchFixture()
+		svc := NewMatchService(matches, teams, fixedClock{now})
+		_, _ = svc.Report(context.Background(), homeCaptain, m)
+
+		_, err := svc.Dispute(context.Background(), matches.match.ID, homeCaptain, 1, 1)
+
+		if domain.CodeOf(err) != domain.CodeConflict {
+			t.Errorf("code = %q, want conflict", domain.CodeOf(err))
+		}
+		if matches.recounts != 0 {
+			t.Error("a captain disputed their own filing")
+		}
+	})
+
+	// Agreeing with the score is confirming it, and saying so is clearer than
+	// a no-op that looks like it worked.
+	t.Run("disputing with the same score is refused", func(t *testing.T) {
+		matches, teams, m := matchFixture()
+		svc := NewMatchService(matches, teams, fixedClock{now})
+		_, _ = svc.Report(context.Background(), homeCaptain, m)
+
+		_, err := svc.Dispute(context.Background(), matches.match.ID, awayCaptain, 3, 2)
+
+		if domain.CodeOf(err) != domain.CodeInvalid {
+			t.Errorf("code = %q, want invalid", domain.CodeOf(err))
+		}
+		if matches.recounts != 0 {
+			t.Error("a no-change dispute was written")
+		}
+	})
+
+	t.Run("an agreed result cannot be reopened", func(t *testing.T) {
+		matches, teams, m := matchFixture()
+		svc := NewMatchService(matches, teams, fixedClock{now})
+		_, _ = svc.Report(context.Background(), homeCaptain, m)
+		_, _ = svc.Confirm(context.Background(), matches.match.ID, awayCaptain)
+
+		_, err := svc.Dispute(context.Background(), matches.match.ID, awayCaptain, 0, 9)
+
+		if domain.CodeOf(err) != domain.CodeConflict {
+			t.Errorf("code = %q, want conflict", domain.CodeOf(err))
+		}
+	})
+
+	t.Run("a stranger cannot dispute", func(t *testing.T) {
+		matches, teams, m := matchFixture()
+		svc := NewMatchService(matches, teams, fixedClock{now})
+		_, _ = svc.Report(context.Background(), homeCaptain, m)
+
+		_, err := svc.Dispute(context.Background(), matches.match.ID, outsider, 0, 5)
+
+		if domain.CodeOf(err) != domain.CodeNotFound {
+			t.Errorf("code = %q, want not_found", domain.CodeOf(err))
+		}
+	})
 }

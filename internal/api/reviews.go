@@ -1,9 +1,12 @@
 package api
 
 import (
+	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/RajwatSingh/khel-arena/internal/domain"
+	"github.com/RajwatSingh/khel-arena/internal/platform/media"
 	"github.com/RajwatSingh/khel-arena/internal/postgres"
 	"github.com/google/uuid"
 )
@@ -164,6 +167,86 @@ func (s *Server) handleAddPhoto(w http.ResponseWriter, r *http.Request) {
 	}
 
 	encode(w, http.StatusCreated, photoDTOFromDomain(photo))
+}
+
+// handleUploadPhoto — POST /v1/owner/arenas/{arenaID}/photos/upload
+//
+// Multipart rather than JSON, because the payload is a file. The stored URL
+// then goes through the same AddPhoto as a linked one -- an upload and a link
+// differ in where the bytes came from, not in what a gallery entry is.
+//
+// The order matters: the file is stored first, then the row. A row pointing
+// at a file that failed to write is a broken image on the venue's page; a file
+// with no row is a few kilobytes nobody references, which is the cheaper
+// failure.
+func (s *Server) handleUploadPhoto(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := s.currentUser(w, r)
+	if !ok {
+		return
+	}
+	if s.media == nil {
+		writeError(w, r, domain.Unavailable("Uploads aren't configured on this server."))
+		return
+	}
+
+	arenaID, err := uuid.Parse(r.PathValue("arenaID"))
+	if err != nil {
+		writeError(w, r, domain.Invalid("arena_id", "That isn't an arena."))
+		return
+	}
+
+	// Capped before parsing: multipart will happily buffer whatever it is
+	// given, and the cap belongs in front of that rather than after.
+	r.Body = http.MaxBytesReader(w, r.Body, media.MaxUploadBytes+1<<20)
+	if err := r.ParseMultipartForm(media.MaxUploadBytes); err != nil {
+		writeError(w, r, domain.Invalid("file", "That upload didn't arrive in one piece.").WithCause(err))
+		return
+	}
+
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, r, domain.Invalid("file", "Attach an image."))
+		return
+	}
+	defer file.Close()
+
+	url, err := s.media.Save(file)
+	switch {
+	case errors.Is(err, media.ErrUnsupportedType):
+		writeError(w, r, domain.Invalid("file", "Images only -- JPEG, PNG, WebP or GIF."))
+		return
+	case errors.Is(err, media.ErrTooLarge):
+		writeError(w, r, domain.Invalid("file", "That image is too large. Keep it under 5 MB."))
+		return
+	case err != nil:
+		writeError(w, r, domain.Internal(err, "storing an uploaded photo"))
+		return
+	}
+
+	photo, err := s.reviews.AddPhoto(r.Context(), ownerID, postgres.Photo{
+		ArenaID:   arenaID,
+		URL:       url,
+		Caption:   r.FormValue("caption"),
+		SortOrder: atoiOr(r.FormValue("sort_order"), 0),
+	})
+	if err != nil {
+		// The row was refused, so the file has nothing pointing at it.
+		_ = s.media.Delete(url)
+		writeError(w, r, err)
+		return
+	}
+
+	encode(w, http.StatusCreated, photoDTOFromDomain(photo))
+}
+
+// atoiOr parses an optional numeric form field. A form field that is absent or
+// unparseable means "the default", not an error: sort order is a nicety.
+func atoiOr(s string, fallback int) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 // handleDeletePhoto — DELETE /v1/owner/photos/{photoID} (authenticated)

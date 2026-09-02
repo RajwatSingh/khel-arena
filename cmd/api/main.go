@@ -25,6 +25,7 @@ import (
 	"github.com/RajwatSingh/khel-arena/internal/domain"
 	"github.com/RajwatSingh/khel-arena/internal/platform/config"
 	"github.com/RajwatSingh/khel-arena/internal/platform/mail"
+	"github.com/RajwatSingh/khel-arena/internal/platform/media"
 	"github.com/RajwatSingh/khel-arena/internal/platform/payment"
 	"github.com/RajwatSingh/khel-arena/internal/platform/token"
 	"github.com/RajwatSingh/khel-arena/internal/postgres"
@@ -108,10 +109,24 @@ func run() error {
 	tournamentService := service.NewTournamentService(postgres.NewTournamentRepo(pool), teamRepo, clock)
 	matchService := service.NewMatchService(postgres.NewMatchRepo(pool), teamRepo, clock)
 	reviewService := service.NewReviewService(postgres.NewReviewRepo(pool))
+
+	// Uploads are optional: with no MEDIA_DIR, galleries still take a URL you
+	// host elsewhere and the upload endpoint reports itself unavailable rather
+	// than half-working.
+	var mediaStore *media.DiskStore
+	if cfg.Media.Configured() {
+		mediaStore, err = media.NewDiskStore(cfg.Media.Dir, cfg.Media.Prefix)
+		if err != nil {
+			return err
+		}
+		slog.Info("uploads configured", "dir", cfg.Media.Dir, "served_at", mediaStore.Prefix())
+	} else {
+		slog.Warn("MEDIA_DIR is unset; photo uploads are disabled (linked images still work)")
+	}
 	janitor := service.NewJanitor(bookings, sessions, callRepo, janitorInterval, slog.Default())
 
 	// ── transport ────────────────────────────────────────────────────────
-	srv := api.NewServer(api.Options{
+	opts := api.Options{
 		Auth:           authService,
 		Bookings:       bookingService,
 		Profiles:       profileService,
@@ -135,11 +150,33 @@ func run() error {
 		// token is logged to make the flow testable. The gate is what makes
 		// that impossible to reach in production rather than merely unlikely.
 		LogResetTokens: !cfg.IsProduction(),
-	})
+	}
+
+	// Assigned only when there is one. A nil *DiskStore put into an interface
+	// field is not a nil interface -- it is a non-nil interface holding a nil
+	// pointer -- so `s.media == nil` in the handler would be false and the
+	// first call would dereference nothing. This is the one place that can go
+	// wrong, so it is the one place it is guarded.
+	if mediaStore != nil {
+		opts.Media = mediaStore
+	}
+
+	srv := api.NewServer(opts)
+
+	// Uploaded files are served alongside the API rather than through it: the
+	// API's middleware chain -- auth, rate limiting, JSON error envelopes --
+	// has nothing to say about a static image.
+	handler := srv.Handler()
+	if mediaStore != nil {
+		mux := http.NewServeMux()
+		mux.Handle(mediaStore.Prefix()+"/", mediaStore.Handler())
+		mux.Handle("/", handler)
+		handler = mux
+	}
 
 	httpServer := &http.Server{
 		Addr:    cfg.HTTPAddr,
-		Handler: srv.Handler(),
+		Handler: handler,
 		// Without ReadHeaderTimeout a client can hold a connection open
 		// forever by sending headers one byte at a time -- the Slowloris
 		// attack. This is the field that closes it.

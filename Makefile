@@ -52,7 +52,7 @@ cover: ## Report test coverage per package
 	TEST_DATABASE_URL="$(TEST_DB_URL)" go test ./... -count=1 -cover
 
 .PHONY: check
-check: tidy-check vet test-race ## Everything CI runs
+check: tidy-check vet test-race web-test ## Everything CI runs
 
 .PHONY: vet
 vet: ## Run go vet
@@ -117,3 +117,7 @@ web-build: ## Build the frontend into web/build
 .PHONY: web-check
 web-check: ## Type- and a11y-check every Svelte component
 	$(WEB) run check
+
+.PHONY: web-test
+web-test: ## Run the frontend unit tests (no server needed)
+	$(WEB) run test

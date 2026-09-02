@@ -56,3 +56,25 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://khel:khel@localhost:5432/khel_arena_test?sslmode=disable
         run: go test ./... -count=1 -race -cover
+
+      # The frontend half. `make check` runs these too, so leaving node out
+      # here would make CI and the local command disagree about what "check"
+      # means -- and the disagreement would only surface as a green CI on a
+      # branch that fails the moment someone runs it themselves.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # `ci`, not `install`: it installs exactly what the lockfile pins and
+      # fails if package.json has drifted from it, rather than quietly
+      # resolving something newer.
+      - name: Install frontend dependencies
+        run: npm ci --prefix web
+
+      - name: Check the frontend
+        run: npm run check --prefix web
+
+      - name: Test the frontend
+        run: npm run test --prefix web

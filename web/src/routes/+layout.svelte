@@ -9,9 +9,13 @@
 
 	let { children } = $props();
 
-	// The server renders signed-out; the browser knows better as soon as it has
-	// the stored session in hand.
-	$effect(() => session.restore());
+	// The server renders signed-out; the browser corrects that once the refresh
+	// cookie has been redeemed. Deliberately not returned from the effect: a
+	// value returned from $effect is taken as its cleanup function, and
+	// restore() is async, so returning it would hand Svelte a Promise to call.
+	$effect(() => {
+		session.restore();
+	});
 
 	// One delegated listener catches every button on the site, present and
 	// future, rather than wiring haptic() into each one by hand — a tap on

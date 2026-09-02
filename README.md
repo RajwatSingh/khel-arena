@@ -129,7 +129,19 @@ one court-hour and exactly one may win.
 make test              # unit only
 make test-integration  # everything
 make test-race         # everything, under the race detector
+make web-test          # the frontend's unit tests
 ```
+
+The frontend has its own suite under vitest, covering `lib/api/client.js` --
+the transport, where the behaviour worth pinning is invisible by hand: an
+expired access token being refreshed and the call replayed once, four
+simultaneous 401s sharing a single refresh rather than racing to rotate the
+token four times, and a server-side call refusing to run without the `fetch`
+that `load()` provides. It stubs fetch, so it needs nothing running.
+
+Whether the server actually agrees with any of that is settled by
+`scripts/smoke.sh` against a live `cmd/api` -- the same split as the Go suite,
+where unit tests need no database and the integration ones do.
 
 ## Migrations
 

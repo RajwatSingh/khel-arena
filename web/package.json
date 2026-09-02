@@ -7,7 +7,9 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-check --threshold warning"
+    "check": "svelte-check --threshold warning",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.5.7",
@@ -15,6 +17,7 @@
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "svelte": "^5.20.0",
     "svelte-check": "^4.1.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vitest": "^4.1.11"
   }
 }

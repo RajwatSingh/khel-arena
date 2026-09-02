@@ -13,20 +13,15 @@
  *     defaults to 15 minutes; the slot goes back on the board when it lapses.
  */
 
+import { ApiError } from './errors.js';
 import { arenas, arenaBySlug, courtById, courts } from './fixtures.js';
 import { addDays, dayTimeMinutes, instantAt, isoWeekday, localDate } from '../time.js';
 
 export const HOLD_WINDOW_MS = 15 * 60 * 1000;
 
-/** Mirrors the shape `domain.Error` reaches the wire as (apiPlan.md §4). */
-export class ApiError extends Error {
-	constructor(code, message, fields = []) {
-		super(message);
-		this.name = 'ApiError';
-		this.code = code;
-		this.fields = fields;
-	}
-}
+// Re-exported so the many pages that already import ApiError from here keep
+// working. It is defined in ./errors.js, which client.js shares.
+export { ApiError };
 
 // --------------------------------------------------------------- pricing ---
 

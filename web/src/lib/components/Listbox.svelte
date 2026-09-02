@@ -12,8 +12,34 @@
 
 	let open = $state(false);
 	let root;
+	let triggerEl = $state(null);
+
+	// The panel escapes to fixed, viewport-relative coordinates rather than
+	// sitting position: absolute inside the trigger — several triggers on
+	// this site (the hero search bar, in particular) live inside a section
+	// with overflow: hidden for its own decorative layers, which would
+	// otherwise clip the popup at the section's edge instead of the
+	// viewport's. Computed fresh each time the panel opens.
+	let pos = $state({ top: 0, left: 0, right: 0, width: 0 });
 
 	const selected = $derived(options.find((o) => o.value === value) ?? options[0]);
+
+	function updatePosition() {
+		if (!triggerEl) return;
+		const rect = triggerEl.getBoundingClientRect();
+		const gap = 10;
+		pos = {
+			top: rect.bottom + gap,
+			left: rect.left,
+			right: window.innerWidth - rect.right,
+			width: rect.width
+		};
+	}
+
+	function toggle() {
+		if (!open) updatePosition();
+		open = !open;
+	}
 
 	function choose(v) {
 		open = false;
@@ -29,6 +55,16 @@
 			open = false;
 			root?.querySelector('.trigger')?.focus();
 		}
+	}
+
+	function onWindowScroll() {
+		// A held-open panel with a now-stale position is worse than one that
+		// just closes — the trigger itself is still right there to reopen it.
+		if (open) open = false;
+	}
+
+	function onWindowResize() {
+		if (open) updatePosition();
 	}
 
 	/* The same blur-clears-as-it-lands language as the rest of the site's
@@ -49,16 +85,22 @@
 	}
 </script>
 
-<svelte:window onclick={onDocClick} onkeydown={onKeydown} />
+<svelte:window
+	onclick={onDocClick}
+	onkeydown={onKeydown}
+	onscroll={onWindowScroll}
+	onresize={onWindowResize}
+/>
 
 <div class="listbox" class:fill bind:this={root}>
 	<button
 		type="button"
 		class="trigger"
 		class:fill
+		bind:this={triggerEl}
 		aria-haspopup="listbox"
 		aria-expanded={open}
-		onclick={() => (open = !open)}
+		onclick={toggle}
 	>
 		{#if icon}
 			<span class="trigger-icon">
@@ -81,7 +123,16 @@
 	</button>
 
 	{#if open}
-		<ul class="panel" class:fill role="listbox" aria-label={label} transition:panelPop>
+		<ul
+			class="panel"
+			class:fill
+			role="listbox"
+			aria-label={label}
+			transition:panelPop
+			style="top: {pos.top}px; {fill
+				? `left: ${pos.left}px;`
+				: `right: ${pos.right}px; min-width: ${pos.width}px;`}"
+		>
 			{#each options as opt (opt.value)}
 				<li>
 					<button
@@ -174,12 +225,12 @@
 
 	/* A narrow trigger column shouldn't force the panel down to the same
 	   narrow width — it opens at a sensible reading width instead, anchored
-	   to the trigger's left edge rather than its right. */
+	   to the trigger's left edge rather than its right (top/left come from
+	   the trigger's own measured position, set inline). */
 	.panel.fill {
-		right: auto;
-		left: 0;
-		min-width: max(100%, 12rem);
+		min-width: 12rem;
 		max-width: min(18rem, calc(100vw - 2rem));
+		transform-origin: top left;
 	}
 
 	.trigger {
@@ -194,6 +245,7 @@
 		font-size: 0.9375rem;
 		font-weight: 500;
 		color: var(--muted);
+		text-align: left;
 		cursor: pointer;
 		transition:
 			border-color var(--dur-hover) var(--ease),
@@ -259,15 +311,17 @@
 		pointer-events: none;
 	}
 
-	/* The gap a native <select> can't give its own popup — the panel sits a
-	   clear half-rem below the pill instead of sealed against it. */
+	/* Fixed, not absolute: several triggers on this site sit inside a
+	   section with overflow: hidden for its own decorative layers (the
+	   hero's pitch grid), which would otherwise clip the popup at the
+	   section's edge. top/left/right come from the trigger's own measured
+	   position, set inline in the markup — this just supplies the gap. */
 	.panel {
-		position: absolute;
+		position: fixed;
 		z-index: 30;
-		top: 100%;
-		right: 0;
-		margin-top: 0.6rem;
-		min-width: 100%;
+		max-height: min(17rem, calc(100vh - 6rem));
+		overflow-y: auto;
+		overscroll-behavior: contain;
 		padding: 0.4rem;
 		background: var(--surface);
 		border-radius: var(--r-md);

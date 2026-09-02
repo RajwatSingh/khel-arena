@@ -24,7 +24,7 @@
 		<p class="lede fade-up fade-up-1">
 			<strong class="num">{data.arenas.length}</strong> arenas, <strong class="num"
 				>{courtCount}</strong
-			> courts. Rates are per hour, per court, and the arena sets them — nothing here is marked up.
+			> courts. Rates are per hour, per court, and the arena sets them. Nothing here is marked up.
 		</p>
 		<div class="pitch-mark fade-up fade-up-2">
 			<CentreMark wide />

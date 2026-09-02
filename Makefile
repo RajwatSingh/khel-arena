@@ -22,6 +22,17 @@ build: ## Compile every binary into ./bin
 tidy: ## Sync go.mod and go.sum
 	go mod tidy
 
+# ── Run ─────────────────────────────────────────────────────────────────────
+
+.PHONY: run
+run: ## Run the API on $(HTTP_ADDR), reading .env if present
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+		DATABASE_URL="$${DATABASE_URL:-$(DB_URL)}" go run ./cmd/api
+
+.PHONY: smoke
+smoke: ## Smoke-test a running API (BASE_URL, COURT_ID override)
+	@DATABASE_URL="$${DATABASE_URL:-$(DB_URL)}" ./scripts/smoke.sh
+
 # ── Test ────────────────────────────────────────────────────────────────────
 
 .PHONY: test

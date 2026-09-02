@@ -189,6 +189,13 @@ export function cityLedger(
 				court_id: court.id,
 				court_name: court.name,
 				sport: court.sport,
+				format: court.format,
+				// The arena a court belongs to, carried on every row: the ledger
+				// links each cell to /arenas/{slug} and labels it with the venue,
+				// and a row without these renders a nameless link to /arenas/undefined.
+				arena_id: court.arena_id,
+				arena_name: court.arena_name,
+				arena_slug: court.arena_slug,
 				arena_area: court.arena_area,
 				slots: grid.slots
 			};

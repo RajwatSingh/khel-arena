@@ -101,7 +101,7 @@
 	{/key}
 
 	<ul class="key small">
-		<li><span class="chip free"></span>Free — price per hour, NPR</li>
+		<li><span class="chip free"></span>Free · price per hour, NPR</li>
 		<li><span class="chip peak"></span>Peak rate</li>
 		<li><span class="chip taken"><i></i></span>Taken</li>
 		<li><span class="chip gone"></span>Already played</li>

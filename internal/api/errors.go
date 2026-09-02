@@ -2,11 +2,40 @@ package api
 
 import (
 	"errors"
-	"github.com/RajwatSingh/khel-arena/internal/domain"
 	"log/slog"
 	"net/http"
+
+	"github.com/RajwatSingh/khel-arena/internal/domain"
 )
 
+// This file is the only place an internal error becomes an HTTP status. Every
+// handler returns the error it got and calls writeError; none of them chooses
+// a status. That is what keeps the mapping consistent, and what makes adding
+// a domain.Code a one-line change here rather than a hunt through handlers.
+
+// errorEnvelope is the one shape every failure takes, matching what
+// web/src/lib/api/client.js decodes.
+type errorEnvelope struct {
+	Error errorDTO `json:"error"`
+}
+
+type errorDTO struct {
+	Code    string     `json:"code"`
+	Message string     `json:"message"`
+	Fields  []fieldDTO `json:"fields,omitempty"`
+}
+
+type fieldDTO struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
+
+// codeToStatus maps a domain error code to its HTTP status. Pure, so it can
+// be tested exhaustively without a request.
+//
+// Anything unrecognised falls through to 500 -- domain.CodeOf already
+// collapses an unknown error to CodeInternal, and this default covers a code
+// added to the domain without a line added here.
 func codeToStatus(code domain.Code) int {
 	switch code {
 	case domain.CodeInvalid:
@@ -28,65 +57,79 @@ func codeToStatus(code domain.Code) int {
 	}
 }
 
-type Resp struct {
-	Err Error `json:"error"`
-}
-
-type Error struct {
-	Code    string  `json:"code"`
-	Message string  `json:"message"`
-	Fields  []Field `json:"fields,omitempty"`
-}
-
-type Field struct {
-	F       string `json:"field"`
-	Message string `json:"message"`
-}
-
+// writeError writes the error envelope and sets the status.
+//
+// The message always comes from domain.UserMessage, never from err.Error().
+// UserMessage returns a generic apology for CodeInternal and for anything it
+// does not recognise, which is what stops a raw pgx failure putting a
+// connection string in a response body. The cause is logged instead, and only
+// for CodeInternal: logging every 401 at error level buries real defects
+// under routine noise.
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	code := domain.CodeOf(err)
 	status := codeToStatus(code)
 
 	if code == domain.CodeInternal {
-
-		var de *domain.Error
-		cause := error(err)
-		if errors.As(err, &de) {
-			if de.Unwrap() != nil {
-				cause = de.Unwrap()
-			}
-		}
 		slog.ErrorContext(r.Context(), "internal error",
-			"error", cause,
+			"error", causeOf(err),
+			"request_id", requestIDFromContext(r.Context()),
+			"method", r.Method,
+			"path", r.URL.Path,
+		)
+	} else {
+		slog.DebugContext(r.Context(), "request rejected",
+			"code", code,
+			"error", causeOf(err),
 			"request_id", requestIDFromContext(r.Context()),
 			"method", r.Method,
 			"path", r.URL.Path,
 		)
 	}
 
-	body := Error{
+	encode(w, status, errorEnvelope{Error: errorDTO{
 		Code:    string(code),
 		Message: domain.UserMessage(err),
 		Fields:  fieldsFromError(err),
-	}
-
-	encode(w, status, Resp{Err: body})
+	}})
 }
 
-func fieldsFromError(err error) []Field {
+// causeOf unwraps to the underlying failure, for the log only. It is
+// deliberately not part of the serialized JSON: the cause is where the
+// database driver's own text lives.
+func causeOf(err error) error {
 	var de *domain.Error
-	if !errors.As(err, &de) {
-		return nil
+	if errors.As(err, &de) {
+		if cause := de.Unwrap(); cause != nil {
+			return cause
+		}
 	}
-	fes := de.FieldErrors()
-	if len(fes) == 0 {
+	return err
+}
+
+// fieldsFromError renders per-field validation messages, so a form can put
+// each one next to the input it belongs to.
+//
+// Returning nil rather than an empty slice matters: the `omitempty` tag on
+// Fields drops the key entirely for nil, so an error with nothing to say
+// about individual fields serializes without a "fields": [] a client would
+// have to check.
+func fieldsFromError(err error) []fieldDTO {
+	var de *domain.Error
+	if !errors.As(err, &de) || de.Code == domain.CodeInternal {
+		// Nothing about an internal defect is safe to describe to a client,
+		// field names included -- UserMessage already refuses to, and this
+		// keeps a second route to the same information closed.
 		return nil
 	}
 
-	out := make([]Field, len(fes))
+	fieldErrors := de.FieldErrors()
+	if len(fieldErrors) == 0 {
+		return nil
+	}
 
-	for i, fe := range fes {
-		out[i] = Field{F: fe.Field, Message: fe.Message}
+	out := make([]fieldDTO, 0, len(fieldErrors))
+	for _, fe := range fieldErrors {
+		out = append(out, fieldDTO{Field: fe.Field, Message: fe.Message})
 	}
 	return out
 }

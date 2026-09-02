@@ -96,7 +96,7 @@
 </script>
 
 <svelte:head>
-	<title>{arena.name}, {arena.area} — book by the hour | Khel Arena</title>
+	<title>{arena.name}, {arena.area} · Book by the hour | Khel Arena</title>
 	<meta name="description" content={arena.description} />
 </svelte:head>
 

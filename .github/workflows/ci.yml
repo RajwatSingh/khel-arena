@@ -30,9 +30,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Read from go.mod rather than pinned here. A pin older than go.mod's
+      # own directive does not fail -- GOTOOLCHAIN=auto quietly downloads the
+      # newer toolchain on every run instead, so CI tests a version nobody
+      # chose and pays for the download each time.
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
           cache: true
 
       - name: Verify go.mod is tidy

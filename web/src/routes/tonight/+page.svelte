@@ -39,7 +39,7 @@
 </script>
 
 <svelte:head>
-	<title>Find a court — every free hour in the valley | Khel Arena</title>
+	<title>Find a court · Every free hour in the valley | Khel Arena</title>
 	<meta
 		name="description"
 		content="Every court in Kathmandu and Lalitpur, every hour of the day, priced. Pick an hour to hold it."

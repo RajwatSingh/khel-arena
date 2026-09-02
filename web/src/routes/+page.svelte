@@ -70,7 +70,7 @@
 </script>
 
 <svelte:head>
-	<title>Khel Arena — book a court by the hour in Kathmandu</title>
+	<title>Khel Arena · Book a court by the hour in Kathmandu</title>
 	<meta
 		name="description"
 		content="Live futsal, basketball and badminton availability across Kathmandu and Lalitpur. Hold an hour for fifteen minutes, pay with eSewa or Khalti, play."
@@ -94,7 +94,7 @@
 
 		<p class="lede">
 			{#if freeTonight > 0}
-				An hour nobody claims doesn't go on sale — it just goes away. Tap one, give your five
+				An hour nobody claims doesn't go on sale. It just goes away. Tap one, give your five
 				fifteen minutes to say yes, then pay to make it yours.
 			{:else}
 				Every evening hour in the valley is taken or done. Tomorrow is one tap away, and the dawn
@@ -118,7 +118,7 @@
 			<p class="from small">
 				Cheapest free hour today is <strong class="num"
 					>NPR {formatNPR(data.ledger.cheapest_npr)}</strong
-				>. No booking fee — the arena's price is the price.
+				>. No booking fee: the arena's price is the price.
 			</p>
 		{/if}
 	</div>
@@ -146,7 +146,7 @@
 			<div>
 				<h2 class="display display-l">Fifteen minutes to get your five to answer</h2>
 				<p class="lede">
-					A held hour is real — the court leaves the board the moment you tap it. It is also
+					A held hour is real: the court leaves the board the moment you tap it. It is also
 					temporary, which is the only reason anyone can trust the board at all.
 				</p>
 			</div>
@@ -192,7 +192,7 @@
 				<div class="prose">
 					<p>
 						Double-booking is not something we check for and apologise about afterwards. The
-						database physically cannot hold two live bookings on one court at one time — not under
+						database physically cannot hold two live bookings on one court at one time: not under
 						load, not on a retry, not when twenty people tap the same eight o'clock slot in the
 						same second.
 					</p>
@@ -209,7 +209,7 @@
 				<div class="prose">
 					<p>
 						No booking fee, and nothing added for being the last hour left on the board. eSewa,
-						Khalti, or cash at the gate — the number on the cell is the number you pay, whether you
+						Khalti, or cash at the gate: the number on the cell is the number you pay, whether you
 						book at noon or with four minutes left on your hold.
 					</p>
 				</div>

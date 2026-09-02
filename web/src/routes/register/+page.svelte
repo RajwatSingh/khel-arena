@@ -62,8 +62,8 @@
 				<CentreMark wide />
 			</div>
 			<p class="lede fade-up fade-up-2">
-				Name, email, password. The rest is how other players find you when someone is a man short —
-				leave it blank and fill it in later.
+				Name, email, password. The rest is how other players find you when someone is a man short.
+				Leave it blank and fill it in later.
 			</p>
 		</div>
 

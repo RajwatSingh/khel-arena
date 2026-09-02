@@ -10,13 +10,13 @@ import (
 
 // Team is a squad with a captain and a roster.
 type Team struct {
-	ID         uuid.UUID
-	Name       string
-	Tag        string // 2-5 uppercase alphanumerics, e.g. "KTM"
-	CrestURL   string
-	CaptainID  uuid.UUID
-	HomeArena  *uuid.UUID
-	JoinCode   string
+	ID          uuid.UUID
+	Name        string
+	Tag         string // 2-5 uppercase alphanumerics, e.g. "KTM"
+	CrestURL    string
+	CaptainID   uuid.UUID
+	HomeArena   *uuid.UUID
+	JoinCode    string
 	MemberCount int
 
 	CreatedAt time.Time

@@ -21,6 +21,7 @@ import (
 type Janitor struct {
 	bookings BookingStore
 	tokens   TokenSweeper
+	calls    CallSweeper
 	interval time.Duration
 	log      *slog.Logger
 }
@@ -30,19 +31,26 @@ type TokenSweeper interface {
 	DeleteExpiredTokens(ctx context.Context, retainRevokedFor time.Duration) (int64, error)
 }
 
+// CallSweeper closes matchmaking calls whose kickoff has passed. Same shape as
+// the booking sweep: the feed already excludes them by time, so this is the
+// stored state catching up rather than something correctness depends on.
+type CallSweeper interface {
+	ExpireStale(ctx context.Context) (int, error)
+}
+
 // retainRevokedTokensFor keeps revoked rows around after they are retired, so
 // that reuse detection still has something to match when a stolen token is
 // presented shortly after rotation.
 const retainRevokedTokensFor = 7 * 24 * time.Hour
 
-func NewJanitor(bookings BookingStore, tokens TokenSweeper, interval time.Duration, log *slog.Logger) *Janitor {
+func NewJanitor(bookings BookingStore, tokens TokenSweeper, calls CallSweeper, interval time.Duration, log *slog.Logger) *Janitor {
 	if interval <= 0 {
 		interval = time.Minute
 	}
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Janitor{bookings: bookings, tokens: tokens, interval: interval, log: log}
+	return &Janitor{bookings: bookings, tokens: tokens, calls: calls, interval: interval, log: log}
 }
 
 // Run sweeps until the context is cancelled. It is meant to be started in its
@@ -85,6 +93,14 @@ func (j *Janitor) sweep(ctx context.Context) {
 			j.log.Error("deleting expired refresh tokens", "error", err)
 		} else if deleted > 0 {
 			j.log.Info("deleted expired refresh tokens", "count", deleted)
+		}
+	}
+
+	if j.calls != nil {
+		if expired, err := j.calls.ExpireStale(ctx); err != nil {
+			j.log.Error("expiring stale matchmaking calls", "error", err)
+		} else if expired > 0 {
+			j.log.Info("expired stale matchmaking calls", "count", expired)
 		}
 	}
 }

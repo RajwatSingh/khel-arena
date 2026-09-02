@@ -1,21 +1,22 @@
 /**
  * The one seam between the interface and its data.
  *
- * `cmd/api` now answers, but not for everything the interface asks for: the
- * arena reads (listArenas, getArena, listAreas, cityLedger) and payBooking
- * have no endpoint behind them yet, so pages still read from `mock.js`.
+ * This now points at the real service. `mock.js` and `fixtures.js` are no
+ * longer imported by anything and are kept only until the payment flow lands,
+ * since that is the last call with nothing behind it -- `client.payBooking`
+ * rejects with a readable message rather than pretending.
  *
- * Switching over is this line, once those endpoints exist — but note that the
- * two transports differ in more than their source. The mock answers
- * synchronously where the client returns a Promise, so `listBookings()` in a
- * $derived has to become an awaited call at the same time. That is the work
- * this seam defers, not work it removes.
+ * The two transports differ in more than their source, which is why switching
+ * this line was not the whole job: the mock answered synchronously and the
+ * client returns a Promise, so every `load` became async and the call sites
+ * that read data inside a `$derived` had to become effects.
  *
- * `client.js` itself is finished and tested against the running service; it is
- * imported directly by session.svelte.js for the auth flow.
+ * On the server, a `load` must pass the `fetch` SvelteKit gives it --
+ * `api.listArenas({ fetch })`. The client's base URL is relative and Node has
+ * no page origin to resolve it against; that fetch does, and forwards cookies
+ * besides. Calling without it throws a message saying so.
  */
 
-export * as api from './mock.js';
+export * as api from './client.js';
 export { ApiError } from './errors.js';
-export { HOLD_WINDOW_MS } from './mock.js';
-export { SPORT_LABELS } from './fixtures.js';
+export { SPORT_LABELS } from '../sports.js';

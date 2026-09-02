@@ -10,18 +10,63 @@
 
 	let version = $state(0);
 	let error = $state(null);
+	let bookings = $state([]);
 
-	// The janitor's rule runs here too: re-read on every tick so a lapsed hold
-	// stops claiming to be live.
-	const bookings = $derived.by(() => {
+	// Only the gateways this deployment is actually configured for. Offering
+	// one whose credentials are absent means a player picks it and fails at the
+	// last step, so the server is asked rather than the list being hardcoded.
+	let providers = $state([]);
+
+	$effect(() => {
+		let cancelled = false;
+		api
+			.paymentProviders()
+			.then((next) => {
+				if (!cancelled) providers = next.filter((p) => p !== 'cash');
+			})
+			.catch(() => {
+				// Not worth an error banner: the pay button reports it if the
+				// player actually reaches for it.
+				if (!cancelled) providers = [];
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	// Fetched, so this is an effect rather than a $derived: the list arrives
+	// after the render that asked for it.
+	//
+	// It re-reads whenever the signed-in state changes, whenever an action
+	// bumps `version`, and once a minute -- the last so a hold that lapsed
+	// while the page sat open stops claiming to be live, which is the janitor's
+	// rule showing through. Once a minute rather than once a second, which is
+	// how often the countdown ticks: the countdown is arithmetic on a timestamp
+	// already in hand and costs nothing, a re-read is a request.
+	$effect(() => {
 		void version;
-		void ticking.now;
-		if (!session.signedIn) return [];
-		try {
-			return api.listBookings();
-		} catch {
-			return [];
+		void Math.floor(ticking.now / 60_000);
+
+		if (!session.signedIn) {
+			bookings = [];
+			return;
 		}
+
+		let cancelled = false;
+		api
+			.listBookings()
+			.then((next) => {
+				if (!cancelled) bookings = next;
+			})
+			.catch((err) => {
+				if (cancelled) return;
+				bookings = [];
+				error = err instanceof ApiError ? err.message : 'We could not load your bookings.';
+			});
+
+		return () => {
+			cancelled = true;
+		};
 	});
 
 	const STATUS = {
@@ -43,11 +88,15 @@
 		}
 	}
 
-	async function pay(booking) {
+	// Leaves the site for the gateway; see the note on the arena page.
+	async function pay(booking, provider = providers[0]) {
 		error = null;
+		if (!provider) {
+			error = 'No payment method is available right now.';
+			return;
+		}
 		try {
-			await api.payBooking(booking.id);
-			version++;
+			api.redirectToGateway(await api.startCheckout(booking.id, provider));
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : 'The payment did not go through.';
 		}

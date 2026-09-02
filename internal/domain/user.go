@@ -27,11 +27,11 @@ type User struct {
 	Phone       string
 	City        string
 
-	Position       *Position
-	JerseyNumber   *int
-	PreferredFoot  *Foot
-	Skill          SkillTier
-	Bio            string
+	Position      *Position
+	JerseyNumber  *int
+	PreferredFoot *Foot
+	Skill         SkillTier
+	Bio           string
 
 	MatchesPlayed  int
 	MatchesWon     int
@@ -41,11 +41,13 @@ type User struct {
 	UpdatedAt time.Time
 }
 
-/** 
+/*
+*
 PasswordHash never appears on User. It is loaded only by the one repository
 method that authenticates a login, so no handler can accidentally serialise
-it. Credentials travel in this separate struct. 
-**/
+it. Credentials travel in this separate struct.
+*
+*/
 type Credentials struct {
 	UserID       uuid.UUID
 	Email        string
@@ -137,11 +139,11 @@ func ValidatePhone(phone string) error {
 
 // Registration is a validated signup request, ready to be persisted.
 type Registration struct {
-	Email       string `json:"email"`
-	Username    string `json:"username"`
-	FullName    string `json:"full_name"`
+	Email       string      `json:"email"`
+	Username    string      `json:"username"`
+	FullName    string      `json:"full_name"`
 	AccountType AccountType `json:"account_type"`
-	Password    string `json:"password"`
+	Password    string      `json:"password"`
 }
 
 // Validate checks everything about a signup at once, so the person filling in

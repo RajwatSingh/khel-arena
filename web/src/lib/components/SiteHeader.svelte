@@ -5,8 +5,13 @@
 
 	const ticking = clock();
 
+	// Primary nav stays at four: the two ways in (a court, a game) and the
+	// two registers behind them. Teams, tournaments and the back office are
+	// reachable from the pages that need them and from the footer, rather
+	// than crowding a bar that has to survive a phone.
 	const links = [
 		{ href: '/tonight', label: 'Find a court' },
+		{ href: '/games', label: 'Games' },
 		{ href: '/arenas', label: 'Arenas' },
 		{ href: '/bookings', label: 'My bookings' }
 	];

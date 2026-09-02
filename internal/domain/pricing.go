@@ -18,7 +18,18 @@ type Price struct {
 	// RuleID identifies the pricing rule that won, or nil if the court's
 	// base price applied. Useful when an owner asks why a slot cost what it did.
 	RuleID *uuid.UUID
+	// RuleLabel is that rule's name, as a player should see it ("Evening
+	// Peak"), or BaseRateLabel when no rule matched. Carried alongside RuleID
+	// because the interface shows the reason next to the price, and looking
+	// the label up again by id -- once per cell of an availability grid --
+	// would be a query per hour to re-learn something already in hand.
+	RuleLabel string
 }
+
+// BaseRateLabel is what a slot's rate is called when no pricing rule covers
+// it. Named here rather than written at each call site so the grid, the
+// booking panel and any future receipt all say the same thing.
+const BaseRateLabel = "Base rate"
 
 // PricingRule sets a rate for a window of hours on given days of the week.
 //
@@ -77,11 +88,15 @@ func ResolvePrice(base int, rules []PricingRule, slot Slot, loc *time.Location) 
 	best := pickRule(rules, slot.Start, loc)
 
 	perHour, isPeak := base, false
+	label := BaseRateLabel
 	var ruleID *uuid.UUID
 	if best != nil {
 		perHour, isPeak = best.PriceNPR, best.IsPeak
 		id := best.ID
 		ruleID = &id
+		if best.Label != "" {
+			label = best.Label
+		}
 	}
 
 	return Price{
@@ -89,6 +104,7 @@ func ResolvePrice(base int, rules []PricingRule, slot Slot, loc *time.Location) 
 		TotalNPR:   perHour * slot.Hours(),
 		IsPeak:     isPeak,
 		RuleID:     ruleID,
+		RuleLabel:  label,
 	}
 }
 

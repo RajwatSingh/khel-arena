@@ -200,6 +200,28 @@ export const forgotPassword = (email, opts) =>
 export const resetPassword = (input, opts) =>
 	request('/auth/password/reset', { method: 'POST', body: input, ...opts });
 
+// ----------------------------------------------------------------- arenas --
+
+export const listArenas = (opts) => request('/arenas', opts);
+
+export const getArena = (slug, opts) => request(`/arenas/${encodeURIComponent(slug)}`, opts);
+
+export const listAreas = (opts) => request('/areas', opts);
+
+/**
+ * The city-wide grid: every matching court's day, in one request.
+ *
+ * One endpoint rather than a loop over /availability per court. That loop is
+ * the N+1 the server side was built to avoid, and moving it into the browser
+ * would not make it cheaper -- it would make it slower and racier.
+ */
+export const cityLedger = (date, { sport = 'all', area = 'all', ...opts } = {}) =>
+	request(
+		`/ledger?date=${encodeURIComponent(date)}` +
+			`&sport=${encodeURIComponent(sport)}&area=${encodeURIComponent(area)}`,
+		opts
+	);
+
 // --------------------------------------------------------------- bookings --
 
 export const availability = (courtId, date, opts) =>
@@ -213,4 +235,209 @@ export const createBooking = (input, opts) =>
 
 export const cancelBooking = (id, opts) =>
 	request(`/bookings/${id}`, { method: 'DELETE', auth: true, ...opts });
+
+// ------------------------------------------------------------ tournaments --
+
+export const listTournaments = (opts) => request('/tournaments', opts);
+
+export const getTournament = (slug, opts) =>
+	request(`/tournaments/${encodeURIComponent(slug)}`, opts);
+
+export const createTournament = (input, opts) =>
+	request('/tournaments', { method: 'POST', body: input, auth: true, ...opts });
+
+export const registerTeam = (tournamentId, teamId, opts) =>
+	request(`/tournaments/${tournamentId}/teams`, {
+		method: 'POST',
+		body: { team_id: teamId },
+		auth: true,
+		...opts
+	});
+
+export const withdrawTeam = (tournamentId, teamId, opts) =>
+	request(`/tournaments/${tournamentId}/teams/${teamId}`, {
+		method: 'DELETE',
+		auth: true,
+		...opts
+	});
+
+export const setEntryPaid = (tournamentId, teamId, paid, opts) =>
+	request(`/tournaments/${tournamentId}/teams/${teamId}/paid`, {
+		method: 'PUT',
+		body: { paid },
+		auth: true,
+		...opts
+	});
+
+export const setTournamentStatus = (tournamentId, status, opts) =>
+	request(`/tournaments/${tournamentId}/status`, {
+		method: 'PUT',
+		body: { status },
+		auth: true,
+		...opts
+	});
+
+// ------------------------------------------------------------------ owner --
+
+export const myArenas = (opts) => request('/owner/arenas', { auth: true, ...opts });
+
+export const createArena = (input, opts) =>
+	request('/owner/arenas', { method: 'POST', body: input, auth: true, ...opts });
+
+export const updateArena = (id, input, opts) =>
+	request(`/owner/arenas/${id}`, { method: 'PATCH', body: input, auth: true, ...opts });
+
+export const setArenaActive = (id, active, opts) =>
+	request(`/owner/arenas/${id}/active`, { method: 'PUT', body: { active }, auth: true, ...opts });
+
+export const createCourt = (arenaId, input, opts) =>
+	request(`/owner/arenas/${arenaId}/courts`, { method: 'POST', body: input, auth: true, ...opts });
+
+export const updateCourt = (courtId, input, opts) =>
+	request(`/owner/courts/${courtId}`, { method: 'PATCH', body: input, auth: true, ...opts });
+
+export const setCourtActive = (courtId, active, opts) =>
+	request(`/owner/courts/${courtId}/active`, { method: 'PUT', body: { active }, auth: true, ...opts });
+
+export const createPricingRule = (courtId, input, opts) =>
+	request(`/owner/courts/${courtId}/pricing`, { method: 'POST', body: input, auth: true, ...opts });
+
+export const deletePricingRule = (ruleId, opts) =>
+	request(`/owner/pricing/${ruleId}`, { method: 'DELETE', auth: true, ...opts });
+
+export const arenaPayments = (arenaId, limit = 50, opts) =>
+	request(`/owner/arenas/${arenaId}/payments?limit=${limit}`, { auth: true, ...opts });
+
+/** The venue confirming that cash changed hands — the only way a cash booking
+ *  becomes confirmed. */
+export const markCashReceived = (paymentId, opts) =>
+	request(`/owner/payments/${paymentId}/received`, { method: 'POST', auth: true, ...opts });
+
+// ------------------------------------------------------------------ teams --
+
+export const myTeams = (opts) => request('/teams', { auth: true, ...opts });
+
+export const getTeam = (id, opts) => request(`/teams/${id}`, { auth: true, ...opts });
+
+export const createTeam = (input, opts) =>
+	request('/teams', { method: 'POST', body: input, auth: true, ...opts });
+
+export const updateTeam = (id, input, opts) =>
+	request(`/teams/${id}`, { method: 'PATCH', body: input, auth: true, ...opts });
+
+/** The code identifies the team, so there is no team id to get wrong. */
+export const joinTeam = (code, opts) =>
+	request('/teams/join', { method: 'POST', body: { code }, auth: true, ...opts });
+
+export const addTeamMember = (teamId, userId, opts) =>
+	request(`/teams/${teamId}/members`, { method: 'POST', body: { user_id: userId }, auth: true, ...opts });
+
+/** One call for both "remove them" and "I'm leaving": the server decides which. */
+export const removeTeamMember = (teamId, userId, opts) =>
+	request(`/teams/${teamId}/members/${userId}`, { method: 'DELETE', auth: true, ...opts });
+
+export const transferCaptaincy = (teamId, userId, opts) =>
+	request(`/teams/${teamId}/captain`, { method: 'PUT', body: { user_id: userId }, auth: true, ...opts });
+
+export const rotateJoinCode = (teamId, opts) =>
+	request(`/teams/${teamId}/join-code`, { method: 'POST', auth: true, ...opts });
+
+export const disbandTeam = (teamId, opts) =>
+	request(`/teams/${teamId}`, { method: 'DELETE', auth: true, ...opts });
+
+// ------------------------------------------------------------- matchmaking --
+
+/**
+ * The board of open games.
+ *
+ * `all` is what the interface's filters call their default position, and the
+ * server reads it as "no filter" — so the two agree without the client having
+ * to translate.
+ */
+export const callFeed = ({ skill = 'all', area = 'all', limit = 50, ...opts } = {}) =>
+	request(
+		`/calls?skill=${encodeURIComponent(skill)}&area=${encodeURIComponent(area)}&limit=${limit}`,
+		opts
+	);
+
+export const myCalls = (opts) => request('/calls/mine', { auth: true, ...opts });
+
+export const getCall = (id, opts) => request(`/calls/${id}`, { auth: true, ...opts });
+
+export const createCall = (input, opts) =>
+	request('/calls', { method: 'POST', body: input, auth: true, ...opts });
+
+export const updateCall = (id, input, opts) =>
+	request(`/calls/${id}`, { method: 'PATCH', body: input, auth: true, ...opts });
+
+export const cancelCall = (id, opts) =>
+	request(`/calls/${id}/cancel`, { method: 'POST', auth: true, ...opts });
+
+export const deleteCall = (id, opts) =>
+	request(`/calls/${id}`, { method: 'DELETE', auth: true, ...opts });
+
+export const respondToCall = (id, message, opts) =>
+	request(`/calls/${id}/responses`, { method: 'POST', body: { message }, auth: true, ...opts });
+
+export const withdrawFromCall = (id, opts) =>
+	request(`/calls/${id}/responses`, { method: 'DELETE', auth: true, ...opts });
+
+export const acceptResponder = (callId, userId, opts) =>
+	request(`/calls/${callId}/responses/${userId}/accept`, { method: 'POST', auth: true, ...opts });
+
+// ---------------------------------------------------------------- payments --
+
+/** Which gateways this deployment can actually take money through. */
+export const paymentProviders = (opts) => request('/payments/providers', opts);
+
+/**
+ * Starts a payment and returns how to hand the player to the gateway.
+ *
+ * The amount is not a parameter and cannot be: the server takes it from the
+ * booking, which took it from the pricing rules when the hold was made.
+ */
+export const startCheckout = (bookingId, provider, opts) =>
+	request(`/bookings/${bookingId}/checkout`, {
+		method: 'POST',
+		body: { provider },
+		auth: true,
+		...opts
+	});
+
+/** The state of the latest payment on a booking, for polling after a redirect. */
+export const paymentStatus = (bookingId, opts) =>
+	request(`/bookings/${bookingId}/payment`, { auth: true, ...opts });
+
+/**
+ * Sends the browser to the gateway.
+ *
+ * Two shapes, because providers differ: Khalti gives a URL to visit, eSewa
+ * wants a form POSTed to it with signed fields. A form is built and submitted
+ * for the second rather than trying to express it as a link, because the
+ * signed fields have to travel in a body.
+ *
+ * This navigates away, so it never returns.
+ */
+export function redirectToGateway(checkout) {
+	if (checkout.method === 'GET') {
+		window.location.assign(checkout.url);
+		return;
+	}
+
+	const form = document.createElement('form');
+	form.method = 'POST';
+	form.action = checkout.url;
+
+	for (const [name, value] of Object.entries(checkout.fields ?? {})) {
+		const input = document.createElement('input');
+		input.type = 'hidden';
+		input.name = name;
+		input.value = value;
+		form.append(input);
+	}
+
+	// Must be in the document to submit.
+	document.body.append(form);
+	form.submit();
+}
 export { ApiError };

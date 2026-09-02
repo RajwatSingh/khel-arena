@@ -4,7 +4,10 @@
 
 	let { arena } = $props();
 
-	const sports = $derived([...new Set(arena.courts.map((c) => SPORT_LABELS[c.sport] ?? c.sport))]);
+	// The listing carries its own distinct sports; it does not carry courts.
+	// Deriving these from a courts array meant this record could only render
+	// for the detail payload, and the index sends the lighter one.
+	const sports = $derived((arena.sports ?? []).map((s) => SPORT_LABELS[s] ?? s));
 	const shown = $derived(arena.amenities.slice(0, 3));
 	const rest = $derived(arena.amenities.length - shown.length);
 </script>

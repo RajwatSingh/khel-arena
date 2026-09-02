@@ -147,6 +147,68 @@ func (r *BookingRepo) BookedRanges(ctx context.Context, courtID uuid.UUID, windo
 	return out, nil
 }
 
+// BookedRangesForCourts answers the same question as BookedRanges for many
+// courts at once, keyed by court.
+//
+// This exists so the city-wide ledger costs one query instead of one per
+// court. Rendering forty courts through BookedRanges would be forty round
+// trips to learn forty small answers -- the N+1 that this rewrite replaced
+// elsewhere, and which would reappear here the moment the home page grew.
+//
+// Courts with nothing taken are absent from the map rather than present with
+// an empty slice; a nil slice reads the same to every caller that ranges over
+// it.
+func (r *BookingRepo) BookedRangesForCourts(ctx context.Context, courtIDs []uuid.UUID, window domain.Slot) (map[uuid.UUID][]domain.Slot, error) {
+	if len(courtIDs) == 0 {
+		return map[uuid.UUID][]domain.Slot{}, nil
+	}
+
+	const q = `
+		select court_id, slot
+		from bookings
+		where court_id = any($1)
+		  and slot && $2
+		  and booking_blocks_slot(status, hold_expires_at)
+		order by court_id, lower(slot)`
+
+	rows, err := r.pool.Query(ctx, q, courtIDs, tstzrange(window))
+	if err != nil {
+		return nil, domain.Internal(err, "loading booked ranges for %d courts", len(courtIDs))
+	}
+	defer rows.Close()
+
+	out := make(map[uuid.UUID][]domain.Slot, len(courtIDs))
+	for rows.Next() {
+		var (
+			courtID uuid.UUID
+			slot    pgtype.Range[pgtype.Timestamptz]
+		)
+		if err := rows.Scan(&courtID, &slot); err != nil {
+			return nil, domain.Internal(err, "scanning booked range")
+		}
+		out[courtID] = append(out[courtID], domain.Slot{
+			Start: slot.Lower.Time.UTC(),
+			End:   slot.Upper.Time.UTC(),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domain.Internal(err, "loading booked ranges for %d courts", len(courtIDs))
+	}
+	return out, nil
+}
+
+// dayTimeToPg converts a wall-clock time for storage in a `time` column.
+//
+// pgtype.Time counts microseconds since midnight. Writing the inverse next to
+// the conversion it undoes so the two cannot drift: a mismatch here shifts
+// every arena's opening hours, quietly.
+func dayTimeToPg(d domain.DayTime) pgtype.Time {
+	return pgtype.Time{
+		Microseconds: int64(d.Minutes()) * 60 * 1_000_000,
+		Valid:        true,
+	}
+}
+
 func dayTimeFromPg(t pgtype.Time) domain.DayTime {
 	if !t.Valid {
 		return domain.DayTime{}

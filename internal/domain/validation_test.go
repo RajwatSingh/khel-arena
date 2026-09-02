@@ -83,9 +83,9 @@ func TestRegistrationNormalisesInput(t *testing.T) {
 
 func TestValidateUsername(t *testing.T) {
 	tests := []struct {
-		in   string
-		ok   bool
-		why  string
+		in  string
+		ok  bool
+		why string
 	}{
 		{"rajwat", true, ""},
 		{"raj_wat_99", true, ""},
@@ -297,7 +297,7 @@ func TestTournamentPrizeSplit(t *testing.T) {
 		return Tournament{
 			Name: "Kathmandu Cup", Format: FormatKnockout, SideCount: 5, SquadCap: 10,
 			MaxTeams: 8, PrizePoolNPR: 100000, PrizeSplit: []int{60, 30, 10},
-			StartsOn: time.Date(2030, time.June, 1, 0, 0, 0, 0, time.UTC),
+			StartsOn:   time.Date(2030, time.June, 1, 0, 0, 0, 0, time.UTC),
 			RegisterBy: time.Date(2030, time.May, 20, 0, 0, 0, 0, time.UTC),
 		}
 	}

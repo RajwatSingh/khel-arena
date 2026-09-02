@@ -72,9 +72,9 @@ func TestVerifyRejectsMalformedHashes(t *testing.T) {
 		"",
 		"not-a-hash",
 		"$argon2id$",
-		"$bcrypt$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA",       // wrong algorithm
-		"$argon2id$v=99$m=65536,t=3,p=4$c2FsdA$aGFzaA",     // unknown version
-		"$argon2id$v=19$m=0,t=0,p=0$c2FsdA$aGFzaA",         // zero parameters
+		"$bcrypt$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA",   // wrong algorithm
+		"$argon2id$v=99$m=65536,t=3,p=4$c2FsdA$aGFzaA", // unknown version
+		"$argon2id$v=19$m=0,t=0,p=0$c2FsdA$aGFzaA",     // zero parameters
 		"$argon2id$v=19$m=65536,t=3,p=4$!!!not-base64$aGFzaA",
 	}
 

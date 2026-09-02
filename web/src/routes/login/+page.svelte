@@ -1,5 +1,6 @@
 <script>
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { ApiError } from '$lib/api/index.js';
 	import { session } from '$lib/session.svelte.js';
 	import Field from '$lib/components/Field.svelte';
@@ -17,7 +18,12 @@
 		error = null;
 		try {
 			await session.signIn({ email, password });
-			goto('/bookings');
+			// Pages that require a session send people here with ?next=, so
+			// signing in returns them to what they were reaching for. Only
+			// same-site paths are honoured: an absolute URL in a query
+			// parameter is an open redirect.
+			const next = page.url.searchParams.get('next');
+			goto(next?.startsWith('/') && !next.startsWith('//') ? next : '/bookings');
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : 'Something went wrong on our side.';
 		} finally {

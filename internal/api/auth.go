@@ -143,10 +143,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 // handleLogin — POST /v1/auth/login
 //
-// TODO: rate limit. This is the online password-guessing target in the API,
-// and domain.CodeRateLimited already exists with nothing producing it. An
-// in-process token bucket keyed by client IP needs no new dependency; it just
-// does not survive running more than one instance.
+// Rate limited in routes(): this is the online password-guessing target, and
+// an unthrottled one is only as strong as the weakest password anybody chose.
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	req, err := decode[loginRequest](w, r)
 	if err != nil {
@@ -211,8 +209,8 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 // this endpoint cannot be used to discover which addresses are registered.
 // The answer is 202 either way.
 //
-// TODO: rate limit — see handleLogin. Unthrottled, this endpoint sprays an
-// inbox on request.
+// Rate limited in routes(): unthrottled, this endpoint sprays an inbox on
+// request, and now that it actually sends mail that is no longer theoretical.
 func (s *Server) handlePasswordForgot(w http.ResponseWriter, r *http.Request) {
 	req, err := decode[forgotPasswordRequest](w, r)
 	if err != nil {
@@ -229,9 +227,16 @@ func (s *Server) handlePasswordForgot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Until email delivery exists this is the only way to finish a reset, so
-	// it is logged locally and only outside production, where the gate makes
-	// it structurally impossible to reach.
+	// Mail it. The notifier swallows its own failures on purpose: answering
+	// differently when delivery fails would tell a caller that the address was
+	// registered, which is the property this endpoint exists to protect.
+	if s.mailer != nil {
+		s.mailer.SendPasswordReset(r.Context(), user, resetToken)
+	}
+
+	// Outside production the token is also logged, so the flow can be
+	// completed on a laptop with no mail server. The gate is what makes this
+	// structurally unreachable in production rather than merely unlikely.
 	if s.logResetTokens && resetToken != "" {
 		slog.InfoContext(r.Context(), "password reset token (development only)",
 			"user_id", user.ID, "username", user.Username, "token", resetToken)

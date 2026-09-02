@@ -70,11 +70,12 @@ func BuildGrid(req GridRequest) []GridSlot {
 		price := ResolvePrice(req.BasePriceNPR, req.Rules, slot, loc)
 
 		grid = append(grid, GridSlot{
-			Slot:     slot,
-			PriceNPR: price.TotalNPR,
-			IsPeak:   price.IsPeak,
-			IsBooked: overlapsAny(slot, req.Booked),
-			IsPast:   slot.Start.Before(req.Now),
+			Slot:      slot,
+			PriceNPR:  price.TotalNPR,
+			IsPeak:    price.IsPeak,
+			RuleLabel: price.RuleLabel,
+			IsBooked:  overlapsAny(slot, req.Booked),
+			IsPast:    slot.Start.Before(req.Now),
 		})
 	}
 

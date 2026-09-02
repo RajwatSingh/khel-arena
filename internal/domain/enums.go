@@ -121,8 +121,8 @@ const (
 
 var sports = []Sport{SportFutsal, SportBasketball, SportBadminton, SportCricketNet, SportTennis}
 
-func (s Sport) Valid() bool      { return slices.Contains(sports, s) }
-func (s Sport) Validate() error  { return validateEnum("sport", string(s), sports) }
+func (s Sport) Valid() bool     { return slices.Contains(sports, s) }
+func (s Sport) Validate() error { return validateEnum("sport", string(s), sports) }
 
 // ---------------------------------------------------------------------------
 
@@ -220,9 +220,9 @@ func (r TeamRole) Validate() error { return validateEnum("role", string(r), team
 type TournamentFormat string
 
 const (
-	FormatKnockout       TournamentFormat = "knockout"
-	FormatLeague         TournamentFormat = "league"
-	FormatGroupKnockout  TournamentFormat = "group_knockout"
+	FormatKnockout      TournamentFormat = "knockout"
+	FormatLeague        TournamentFormat = "league"
+	FormatGroupKnockout TournamentFormat = "group_knockout"
 )
 
 var tournamentFormats = []TournamentFormat{FormatKnockout, FormatLeague, FormatGroupKnockout}

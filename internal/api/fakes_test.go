@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/RajwatSingh/khel-arena/internal/domain"
+	"github.com/RajwatSingh/khel-arena/internal/platform/payment"
 	"github.com/RajwatSingh/khel-arena/internal/postgres"
 	"github.com/RajwatSingh/khel-arena/internal/service"
 	"github.com/google/uuid"
@@ -180,6 +181,94 @@ func (f *fakeProfiles) Update(ctx context.Context, userID uuid.UUID, p domain.Pr
 	return f.update(ctx, userID, p)
 }
 
+type fakeArenas struct {
+	t *testing.T
+
+	list       func(context.Context) ([]postgres.ArenaListing, error)
+	bySlug     func(context.Context, string) (postgres.ArenaDetail, error)
+	listAreas  func(context.Context) ([]string, error)
+	cityLedger func(context.Context, time.Time, domain.Sport, string) (service.Ledger, error)
+
+	gotSlug  string
+	gotSport domain.Sport
+	gotArea  string
+	gotDate  time.Time
+}
+
+func (f *fakeArenas) List(ctx context.Context) ([]postgres.ArenaListing, error) {
+	if f.list == nil {
+		f.t.Fatal("handler called ArenaAPI.List, which this test did not expect")
+	}
+	return f.list(ctx)
+}
+
+func (f *fakeArenas) BySlug(ctx context.Context, slug string) (postgres.ArenaDetail, error) {
+	if f.bySlug == nil {
+		f.t.Fatal("handler called ArenaAPI.BySlug, which this test did not expect")
+	}
+	f.gotSlug = slug
+	return f.bySlug(ctx, slug)
+}
+
+func (f *fakeArenas) ListAreas(ctx context.Context) ([]string, error) {
+	if f.listAreas == nil {
+		f.t.Fatal("handler called ArenaAPI.ListAreas, which this test did not expect")
+	}
+	return f.listAreas(ctx)
+}
+
+func (f *fakeArenas) CityLedger(ctx context.Context, date time.Time, sport domain.Sport, area string) (service.Ledger, error) {
+	if f.cityLedger == nil {
+		f.t.Fatal("handler called ArenaAPI.CityLedger, which this test did not expect")
+	}
+	f.gotDate, f.gotSport, f.gotArea = date, sport, area
+	return f.cityLedger(ctx, date, sport, area)
+}
+
+type fakePayments struct {
+	t *testing.T
+
+	providers func() []domain.PaymentProvider
+	checkout  func(context.Context, uuid.UUID, uuid.UUID, domain.PaymentProvider) (payment.Checkout, domain.Payment, error)
+	settle    func(context.Context, domain.PaymentProvider, payment.CallbackRef) (domain.Payment, error)
+	status    func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
+
+	gotProvider domain.PaymentProvider
+	gotRef      payment.CallbackRef
+	gotUserID   uuid.UUID
+}
+
+func (f *fakePayments) Providers() []domain.PaymentProvider {
+	if f.providers == nil {
+		return []domain.PaymentProvider{domain.ProviderEsewa}
+	}
+	return f.providers()
+}
+
+func (f *fakePayments) Checkout(ctx context.Context, bookingID, userID uuid.UUID, provider domain.PaymentProvider) (payment.Checkout, domain.Payment, error) {
+	if f.checkout == nil {
+		f.t.Fatal("handler called PaymentAPI.Checkout, which this test did not expect")
+	}
+	f.gotProvider, f.gotUserID = provider, userID
+	return f.checkout(ctx, bookingID, userID, provider)
+}
+
+func (f *fakePayments) Settle(ctx context.Context, provider domain.PaymentProvider, ref payment.CallbackRef) (domain.Payment, error) {
+	if f.settle == nil {
+		f.t.Fatal("handler called PaymentAPI.Settle, which this test did not expect")
+	}
+	f.gotProvider, f.gotRef = provider, ref
+	return f.settle(ctx, provider, ref)
+}
+
+func (f *fakePayments) Status(ctx context.Context, bookingID, userID uuid.UUID) (domain.Payment, error) {
+	if f.status == nil {
+		f.t.Fatal("handler called PaymentAPI.Status, which this test did not expect")
+	}
+	f.gotUserID = userID
+	return f.status(ctx, bookingID, userID)
+}
+
 type fakePinger struct{ err error }
 
 func (f fakePinger) Ping(context.Context) error { return f.err }
@@ -223,7 +312,19 @@ func signedIn(token string) func(string) (uuid.UUID, domain.AccountType, error) 
 // newTestServer wires a Server over the given fakes and returns the full
 // handler -- routing and middleware included, so every test exercises the
 // same stack a real request meets.
-func newTestServer(t *testing.T, auth *fakeAuth, bookings *fakeBookings, profiles *fakeProfiles) http.Handler {
+//
+// The optional dependencies are functional options rather than more
+// positional arguments: most tests have an opinion about one of them, and a
+// five- or six-argument helper full of nils says nothing at a call site.
+func withArenas(a *fakeArenas) func(*Options) {
+	return func(o *Options) { o.Arenas = a }
+}
+
+func withPayments(p *fakePayments) func(*Options) {
+	return func(o *Options) { o.Payments = p }
+}
+
+func newTestServer(t *testing.T, auth *fakeAuth, bookings *fakeBookings, profiles *fakeProfiles, extras ...func(*Options)) http.Handler {
 	t.Helper()
 
 	if auth != nil {
@@ -236,13 +337,34 @@ func newTestServer(t *testing.T, auth *fakeAuth, bookings *fakeBookings, profile
 		profiles.t = t
 	}
 
-	return NewServer(Options{
+	opts := Options{
 		Auth:           auth,
 		Bookings:       bookings,
 		Profiles:       profiles,
 		Pinger:         fakePinger{},
 		AllowedOrigins: []string{"http://localhost:5173"},
-	}).Handler()
+		// Off by default. A handler test that signs in six times is exercising
+		// the handler, not the limiter, and should not start failing on the
+		// sixth because of a policy it never asked about. TestRateLimit turns
+		// it on deliberately.
+		LoginRateLimit: RateLimit{Disabled: true},
+	}
+	for _, extra := range extras {
+		extra(&opts)
+	}
+
+	// Give every fake the testing handle it reports unexpected calls through.
+	if a, ok := opts.Arenas.(*fakeArenas); ok && a != nil {
+		a.t = t
+	}
+	if p, ok := opts.Payments.(*fakePayments); ok && p != nil {
+		p.t = t
+	}
+	if o, ok := opts.Owner.(*fakeOwner); ok && o != nil {
+		o.t = t
+	}
+
+	return NewServer(opts).Handler()
 }
 
 // do sends one request through a handler and returns the recorded response.
@@ -281,4 +403,106 @@ func cookieNamed(t *testing.T, w *httptest.ResponseRecorder, name string) *http.
 		}
 	}
 	return nil
+}
+
+type fakeOwner struct {
+	t *testing.T
+
+	myArenas          func(context.Context, uuid.UUID) ([]postgres.ArenaListing, error)
+	createArena       func(context.Context, uuid.UUID, domain.Arena) (domain.Arena, error)
+	updateArena       func(context.Context, uuid.UUID, uuid.UUID, domain.Arena) (domain.Arena, error)
+	setArenaActive    func(context.Context, uuid.UUID, uuid.UUID, bool) error
+	createCourt       func(context.Context, uuid.UUID, domain.Court, string) (postgres.CourtWithRules, error)
+	updateCourt       func(context.Context, uuid.UUID, uuid.UUID, domain.Court, string) (postgres.CourtWithRules, error)
+	setCourtActive    func(context.Context, uuid.UUID, uuid.UUID, bool) error
+	createPricingRule func(context.Context, uuid.UUID, domain.PricingRule) (domain.PricingRule, error)
+	deletePricingRule func(context.Context, uuid.UUID, uuid.UUID) error
+	payments          func(context.Context, uuid.UUID, uuid.UUID, int) ([]postgres.OwnerPayment, error)
+	markCashReceived  func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
+}
+
+func (f *fakeOwner) unexpected(method string) {
+	f.t.Helper()
+	f.t.Fatalf("handler called OwnerAPI.%s, which this test did not expect", method)
+}
+
+func (f *fakeOwner) MyArenas(ctx context.Context, ownerID uuid.UUID) ([]postgres.ArenaListing, error) {
+	if f.myArenas == nil {
+		f.unexpected("MyArenas")
+	}
+	return f.myArenas(ctx, ownerID)
+}
+
+func (f *fakeOwner) CreateArena(ctx context.Context, ownerID uuid.UUID, a domain.Arena) (domain.Arena, error) {
+	if f.createArena == nil {
+		f.unexpected("CreateArena")
+	}
+	return f.createArena(ctx, ownerID, a)
+}
+
+func (f *fakeOwner) UpdateArena(ctx context.Context, arenaID, ownerID uuid.UUID, a domain.Arena) (domain.Arena, error) {
+	if f.updateArena == nil {
+		f.unexpected("UpdateArena")
+	}
+	return f.updateArena(ctx, arenaID, ownerID, a)
+}
+
+func (f *fakeOwner) SetArenaActive(ctx context.Context, arenaID, ownerID uuid.UUID, active bool) error {
+	if f.setArenaActive == nil {
+		f.unexpected("SetArenaActive")
+	}
+	return f.setArenaActive(ctx, arenaID, ownerID, active)
+}
+
+func (f *fakeOwner) CreateCourt(ctx context.Context, ownerID uuid.UUID, c domain.Court, format string) (postgres.CourtWithRules, error) {
+	if f.createCourt == nil {
+		f.unexpected("CreateCourt")
+	}
+	return f.createCourt(ctx, ownerID, c, format)
+}
+
+func (f *fakeOwner) UpdateCourt(ctx context.Context, courtID, ownerID uuid.UUID, c domain.Court, format string) (postgres.CourtWithRules, error) {
+	if f.updateCourt == nil {
+		f.unexpected("UpdateCourt")
+	}
+	return f.updateCourt(ctx, courtID, ownerID, c, format)
+}
+
+func (f *fakeOwner) SetCourtActive(ctx context.Context, courtID, ownerID uuid.UUID, active bool) error {
+	if f.setCourtActive == nil {
+		f.unexpected("SetCourtActive")
+	}
+	return f.setCourtActive(ctx, courtID, ownerID, active)
+}
+
+func (f *fakeOwner) CreatePricingRule(ctx context.Context, ownerID uuid.UUID, rule domain.PricingRule) (domain.PricingRule, error) {
+	if f.createPricingRule == nil {
+		f.unexpected("CreatePricingRule")
+	}
+	return f.createPricingRule(ctx, ownerID, rule)
+}
+
+func (f *fakeOwner) DeletePricingRule(ctx context.Context, ruleID, ownerID uuid.UUID) error {
+	if f.deletePricingRule == nil {
+		f.unexpected("DeletePricingRule")
+	}
+	return f.deletePricingRule(ctx, ruleID, ownerID)
+}
+
+func (f *fakeOwner) Payments(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]postgres.OwnerPayment, error) {
+	if f.payments == nil {
+		f.unexpected("Payments")
+	}
+	return f.payments(ctx, arenaID, ownerID, limit)
+}
+
+func (f *fakeOwner) MarkCashReceived(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error) {
+	if f.markCashReceived == nil {
+		f.unexpected("MarkCashReceived")
+	}
+	return f.markCashReceived(ctx, paymentID, ownerID)
+}
+
+func withOwner(o *fakeOwner) func(*Options) {
+	return func(opts *Options) { opts.Owner = o }
 }

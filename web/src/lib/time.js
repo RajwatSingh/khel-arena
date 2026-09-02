@@ -120,3 +120,18 @@ export function formatCountdown(ms) {
 	const seconds = total % 60;
 	return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
+
+/**
+ * The date rail: today, and the days after it.
+ *
+ * This lived in the API mock, which made it look like something the server
+ * answered. It is not -- it is "what day is it where this person is", which
+ * only the client can know.
+ */
+export const dates = {
+	today: () => localDate(),
+	rail: (span = 7) => {
+		const start = localDate();
+		return Array.from({ length: span }, (_, i) => addDays(start, i));
+	}
+};

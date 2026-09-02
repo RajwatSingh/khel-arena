@@ -55,7 +55,7 @@ one type — `SessionContext`, which the service layer's own signatures require.
 
 ## The API
 
-Fifteen endpoints over the two services that have repositories behind them.
+Sixty endpoints.
 Errors are one envelope (`{"error": {code, message, fields}}`) mapped from
 `domain.Code` in a single place, so no handler picks a status itself.
 
@@ -69,7 +69,19 @@ Errors are one envelope (`{"error": {code, message, fields}}`) mapped from
 | POST | `/v1/auth/logout` | 204, idempotent |
 | POST | `/v1/auth/password/forgot` | Always 202, never returns the token |
 | POST | `/v1/auth/password/reset` | 204, burns the token |
+| GET | `/v1/arenas` | The venue index |
+| GET | `/v1/arenas/{slug}` | One venue, its courts and pricing rules |
+| GET | `/v1/areas` | Neighbourhoods with something bookable |
+| GET | `/v1/ledger` | Every court in the city for one day |
 | GET | `/v1/courts/{courtID}/availability` | `?date=YYYY-MM-DD` |
+| GET | `/v1/payments/providers` | Gateways this deployment is configured for |
+| GET | `/v1/payments/{provider}/callback` | Where a gateway returns the payer |
+| POST | `/v1/bookings/{bookingID}/checkout` | Authenticated, starts a payment |
+| GET | `/v1/bookings/{bookingID}/payment` | Authenticated, latest attempt |
+| — | `/v1/owner/*` | 11 routes: venues, courts, pricing, reconciliation |
+| — | `/v1/teams/*` | 10 routes: squads, rosters, invite codes |
+| — | `/v1/calls/*` | 9 routes: the pickup-game board |
+| — | `/v1/tournaments/*` | 7 routes: brackets and entries |
 | GET | `/v1/me` | Authenticated |
 | POST | `/v1/auth/password/change` | Authenticated |
 | POST | `/v1/bookings` | Authenticated, takes a hold, 201 |
@@ -80,6 +92,38 @@ Access tokens travel in `Authorization: Bearer`; the refresh token travels
 only in an httpOnly cookie, so a script that can read `localStorage` cannot
 read it. The booking price and the booking's owner are both resolved
 server-side and never taken from a request body.
+
+`/v1/auth/login` and `/v1/auth/password/forgot` are rate limited -- five
+attempts, then one every twelve seconds, per client address. It is an
+in-process token bucket, so it does not survive running more than one
+instance; that is the point at which it wants a shared counter rather than
+this.
+
+## Payments
+
+**A redirect back from a gateway is not evidence of payment.** It arrives in
+the player's browser, over a URL the player can edit. Every adapter treats it
+as nothing more than a hint about *which* transaction to ask about, then asks
+the gateway directly, server to server, over a connection the player is not
+part of. `Verified` is set from that answer and from nothing else.
+
+The second guard is the amount: `domain.Payment.Verify` compares what the
+gateway says was paid against what the booking owed, so a correctly signed
+confirmation for NPR 1 against an NPR 1,800 court is refused and recorded as
+failed. Between the two, an adapter would have to be extraordinarily wrong
+before a free booking came out of it.
+
+Settlement writes the payment and confirms the booking in one transaction. A
+payment recorded as verified while its booking stays pending is a player who
+has been charged and whose hour the janitor releases fifteen minutes later; a
+booking confirmed against a payment we failed to record is an hour given away.
+No ordering of two separate writes avoids both, so they are one write.
+
+Providers are configured, not compiled in: a gateway whose credentials are
+absent is not offered, and `/v1/payments/providers` reports only what will
+actually work. Cash is always present and never verifies anything -- settling
+at the arena is confirmed by the venue, which is owner-facing work that does
+not exist yet.
 
 ## Running it
 
@@ -175,41 +219,79 @@ A few deliberate departures from what it replaces:
   capacity and matchmaking fill are enforced by the database, so the row lock
   taken by the counter update settles concurrent registrations for free.
 
+## Authorization
+
+Past sign-in, permission is a property of the thing, not of the account. The
+one exception is registering a venue, which needs an `arena_owner` account;
+after that, owning *that arena* is what lets you edit it, captaining *that
+team* is what lets you change the squad, and authoring *that call* is what
+lets you accept somebody into the game.
+
+Two rules hold throughout:
+
+**Owner-scoped writes carry their predicate in the SQL.** Every statement in
+`arena_admin.go` and the cash reconciliation in `payment.go` joins through to
+`arenas.owner_id` in its own WHERE clause. The service checks ownership too,
+for the sake of a readable error -- but that check is not what enforces it. A
+read-then-write leaves a window, and these are the writes where the window
+means editing somebody else's venue.
+
+**Refusals do not confirm existence.** Editing an arena you do not own, paying
+for a booking that is not yours, or managing a call you did not write all come
+back as 404 rather than 403. A distinct "forbidden" would tell a stranger the
+thing is there.
+
+The authorization rules themselves live in the domain -- `CanAddMember`,
+`CanRemoveMember`, `CanTransferCaptaincy`, `CanBeJoinedBy`,
+`CanAcceptResponse`, `CanAcceptRegistration` -- and the services call them
+rather than restating them. A second opinion written at the service layer is
+one that can drift from the first.
+
 ## Status
 
 Done: schema and migrations; the domain layer; repositories for bookings,
-availability, users and sessions; the booking, auth and profile services; the
-janitor; and the HTTP API over all of them, with `cmd/api` wiring it together.
+availability, users, sessions and arenas; the booking, auth, profile and arena
+services; the janitor; rate limiting; and the HTTP API over all of them, with
+`cmd/api` wiring it together.
 
-The frontend still reads from the mock in `web/src/lib/api/mock.js`. It cannot
-be switched over yet, because seven of the fourteen calls it makes have no
-endpoint behind them: `listArenas`, `getArena`, `listAreas` and `cityLedger`
-need arena and court repositories, and `payBooking` needs payments. The three
-flows the API does cover — sign in, availability, book and cancel — can be
-pointed at `client.js` today.
+**The frontend reads from the service.** `web/src/lib/api/index.js` points at
+`client.js`, and every page -- the city ledger, the arena index, a venue, the
+availability grid, sign-in, booking and cancelling -- is served from Postgres.
+`mock.js` and `fixtures.js` are no longer imported by anything and stay only
+until payments land.
 
-Not yet written, in the order they unblock the frontend:
+Every table in the schema has a repository, a service and endpoints over it,
+and every surface has an interface:
 
-1. **Arena and court repositories,** then `GET /v1/arenas`, `/v1/arenas/{slug}`
-   and `/v1/areas`. This is what four of the seven missing calls need, and it
-   is the largest single step toward retiring the mock.
-2. **Payments** — a `PaymentRepo` and the eSewa/Khalti adapters. The last thing
-   between an unpaid hold and a confirmed booking. The provider callbacks are
-   attacker-reachable and want a focused pass of their own, with signature
-   verification done properly rather than folded into general API work.
-3. **Email delivery,** to make password reset usable. Until then the reset
-   token is logged outside production and nowhere else.
-4. **Rate limiting** on `/v1/auth/login` and `/v1/auth/password/forgot` — the
-   online guessing target and the inbox sprayer. `domain.CodeRateLimited`
-   exists with nothing producing it.
-5. **Repositories and endpoints for teams, tournaments and matchmaking**, whose
-   tables and domain types are in place but which nothing stores yet.
-6. **Arena management** — owner-facing writes, and the first place
-   `domain.AccountArenaOwner` and `domain.CodeForbidden` do real authorization
-   work rather than existing as enum values.
+```
+/tonight, /arenas       book a court by the hour
+/games                  the call sheet -- games short of players
+/teams                  squads, rosters, invite codes
+/tournaments            brackets and entries
+/manage                 the back office: venues, courts, rates, the till
+```
 
-One smaller gap worth naming: `domain.GridSlot` does not carry the label of the
-pricing rule that won, so the availability response reports `"rule": "Peak
-rate"` or `"Base rate"` where the frontend expects the rule's own name
-("Evening Peak"). Fixing it properly means carrying the winning rule out of
-`domain.BuildGrid`.
+Not yet written:
+
+1. **Matches and standings.** `matches` and the `Standing` type exist and
+   nothing writes them -- a recorded result needs both captains to confirm a
+   score, which is a flow rather than an endpoint.
+2. **Arena reviews and photos.** Tables from 0008, untouched.
+3. **Editing what can only be created.** A venue's hours and a court's rates
+   can be set when they are made and read afterwards, but the edit forms
+   behind `PATCH /v1/owner/arenas/{id}` and the pricing-rule endpoints have no
+   screen yet.
+
+Three things to know before this serves real traffic:
+
+- The rate limiter is per-process and wants a shared counter behind more than
+  one instance.
+- The API has to sit on the same origin as the interface (a reverse proxy in
+  production, the vite proxy in development) for the refresh cookie to travel,
+  and for `APP_URL` to address both.
+- **The gateway adapters have been exercised against eSewa's sandbox and
+  against stubs, not against a completed live payment.** The refusal paths are
+  verified -- a forged `COMPLETE` redirect for an unpaid transaction is
+  correctly rejected -- but the success path has only ever been driven by a
+  stub. Run one real transaction end to end through each provider's sandbox
+  before taking money.

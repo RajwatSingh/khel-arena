@@ -177,9 +177,9 @@ type UserSummary struct {
 // ---------------------------------------------------------------------------
 
 var (
-	slugPattern      = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
-	nonSlugRunes     = regexp.MustCompile(`[^a-z0-9]+`)
-	repeatedHyphens  = regexp.MustCompile(`-{2,}`)
+	slugPattern     = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+	nonSlugRunes    = regexp.MustCompile(`[^a-z0-9]+`)
+	repeatedHyphens = regexp.MustCompile(`-{2,}`)
 )
 
 func ValidSlug(s string) bool { return s != "" && len(s) <= 80 && slugPattern.MatchString(s) }

@@ -19,10 +19,51 @@ type Config struct {
 	HTTPAddr       string
 	AllowedOrigins []string
 
+	// AppURL is the interface's own origin, used to build links that appear
+	// in email and to send a payer back after a gateway. Configuration rather
+	// than anything read off a request: deriving it from a Host header would
+	// let whoever sent the request choose the domain in an email.
+	AppURL string
+
 	Database Database
 	Auth     Auth
 	Booking  Booking
+	Mail     Mail
+	Payment  Payment
 }
+
+// Mail configures transactional email. With no SMTP host set, cmd/api uses a
+// sender that logs instead -- fine for development, and refused in production.
+type Mail struct {
+	SMTPHost string
+	SMTPPort int
+	Username string
+	Password string
+	From     string
+	FromName string
+}
+
+// Configured reports whether a real mail server was named.
+func (m Mail) Configured() bool { return m.SMTPHost != "" && m.From != "" }
+
+// Payment configures the gateways. A provider whose credentials are absent is
+// simply not offered, which is why these are not required: a deployment that
+// takes only cash is a real deployment.
+type Payment struct {
+	EsewaSecretKey   []byte
+	EsewaProductCode string
+	EsewaFormURL     string
+	EsewaStatusURL   string
+
+	KhaltiSecretKey string
+	KhaltiBaseURL   string
+}
+
+func (p Payment) EsewaConfigured() bool {
+	return len(p.EsewaSecretKey) > 0 && p.EsewaProductCode != ""
+}
+
+func (p Payment) KhaltiConfigured() bool { return p.KhaltiSecretKey != "" }
 
 type Database struct {
 	URL             string
@@ -68,6 +109,7 @@ func Load() (Config, error) {
 		Env:            envOr("APP_ENV", "development"),
 		HTTPAddr:       envOr("HTTP_ADDR", ":8080"),
 		AllowedOrigins: allowedOrigins,
+		AppURL:         strings.TrimRight(envOr("APP_URL", "http://localhost:5173"), "/"),
 	}
 
 	cfg.Database.URL = os.Getenv("DATABASE_URL")
@@ -102,6 +144,40 @@ func Load() (Config, error) {
 		fail("ARENA_TIMEZONE %q is not a known zone: %v", tzName, err)
 	}
 	cfg.Booking.Timezone = tz
+
+	cfg.Mail = Mail{
+		SMTPHost: os.Getenv("SMTP_HOST"),
+		SMTPPort: intEnvOr("SMTP_PORT", 587, fail),
+		Username: os.Getenv("SMTP_USERNAME"),
+		Password: os.Getenv("SMTP_PASSWORD"),
+		From:     os.Getenv("MAIL_FROM"),
+		FromName: envOr("MAIL_FROM_NAME", "Khel Arena"),
+	}
+
+	cfg.Payment = Payment{
+		EsewaSecretKey:   []byte(os.Getenv("ESEWA_SECRET_KEY")),
+		EsewaProductCode: os.Getenv("ESEWA_PRODUCT_CODE"),
+		EsewaFormURL:     os.Getenv("ESEWA_FORM_URL"),
+		EsewaStatusURL:   os.Getenv("ESEWA_STATUS_URL"),
+		KhaltiSecretKey:  os.Getenv("KHALTI_SECRET_KEY"),
+		KhaltiBaseURL:    os.Getenv("KHALTI_BASE_URL"),
+	}
+
+	// A half-configured gateway is worse than an absent one: it is offered to
+	// players and then fails at the moment they try to pay.
+	if cfg.Payment.EsewaConfigured() && (cfg.Payment.EsewaFormURL == "" || cfg.Payment.EsewaStatusURL == "") {
+		fail("ESEWA_FORM_URL and ESEWA_STATUS_URL are required when ESEWA_SECRET_KEY is set")
+	}
+	if cfg.Payment.KhaltiConfigured() && cfg.Payment.KhaltiBaseURL == "" {
+		fail("KHALTI_BASE_URL is required when KHALTI_SECRET_KEY is set")
+	}
+
+	// Production has to be able to send mail. Password reset is the only way
+	// back into a locked-out account, and a deployment that logs the reset
+	// link instead of sending it has no recovery path at all.
+	if cfg.IsProduction() && !cfg.Mail.Configured() {
+		fail("SMTP_HOST and MAIL_FROM are required when APP_ENV=production (password reset needs to send email)")
+	}
 
 	if len(problems) > 0 {
 		return Config{}, errors.New("invalid configuration:\n  - " + strings.Join(problems, "\n  - "))

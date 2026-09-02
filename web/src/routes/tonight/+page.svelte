@@ -1,6 +1,6 @@
 <script>
 	import { goto } from '$app/navigation';
-	import { api, SPORT_LABELS } from '$lib/api/index.js';
+	import { SPORT_LABELS } from '$lib/api/index.js';
 	import HourLedger from '$lib/components/HourLedger.svelte';
 	import HourPulse from '$lib/components/HourPulse.svelte';
 	import CentreMark from '$lib/components/CentreMark.svelte';
@@ -18,7 +18,7 @@
 	const sport = $derived(data.sport);
 	const area = $derived(data.area);
 
-	const ledger = $derived(api.cityLedger(date, { sport, area }));
+	const ledger = $derived(data.ledger);
 	const sportName = $derived(SPORT_LABELS[sport].toLowerCase());
 
 	const areaOptions = $derived([

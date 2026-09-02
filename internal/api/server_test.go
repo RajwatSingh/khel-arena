@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/RajwatSingh/khel-arena/internal/domain"
+	"github.com/RajwatSingh/khel-arena/internal/platform/payment"
 	"github.com/RajwatSingh/khel-arena/internal/postgres"
 	"github.com/RajwatSingh/khel-arena/internal/service"
 	"github.com/google/uuid"
@@ -62,7 +63,25 @@ func TestRoutes(t *testing.T) {
 		},
 	}
 
-	h := newTestServer(t, auth, bookings, profiles)
+	arenas := &fakeArenas{
+		list:      func(context.Context) ([]postgres.ArenaListing, error) { return nil, nil },
+		bySlug:    func(context.Context, string) (postgres.ArenaDetail, error) { return postgres.ArenaDetail{}, nil },
+		listAreas: func(context.Context) ([]string, error) { return nil, nil },
+		cityLedger: func(context.Context, time.Time, domain.Sport, string) (service.Ledger, error) {
+			return service.Ledger{}, nil
+		},
+	}
+
+	payments := &fakePayments{
+		checkout: func(context.Context, uuid.UUID, uuid.UUID, domain.PaymentProvider) (payment.Checkout, domain.Payment, error) {
+			return payment.Checkout{Method: "GET", URL: "https://gateway.test/pay"}, domain.Payment{}, nil
+		},
+		status: func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error) {
+			return domain.Payment{}, nil
+		},
+	}
+
+	h := newTestServer(t, auth, bookings, profiles, withArenas(arenas), withPayments(payments))
 
 	cases := []struct {
 		method    string
@@ -81,12 +100,19 @@ func TestRoutes(t *testing.T) {
 		{http.MethodPost, "/v1/auth/password/forgot", `{"email":"r@k.np"}`, false, http.StatusAccepted},
 		{http.MethodPost, "/v1/auth/password/reset", `{"token":"t","new_password":"kathmandu2026"}`, false, http.StatusNoContent},
 		{http.MethodGet, "/v1/courts/" + testCourtID.String() + "/availability?date=2026-08-14", "", false, http.StatusOK},
+		{http.MethodGet, "/v1/arenas", "", false, http.StatusOK},
+		{http.MethodGet, "/v1/arenas/dhuku-futsal", "", false, http.StatusOK},
+		{http.MethodGet, "/v1/areas", "", false, http.StatusOK},
+		{http.MethodGet, "/v1/ledger?date=2026-08-14", "", false, http.StatusOK},
+		{http.MethodGet, "/v1/payments/providers", "", false, http.StatusOK},
 
 		{http.MethodPost, "/v1/auth/password/change", `{"current_password":"a","new_password":"kathmandu2026"}`, true, http.StatusNoContent},
 		{http.MethodGet, "/v1/me", "", true, http.StatusOK},
 		{http.MethodPost, "/v1/bookings", `{"court_id":"` + testCourtID.String() + `","starts_at":"2026-08-14T12:15:00Z","ends_at":"2026-08-14T13:15:00Z"}`, true, http.StatusCreated},
 		{http.MethodGet, "/v1/bookings", "", true, http.StatusOK},
 		{http.MethodDelete, "/v1/bookings/" + testBookingID.String(), "", true, http.StatusNoContent},
+		{http.MethodPost, "/v1/bookings/" + testBookingID.String() + "/checkout", `{"provider":"esewa"}`, true, http.StatusCreated},
+		{http.MethodGet, "/v1/bookings/" + testBookingID.String() + "/payment", "", true, http.StatusOK},
 	}
 
 	for _, tc := range cases {
@@ -140,7 +166,10 @@ func TestRoutesRejectWrongMethod(t *testing.T) {
 func TestUnknownRouteIs404(t *testing.T) {
 	h := newTestServer(t, &fakeAuth{}, &fakeBookings{}, &fakeProfiles{})
 
-	if w := do(h, http.MethodGet, "/v1/arenas", ""); w.Code != http.StatusNotFound {
+	// Deliberately something the API will never serve. This test has now been
+	// broken twice by paths becoming real, which is the hazard of asserting
+	// against a route that merely does not exist yet.
+	if w := do(h, http.MethodGet, "/v1/definitely-not-a-route", ""); w.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", w.Code)
 	}
 }

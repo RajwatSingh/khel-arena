@@ -169,8 +169,11 @@ type GridSlot struct {
 	Slot     Slot
 	PriceNPR int
 	IsPeak   bool
-	IsBooked bool
-	IsPast   bool
+	// RuleLabel names the rate that applied, for the line shown under the
+	// price ("Evening Peak", or BaseRateLabel).
+	RuleLabel string
+	IsBooked  bool
+	IsPast    bool
 }
 
 // Available reports whether a player can actually take this cell.

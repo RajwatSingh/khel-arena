@@ -40,8 +40,8 @@ func (c Claims) UserID() (uuid.UUID, error) {
 
 // Issuer mints and verifies access tokens.
 type Issuer struct {
-	secret   []byte
-	issuer   string
+	secret    []byte
+	issuer    string
 	accessTTL time.Duration
 }
 

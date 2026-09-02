@@ -14,9 +14,11 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/RajwatSingh/khel-arena/internal/domain"
+	"github.com/RajwatSingh/khel-arena/internal/platform/payment"
 	"github.com/RajwatSingh/khel-arena/internal/postgres"
 	"github.com/RajwatSingh/khel-arena/internal/service"
 	"github.com/google/uuid"
@@ -52,6 +54,96 @@ type BookingAPI interface {
 	Cancel(ctx context.Context, bookingID, userID uuid.UUID) error
 }
 
+// ArenaAPI is the part of service.ArenaService the handlers reach for.
+//
+// Reads only. Owner-facing writes are separate work with an authorization
+// story of their own, and this interface should not quietly grow them.
+type ArenaAPI interface {
+	List(ctx context.Context) ([]postgres.ArenaListing, error)
+	BySlug(ctx context.Context, slug string) (postgres.ArenaDetail, error)
+	ListAreas(ctx context.Context) ([]string, error)
+	CityLedger(ctx context.Context, date time.Time, sport domain.Sport, area string) (service.Ledger, error)
+}
+
+// PaymentAPI is the part of service.PaymentService the handlers reach for.
+//
+// Note what is absent: nothing here lets a caller assert that a payment
+// succeeded. Settle takes a callback reference and reports what the gateway
+// said; there is no method that marks a booking paid on a client's word.
+type PaymentAPI interface {
+	Providers() []domain.PaymentProvider
+	Checkout(ctx context.Context, bookingID, userID uuid.UUID, provider domain.PaymentProvider) (payment.Checkout, domain.Payment, error)
+	Settle(ctx context.Context, provider domain.PaymentProvider, ref payment.CallbackRef) (domain.Payment, error)
+	Status(ctx context.Context, bookingID, userID uuid.UUID) (domain.Payment, error)
+}
+
+// OwnerAPI is the part of service.OwnerService the handlers reach for.
+//
+// The first interface here whose methods all take an owner id. Every write
+// behind it reaches SQL carrying the owner predicate, so a handler that forgot
+// its own check still could not touch another owner's arena.
+type OwnerAPI interface {
+	MyArenas(ctx context.Context, ownerID uuid.UUID) ([]postgres.ArenaListing, error)
+	CreateArena(ctx context.Context, ownerID uuid.UUID, a domain.Arena) (domain.Arena, error)
+	UpdateArena(ctx context.Context, arenaID, ownerID uuid.UUID, a domain.Arena) (domain.Arena, error)
+	SetArenaActive(ctx context.Context, arenaID, ownerID uuid.UUID, active bool) error
+
+	CreateCourt(ctx context.Context, ownerID uuid.UUID, c domain.Court, format string) (postgres.CourtWithRules, error)
+	UpdateCourt(ctx context.Context, courtID, ownerID uuid.UUID, c domain.Court, format string) (postgres.CourtWithRules, error)
+	SetCourtActive(ctx context.Context, courtID, ownerID uuid.UUID, active bool) error
+
+	CreatePricingRule(ctx context.Context, ownerID uuid.UUID, rule domain.PricingRule) (domain.PricingRule, error)
+	DeletePricingRule(ctx context.Context, ruleID, ownerID uuid.UUID) error
+
+	Payments(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]postgres.OwnerPayment, error)
+	MarkCashReceived(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
+}
+
+// TeamAPI is the part of service.TeamService the handlers reach for.
+type TeamAPI interface {
+	MyTeams(ctx context.Context, userID uuid.UUID) ([]domain.Team, error)
+	Create(ctx context.Context, captainID uuid.UUID, t domain.Team) (domain.Team, error)
+	Get(ctx context.Context, teamID, viewerID uuid.UUID) (service.TeamWithRoster, error)
+	Update(ctx context.Context, teamID, actorID uuid.UUID, t domain.Team) (domain.Team, error)
+	Join(ctx context.Context, userID uuid.UUID, code string) (domain.Team, error)
+	AddMember(ctx context.Context, teamID, actorID, userID uuid.UUID) error
+	RemoveMember(ctx context.Context, teamID, actorID, targetID uuid.UUID) error
+	TransferCaptaincy(ctx context.Context, teamID, actorID, targetID uuid.UUID) error
+	RotateJoinCode(ctx context.Context, teamID, actorID uuid.UUID) (string, error)
+	Disband(ctx context.Context, teamID, actorID uuid.UUID) error
+}
+
+// MatchmakingAPI is the part of service.MatchmakingService the handlers use.
+type MatchmakingAPI interface {
+	Feed(ctx context.Context, f postgres.CallFilter) ([]domain.Call, error)
+	MyCalls(ctx context.Context, userID uuid.UUID) ([]domain.Call, error)
+	Create(ctx context.Context, authorID uuid.UUID, c domain.Call) (domain.Call, error)
+	Get(ctx context.Context, callID, viewerID uuid.UUID) (service.CallWithResponses, error)
+	Update(ctx context.Context, callID, actorID uuid.UUID, c domain.Call) (domain.Call, error)
+	Cancel(ctx context.Context, callID, actorID uuid.UUID) error
+	Delete(ctx context.Context, callID, actorID uuid.UUID) error
+	Respond(ctx context.Context, callID, userID uuid.UUID, message string) error
+	Accept(ctx context.Context, callID, actorID, userID uuid.UUID) error
+	Withdraw(ctx context.Context, callID, userID uuid.UUID) error
+}
+
+// TournamentAPI is the part of service.TournamentService the handlers use.
+type TournamentAPI interface {
+	List(ctx context.Context, limit int) ([]domain.Tournament, error)
+	Get(ctx context.Context, slug string) (service.TournamentWithEntries, error)
+	Create(ctx context.Context, organizerID uuid.UUID, t domain.Tournament) (domain.Tournament, error)
+	Register(ctx context.Context, tournamentID, teamID, actorID uuid.UUID) error
+	Withdraw(ctx context.Context, tournamentID, teamID, actorID uuid.UUID) error
+	SetEntryPaid(ctx context.Context, tournamentID, teamID, actorID uuid.UUID, paid bool) error
+	SetStatus(ctx context.Context, tournamentID, actorID uuid.UUID, status domain.TournamentStatus) error
+}
+
+// Mailer sends the reset link. One method, because that is the only message
+// this layer triggers.
+type Mailer interface {
+	SendPasswordReset(ctx context.Context, user domain.User, token string)
+}
+
 // ProfileAPI is the part of service.ProfileService the handlers reach for.
 type ProfileAPI interface {
 	Me(ctx context.Context, userID uuid.UUID) (domain.User, error)
@@ -63,9 +155,19 @@ type ProfileAPI interface {
 // a call site NewServer(a, b, c, nil, true, false, true) says nothing about
 // which flag is which.
 type Options struct {
-	Auth     AuthAPI
-	Bookings BookingAPI
-	Profiles ProfileAPI
+	Auth        AuthAPI
+	Bookings    BookingAPI
+	Profiles    ProfileAPI
+	Arenas      ArenaAPI
+	Payments    PaymentAPI
+	Owner       OwnerAPI
+	Teams       TeamAPI
+	Calls       MatchmakingAPI
+	Tournaments TournamentAPI
+
+	// Mailer delivers the password-reset link. Optional: with none, the token
+	// is only logged (see LogResetTokens), which is the development path.
+	Mailer Mailer
 
 	// Pinger backs /readyz. Optional: leave it nil and readiness reports the
 	// process alone, which is the honest answer when there is nothing else to
@@ -90,6 +192,17 @@ type Options struct {
 	// RequestTimeout caps how long a single request may run. Zero picks
 	// defaultRequestTimeout.
 	RequestTimeout time.Duration
+
+	// AppURL is the interface's own origin. A payer coming back from a
+	// gateway is redirected here -- built from configuration and never from
+	// the request, because a redirect target taken from a query parameter is
+	// an open redirect on a URL gateways will send anyone to.
+	AppURL string
+
+	// LoginRateLimit throttles the two endpoints an attacker can grind on.
+	// The zero value applies defaultLoginRate; set Disabled to turn it off,
+	// which is what the handler tests want.
+	LoginRateLimit RateLimit
 }
 
 // defaultRequestTimeout is generous enough for the slowest of these handlers
@@ -99,15 +212,29 @@ type Options struct {
 const defaultRequestTimeout = 10 * time.Second
 
 type Server struct {
-	auth     AuthAPI
-	bookings BookingAPI
-	profiles ProfileAPI
-	pinger   Pinger
+	auth        AuthAPI
+	bookings    BookingAPI
+	profiles    ProfileAPI
+	arenas      ArenaAPI
+	payments    PaymentAPI
+	owner       OwnerAPI
+	teams       TeamAPI
+	calls       MatchmakingAPI
+	tournaments TournamentAPI
+	mailer      Mailer
+	pinger      Pinger
+
+	appURL string
 
 	allowedOrigins []string
 	secureCookies  bool
 	logResetTokens bool
 	requestTimeout time.Duration
+
+	// loginLimiter throttles the two endpoints worth grinding on. Held on the
+	// Server rather than built inside routes() so its buckets survive for the
+	// life of the process, which is the only way a rate limit means anything.
+	loginLimiter *limiter
 }
 
 func NewServer(opts Options) *Server {
@@ -119,11 +246,20 @@ func NewServer(opts Options) *Server {
 		auth:           opts.Auth,
 		bookings:       opts.Bookings,
 		profiles:       opts.Profiles,
+		arenas:         opts.Arenas,
+		payments:       opts.Payments,
+		owner:          opts.Owner,
+		teams:          opts.Teams,
+		calls:          opts.Calls,
+		tournaments:    opts.Tournaments,
+		mailer:         opts.Mailer,
 		pinger:         opts.Pinger,
+		appURL:         strings.TrimRight(opts.AppURL, "/"),
 		allowedOrigins: opts.AllowedOrigins,
 		secureCookies:  opts.SecureCookies,
 		logResetTokens: opts.LogResetTokens,
 		requestTimeout: timeout,
+		loginLimiter:   newLimiter(opts.LoginRateLimit, nil),
 	}
 }
 
@@ -140,13 +276,33 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
 
 	// Public.
+	//
+	// Login and password/forgot are throttled: the first is the online
+	// password-guessing target, the second sprays somebody's inbox on
+	// request. Everything else here is a read whose cost is a cached query.
+	throttle := withRateLimit(s.loginLimiter)
+
 	mux.HandleFunc("POST /v1/auth/register", s.handleRegister)
-	mux.HandleFunc("POST /v1/auth/login", s.handleLogin)
+	mux.Handle("POST /v1/auth/login", throttle(s.handleLogin))
 	mux.HandleFunc("POST /v1/auth/refresh", s.handleRefresh)
 	mux.HandleFunc("POST /v1/auth/logout", s.handleLogout)
-	mux.HandleFunc("POST /v1/auth/password/forgot", s.handlePasswordForgot)
+	mux.Handle("POST /v1/auth/password/forgot", throttle(s.handlePasswordForgot))
 	mux.HandleFunc("POST /v1/auth/password/reset", s.handlePasswordReset)
+
+	mux.HandleFunc("GET /v1/arenas", s.handleListArenas)
+	mux.HandleFunc("GET /v1/arenas/{slug}", s.handleGetArena)
+	mux.HandleFunc("GET /v1/areas", s.handleListAreas)
+	mux.HandleFunc("GET /v1/ledger", s.handleLedger)
 	mux.HandleFunc("GET /v1/courts/{courtID}/availability", s.handleAvailability)
+	mux.HandleFunc("GET /v1/payments/providers", s.handleListProviders)
+	mux.HandleFunc("GET /v1/calls", s.handleCallFeed)
+	mux.HandleFunc("GET /v1/tournaments", s.handleListTournaments)
+	mux.HandleFunc("GET /v1/tournaments/{slug}", s.handleGetTournament)
+
+	// The gateway sends the player's browser here. Public by necessity -- the
+	// redirect carries no access token -- and safe because nothing in the
+	// request decides the outcome: see handlePaymentCallback.
+	mux.HandleFunc("GET /v1/payments/{provider}/callback", s.handlePaymentCallback)
 
 	// Authenticated. Each pattern is registered on this same mux, wrapped
 	// individually, rather than on a nested mux mounted under a prefix:
@@ -160,6 +316,57 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("POST /v1/bookings", protected(s.handleCreateBooking))
 	mux.Handle("GET /v1/bookings", protected(s.handleListBookings))
 	mux.Handle("DELETE /v1/bookings/{bookingID}", protected(s.handleCancelBooking))
+	mux.Handle("POST /v1/bookings/{bookingID}/checkout", protected(s.handleCreateCheckout))
+	mux.Handle("GET /v1/bookings/{bookingID}/payment", protected(s.handlePaymentStatus))
+
+	// Owner-facing. Under its own prefix so the boundary is visible in the
+	// route table as well as in the handlers: everything here is scoped to
+	// arenas the caller owns.
+	mux.Handle("GET /v1/owner/arenas", protected(s.handleMyArenas))
+	mux.Handle("POST /v1/owner/arenas", protected(s.handleCreateArena))
+	mux.Handle("PATCH /v1/owner/arenas/{arenaID}", protected(s.handleUpdateArena))
+	mux.Handle("PUT /v1/owner/arenas/{arenaID}/active", protected(s.handleSetArenaActive))
+	mux.Handle("POST /v1/owner/arenas/{arenaID}/courts", protected(s.handleCreateCourt))
+	mux.Handle("GET /v1/owner/arenas/{arenaID}/payments", protected(s.handleOwnerPayments))
+	mux.Handle("PATCH /v1/owner/courts/{courtID}", protected(s.handleUpdateCourt))
+	mux.Handle("PUT /v1/owner/courts/{courtID}/active", protected(s.handleSetCourtActive))
+	mux.Handle("POST /v1/owner/courts/{courtID}/pricing", protected(s.handleCreatePricingRule))
+	mux.Handle("DELETE /v1/owner/pricing/{ruleID}", protected(s.handleDeletePricingRule))
+	mux.Handle("POST /v1/owner/payments/{paymentID}/received", protected(s.handleMarkCashReceived))
+
+	// Teams. All authenticated: a squad is a group of people, and there is
+	// nothing useful to show somebody who is not one of them.
+	mux.Handle("GET /v1/teams", protected(s.handleMyTeams))
+	mux.Handle("POST /v1/teams", protected(s.handleCreateTeam))
+	mux.Handle("POST /v1/teams/join", protected(s.handleJoinTeam))
+	mux.Handle("GET /v1/teams/{teamID}", protected(s.handleGetTeam))
+	mux.Handle("PATCH /v1/teams/{teamID}", protected(s.handleUpdateTeam))
+	mux.Handle("DELETE /v1/teams/{teamID}", protected(s.handleDisbandTeam))
+	mux.Handle("POST /v1/teams/{teamID}/members", protected(s.handleAddTeamMember))
+	mux.Handle("DELETE /v1/teams/{teamID}/members/{userID}", protected(s.handleRemoveTeamMember))
+	mux.Handle("PUT /v1/teams/{teamID}/captain", protected(s.handleTransferCaptaincy))
+	mux.Handle("POST /v1/teams/{teamID}/join-code", protected(s.handleRotateJoinCode))
+
+	// Matchmaking. The feed is public (above); one call is readable either
+	// way, because a shared link should open for somebody not signed in --
+	// the handler simply omits the viewer-specific fields.
+	mux.Handle("GET /v1/calls/mine", protected(s.handleMyCalls))
+	mux.Handle("POST /v1/calls", protected(s.handleCreateCall))
+	mux.HandleFunc("GET /v1/calls/{callID}", s.handleGetCall)
+	mux.Handle("PATCH /v1/calls/{callID}", protected(s.handleUpdateCall))
+	mux.Handle("DELETE /v1/calls/{callID}", protected(s.handleDeleteCall))
+	mux.Handle("POST /v1/calls/{callID}/cancel", protected(s.handleCancelCall))
+	mux.Handle("POST /v1/calls/{callID}/responses", protected(s.handleRespondToCall))
+	mux.Handle("DELETE /v1/calls/{callID}/responses", protected(s.handleWithdrawFromCall))
+	mux.Handle("POST /v1/calls/{callID}/responses/{userID}/accept", protected(s.handleAcceptResponse))
+
+	// Tournaments. Listing and one bracket are public (above); entering one
+	// and running one are not.
+	mux.Handle("POST /v1/tournaments", protected(s.handleCreateTournament))
+	mux.Handle("POST /v1/tournaments/{tournamentID}/teams", protected(s.handleRegisterTeam))
+	mux.Handle("DELETE /v1/tournaments/{tournamentID}/teams/{teamID}", protected(s.handleWithdrawTeam))
+	mux.Handle("PUT /v1/tournaments/{tournamentID}/teams/{teamID}/paid", protected(s.handleSetEntryPaid))
+	mux.Handle("PUT /v1/tournaments/{tournamentID}/status", protected(s.handleSetTournamentStatus))
 
 	// Outermost first. Recovery has to be able to catch a panic thrown by any
 	// of the others, request ID has to exist before anything logs, and CORS

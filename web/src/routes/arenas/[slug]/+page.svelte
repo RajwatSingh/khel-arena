@@ -7,12 +7,12 @@
 	import CentreMark from '$lib/components/CentreMark.svelte';
 	import TextAnimate from '$lib/components/TextAnimate.svelte';
 	import { reveal } from '$lib/actions/reveal.js';
-	import { formatNPR, formatTime } from '$lib/time.js';
+	import { dates as dateHelper, formatNPR, formatTime } from '$lib/time.js';
 
 	let { data } = $props();
 
 	const arena = $derived(data.arena);
-	const dates = api.dates.rail(7);
+	const dates = dateHelper.rail(7);
 
 	let courtId = $state(page.url.searchParams.get('court'));
 	let date = $state(page.url.searchParams.get('date') ?? dates[0]);
@@ -21,11 +21,64 @@
 	let busy = $state(false);
 	let error = $state(null);
 
+	// The gateways this deployment can actually take money through. Asked for
+	// rather than hardcoded, so a provider whose credentials are absent is
+	// never offered. Cash is excluded: it is settled with the venue, and the
+	// server refuses to start a checkout for it.
+	let providers = $state([]);
+
+	$effect(() => {
+		let cancelled = false;
+		api
+			.paymentProviders()
+			.then((next) => {
+				if (!cancelled) providers = next.filter((p) => p !== 'cash');
+			})
+			.catch(() => {
+				if (!cancelled) providers = [];
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
+
 	// Falls back to the first court, which is also what makes an arena-to-arena
 	// navigation safe: this component is reused, so `courtId` can still name a
 	// court that belongs to the arena you just left.
 	const court = $derived(arena.courts.find((c) => c.id === courtId) ?? arena.courts[0]);
-	const grid = $derived(api.availability(court.id, date));
+
+	// The grid is fetched, not computed, so it cannot be a $derived: it arrives
+	// later than the court and date that ask for it. The effect re-runs when
+	// either changes, and the cancelled flag drops a reply that lost the race
+	// -- without it, switching courts quickly can leave the slower response
+	// painting the grid of the court you just left.
+	let grid = $state({ slots: [] });
+	let gridError = $state(null);
+
+	$effect(() => {
+		const courtID = court.id;
+		const on = date;
+		let cancelled = false;
+
+		api
+			.availability(courtID, on)
+			.then((next) => {
+				if (!cancelled) {
+					grid = next;
+					gridError = null;
+				}
+			})
+			.catch((err) => {
+				if (cancelled) return;
+				grid = { slots: [] };
+				gridError = err instanceof ApiError ? err.message : 'We could not load that day.';
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	});
+
 	const slot = $derived(grid.slots.find((s) => s.starts_at === picked && s.available) ?? null);
 	const freeCount = $derived(grid.slots.filter((s) => s.available).length);
 
@@ -42,6 +95,8 @@
 		hold = null;
 		error = null;
 	});
+
+	const shownError = $derived(error ?? gridError);
 
 	function choose(next) {
 		picked = next.starts_at;
@@ -66,7 +121,14 @@
 		busy = true;
 		error = null;
 		try {
-			hold = await api.createBooking({ court_id: court.id, starts_at: slot.starts_at });
+			hold = await api.createBooking({
+				court_id: court.id,
+				starts_at: slot.starts_at,
+				// Both ends, explicitly. The mock inferred the end from the
+				// grid; the service will not guess at what it is being asked
+				// to reserve.
+				ends_at: slot.ends_at
+			});
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : 'Something went wrong on our side.';
 		} finally {
@@ -74,14 +136,25 @@
 		}
 	}
 
-	async function pay() {
+	// Paying leaves the site: the gateway takes over, and the player comes back
+	// through /v1/payments/{provider}/callback, which confirms the booking
+	// server-side before redirecting them on to /bookings.
+	//
+	// `busy` is never cleared on the success path because there is no success
+	// path here -- redirectToGateway navigates away.
+	async function pay(provider = providers[0]) {
+		if (!provider) {
+			error = 'No payment method is available right now. Settle at the arena.';
+			return;
+		}
+
 		busy = true;
 		error = null;
 		try {
-			hold = await api.payBooking(hold.id);
+			const checkout = await api.startCheckout(hold.id, provider);
+			api.redirectToGateway(checkout);
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : 'The payment did not go through.';
-		} finally {
 			busy = false;
 		}
 	}
@@ -219,7 +292,7 @@
 				{slot}
 				{hold}
 				{busy}
-				{error}
+				error={shownError}
 				signedIn={session.signedIn}
 				onhold={takeHold}
 				onpay={pay}

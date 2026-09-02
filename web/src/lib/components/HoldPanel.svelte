@@ -85,7 +85,7 @@
 		{/if}
 
 		<div class="actions">
-			<button class="btn btn-primary grow" class:loading={busy} onclick={onpay} disabled={busy}>
+			<button class="btn btn-primary grow" class:loading={busy} onclick={() => onpay()} disabled={busy}>
 				{busy ? 'Talking to eSewa…' : `Pay NPR ${formatNPR(hold.price_npr)}`}
 			</button>
 			<button class="btn btn-secondary" onclick={onrelease} disabled={busy}>Release</button>

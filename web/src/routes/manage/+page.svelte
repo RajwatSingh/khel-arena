@@ -65,7 +65,10 @@
 					<li use:reveal={{ delay: Math.min(i, 6) * 60 }}>
 						<a class="record" href="/manage/{arena.id}">
 							<div class="who">
-								<h3 class="display display-m">{arena.name}</h3>
+								<h3 class="display display-m">
+									{arena.name}
+									{#if !arena.is_active}<span class="closed label">closed</span>{/if}
+								</h3>
 								<p class="small">{arena.area}, {arena.city} · {arena.opens_at}–{arena.closes_at}</p>
 							</div>
 							<div class="right">
@@ -130,6 +133,18 @@
 	h3 { margin: 0; }
 	.record:hover h3 { color: var(--pine-deep); }
 	.who .small { margin: 0.2rem 0 0; color: var(--faint); }
+
+	/* A closed venue is still listed here — this is the view you come to in
+	   order to reopen it — so it has to be marked rather than merely absent. */
+	.closed {
+		display: inline-block;
+		margin-left: 0.5rem;
+		padding: 0.15rem 0.5rem;
+		border-radius: var(--r-pill);
+		background: var(--surface-sunk);
+		color: var(--faint);
+		vertical-align: middle;
+	}
 
 	.right {
 		display: flex;

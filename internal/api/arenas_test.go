@@ -16,7 +16,10 @@ import (
 
 var _ ArenaAPI = (*service.ArenaService)(nil)
 
-var testArenaID = uuid.MustParse("44444444-4444-4444-8444-444444444444")
+var (
+	testArenaID = uuid.MustParse("44444444-4444-4444-8444-444444444444")
+	testRuleID  = uuid.MustParse("66666666-6666-4666-8666-666666666666")
+)
 
 func testArena() domain.Arena {
 	opens, _ := domain.ParseDayTime("06:00")
@@ -53,6 +56,7 @@ func testCourt() postgres.CourtWithRules {
 			IsActive:     true,
 		},
 		PricingRules: []domain.PricingRule{{
+			ID:        testRuleID,
 			Label:     "Evening Peak",
 			Days:      []time.Weekday{time.Monday, time.Sunday},
 			StartHour: 17,
@@ -99,6 +103,10 @@ func TestHandleListArenas(t *testing.T) {
 	// listing payload carries no courts to derive them from.
 	if len(got[0].Sports) != 1 || got[0].Sports[0] != domain.SportFutsal {
 		t.Errorf("sports = %v, want [futsal]", got[0].Sports)
+	}
+	// The owner view lists closed venues too, and needs to be able to say so.
+	if !got[0].IsActive {
+		t.Error("is_active did not reach the client")
 	}
 	// DayTime renders itself; the interface prints these straight.
 	if got[0].OpensAt != "06:00" || got[0].ClosesAt != "22:00" {
@@ -150,6 +158,11 @@ func TestHandleGetArena(t *testing.T) {
 		}
 		if len(court.Rules) != 1 || court.Rules[0].Label != "Evening Peak" {
 			t.Fatalf("rules = %+v", court.Rules)
+		}
+		// Deleting a rule needs its id, and reading is the only way to learn
+		// one -- without this the delete endpoint cannot be reached.
+		if court.Rules[0].ID != testRuleID {
+			t.Errorf("rule id = %v, want %v", court.Rules[0].ID, testRuleID)
 		}
 		// ISO weekdays on the wire: Monday is 1 and Sunday is 7. Go counts
 		// Sunday as zero, and letting that out would shift every rule by a day

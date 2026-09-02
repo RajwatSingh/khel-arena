@@ -57,7 +57,12 @@ func (s *Server) handleCreateArena(w http.ResponseWriter, r *http.Request) {
 	encode(w, http.StatusCreated, arenaDTOFromDomain(arena))
 }
 
-// handleUpdateArena — PATCH /v1/owner/arenas/{arenaID}
+// handleUpdateArena — PUT /v1/owner/arenas/{arenaID}
+//
+// PUT rather than PATCH because it replaces: the statement behind it writes
+// every column it owns, so a field the body omits is a field that gets
+// blanked. A PATCH that silently erases what you did not mention is a trap
+// for any client that sends less than the whole resource.
 func (s *Server) handleUpdateArena(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := s.currentUser(w, r)
 	if !ok {
@@ -149,7 +154,7 @@ func (s *Server) handleCreateCourt(w http.ResponseWriter, r *http.Request) {
 	encode(w, http.StatusCreated, courtDTOFromDomain(created))
 }
 
-// handleUpdateCourt — PATCH /v1/owner/courts/{courtID}
+// handleUpdateCourt — PUT /v1/owner/courts/{courtID}. Replaces, like the arena above.
 func (s *Server) handleUpdateCourt(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := s.currentUser(w, r)
 	if !ok {

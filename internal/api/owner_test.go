@@ -52,11 +52,11 @@ func TestOwnerRoutesAllRequireASession(t *testing.T) {
 	routes := []struct{ method, target, body string }{
 		{http.MethodGet, "/v1/owner/arenas", ""},
 		{http.MethodPost, "/v1/owner/arenas", `{"name":"A","area":"B","opens_at":"06:00","closes_at":"22:00"}`},
-		{http.MethodPatch, arena, `{"name":"A","area":"B","opens_at":"06:00","closes_at":"22:00"}`},
+		{http.MethodPut, arena, `{"name":"A","area":"B","opens_at":"06:00","closes_at":"22:00"}`},
 		{http.MethodPut, arena + "/active", `{"active":false}`},
 		{http.MethodPost, arena + "/courts", `{"name":"Court A","side_count":5,"base_price_npr":1200}`},
 		{http.MethodGet, arena + "/payments", ""},
-		{http.MethodPatch, court, `{"name":"Court A","side_count":5,"base_price_npr":1200}`},
+		{http.MethodPut, court, `{"name":"Court A","side_count":5,"base_price_npr":1200}`},
 		{http.MethodPut, court + "/active", `{"active":false}`},
 		{http.MethodPost, court + "/pricing", `{"label":"Peak","days":[1],"start_hour":17,"end_hour":21,"price_npr":1800}`},
 		{http.MethodDelete, "/v1/owner/pricing/" + uuid.New().String(), ""},
@@ -104,7 +104,7 @@ func TestCreateArenaTakesTheOwnerFromTheToken(t *testing.T) {
 func TestArenaSlugIsNotEditable(t *testing.T) {
 	auth := &fakeAuth{authenticate: signedIn(testAccessToken)}
 
-	w := do(newTestServer(t, auth, nil, nil, withOwner(&fakeOwner{})), http.MethodPatch,
+	w := do(newTestServer(t, auth, nil, nil, withOwner(&fakeOwner{})), http.MethodPut,
 		"/v1/owner/arenas/"+testArenaID.String(),
 		`{"name":"Dhuku","area":"Jhamsikhel","opens_at":"06:00","closes_at":"22:00","slug":"new-slug"}`,
 		bearer(testAccessToken))
@@ -124,7 +124,7 @@ func TestEditingSomebodyElsesArena(t *testing.T) {
 	}
 	auth := &fakeAuth{authenticate: signedIn(testAccessToken)}
 
-	w := do(newTestServer(t, auth, nil, nil, withOwner(owner)), http.MethodPatch,
+	w := do(newTestServer(t, auth, nil, nil, withOwner(owner)), http.MethodPut,
 		"/v1/owner/arenas/"+testArenaID.String(),
 		`{"name":"Theirs","area":"Elsewhere","opens_at":"06:00","closes_at":"22:00"}`,
 		bearer(testAccessToken))

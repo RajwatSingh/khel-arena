@@ -317,6 +317,11 @@ type arenaListingDTO struct {
 	CourtCount   int            `json:"court_count"`
 	FromPriceNPR int            `json:"from_price_npr"`
 	Sports       []domain.Sport `json:"sports"`
+	// IsActive is always true on the public index, which lists nothing else.
+	// It carries the answer for the owner view, which does include closed
+	// venues -- and without it an owner who closed one could never tell, or
+	// reopen it.
+	IsActive bool `json:"is_active"`
 }
 
 type arenaDetailDTO struct {
@@ -336,13 +341,17 @@ type courtDTO struct {
 }
 
 type pricingRuleDTO struct {
-	Label     string `json:"label"`
-	Days      []int  `json:"days"`
-	StartHour int    `json:"start_hour"`
-	EndHour   int    `json:"end_hour"`
-	PriceNPR  int    `json:"price_npr"`
-	IsPeak    bool   `json:"is_peak"`
-	Priority  int    `json:"priority"`
+	// The id is what DELETE /v1/owner/pricing/{ruleID} is addressed by, and
+	// reading the rules is the only way a client can learn it. Without this
+	// the delete endpoint is unreachable.
+	ID        uuid.UUID `json:"id"`
+	Label     string    `json:"label"`
+	Days      []int     `json:"days"`
+	StartHour int       `json:"start_hour"`
+	EndHour   int       `json:"end_hour"`
+	PriceNPR  int       `json:"price_npr"`
+	IsPeak    bool      `json:"is_peak"`
+	Priority  int       `json:"priority"`
 }
 
 // ledgerDTO is the city-wide grid for one date.
@@ -406,6 +415,7 @@ func arenaListingDTOsFromDomain(listings []postgres.ArenaListing) []arenaListing
 			CourtCount:   l.CourtCount,
 			FromPriceNPR: l.FromPriceNPR,
 			Sports:       sports,
+			IsActive:     l.IsActive,
 		})
 	}
 	return out
@@ -447,6 +457,7 @@ func pricingRuleDTOFromDomain(r domain.PricingRule) pricingRuleDTO {
 	}
 
 	return pricingRuleDTO{
+		ID:        r.ID,
 		Label:     r.Label,
 		Days:      days,
 		StartHour: r.StartHour,

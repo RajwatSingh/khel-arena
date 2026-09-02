@@ -79,6 +79,7 @@ Errors are one envelope (`{"error": {code, message, fields}}`) mapped from
 | POST | `/v1/bookings/{bookingID}/checkout` | Authenticated, starts a payment |
 | GET | `/v1/bookings/{bookingID}/payment` | Authenticated, latest attempt |
 | — | `/v1/owner/*` | 11 routes: venues, courts, pricing, reconciliation |
+| PUT | `/v1/owner/arenas/{id}` | Replaces — see below |
 | — | `/v1/teams/*` | 10 routes: squads, rosters, invite codes |
 | — | `/v1/calls/*` | 9 routes: the pickup-game board |
 | — | `/v1/tournaments/*` | 7 routes: brackets and entries |
@@ -236,6 +237,12 @@ for the sake of a readable error -- but that check is not what enforces it. A
 read-then-write leaves a window, and these are the writes where the window
 means editing somebody else's venue.
 
+**Updates are PUT, not PATCH.** The four update endpoints -- a venue, a court,
+a team, a call -- each write every field they own, so a body that leaves one
+out blanks it. That is a replace, and calling it PATCH would be a trap for any
+client sending less than the whole resource. The edit forms are pre-filled from
+current values for exactly this reason.
+
 **Refusals do not confirm existence.** Editing an arena you do not own, paying
 for a booking that is not yours, or managing a call you did not write all come
 back as 404 rather than 403. A distinct "forbidden" would tell a stranger the
@@ -277,10 +284,9 @@ Not yet written:
    nothing writes them -- a recorded result needs both captains to confirm a
    score, which is a flow rather than an endpoint.
 2. **Arena reviews and photos.** Tables from 0008, untouched.
-3. **Editing what can only be created.** A venue's hours and a court's rates
-   can be set when they are made and read afterwards, but the edit forms
-   behind `PATCH /v1/owner/arenas/{id}` and the pricing-rule endpoints have no
-   screen yet.
+3. **Bulk work in the back office.** One venue at a time is fine at this
+   size; an owner with five would want to copy a rate card between courts
+   rather than set each one by hand.
 
 Three things to know before this serves real traffic:
 

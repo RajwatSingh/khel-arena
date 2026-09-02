@@ -284,8 +284,15 @@ export const myArenas = (opts) => request('/owner/arenas', { auth: true, ...opts
 export const createArena = (input, opts) =>
 	request('/owner/arenas', { method: 'POST', body: input, auth: true, ...opts });
 
+/**
+ * Replaces the venue's details.
+ *
+ * PUT, not PATCH: the server writes every field it owns, so anything the body
+ * leaves out is blanked. Send the whole resource — the edit form is pre-filled
+ * from the current values for exactly this reason.
+ */
 export const updateArena = (id, input, opts) =>
-	request(`/owner/arenas/${id}`, { method: 'PATCH', body: input, auth: true, ...opts });
+	request(`/owner/arenas/${id}`, { method: 'PUT', body: input, auth: true, ...opts });
 
 export const setArenaActive = (id, active, opts) =>
 	request(`/owner/arenas/${id}/active`, { method: 'PUT', body: { active }, auth: true, ...opts });
@@ -294,7 +301,7 @@ export const createCourt = (arenaId, input, opts) =>
 	request(`/owner/arenas/${arenaId}/courts`, { method: 'POST', body: input, auth: true, ...opts });
 
 export const updateCourt = (courtId, input, opts) =>
-	request(`/owner/courts/${courtId}`, { method: 'PATCH', body: input, auth: true, ...opts });
+	request(`/owner/courts/${courtId}`, { method: 'PUT', body: input, auth: true, ...opts });
 
 export const setCourtActive = (courtId, active, opts) =>
 	request(`/owner/courts/${courtId}/active`, { method: 'PUT', body: { active }, auth: true, ...opts });
@@ -323,7 +330,7 @@ export const createTeam = (input, opts) =>
 	request('/teams', { method: 'POST', body: input, auth: true, ...opts });
 
 export const updateTeam = (id, input, opts) =>
-	request(`/teams/${id}`, { method: 'PATCH', body: input, auth: true, ...opts });
+	request(`/teams/${id}`, { method: 'PUT', body: input, auth: true, ...opts });
 
 /** The code identifies the team, so there is no team id to get wrong. */
 export const joinTeam = (code, opts) =>
@@ -368,7 +375,7 @@ export const createCall = (input, opts) =>
 	request('/calls', { method: 'POST', body: input, auth: true, ...opts });
 
 export const updateCall = (id, input, opts) =>
-	request(`/calls/${id}`, { method: 'PATCH', body: input, auth: true, ...opts });
+	request(`/calls/${id}`, { method: 'PUT', body: input, auth: true, ...opts });
 
 export const cancelCall = (id, opts) =>
 	request(`/calls/${id}/cancel`, { method: 'POST', auth: true, ...opts });

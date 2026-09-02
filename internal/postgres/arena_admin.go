@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,16 +23,24 @@ import (
 // `OwnerScoped` in the names is a reminder, not decoration -- an UPDATE here
 // without an owner predicate is a privilege escalation.
 
+// unaliasedArenaColumns is arenaColumns without the `a.` qualifier, for the
+// INSERT, which has no table alias to qualify against.
+//
+// Two spellings of one list is a wart, and the alternative is worse: aliasing
+// every read query's table to nothing, or writing the columns out a third time
+// inside each statement.
+var unaliasedArenaColumns = strings.ReplaceAll(arenaColumns, "a.", "")
+
 // CreateArena registers a venue owned by the caller.
 func (r *ArenaRepo) CreateArena(ctx context.Context, a domain.Arena) (domain.Arena, error) {
-	const q = `
+	q := `
 		insert into arenas (
 			owner_id, name, slug, area, city, lat, lng, description,
 			cover_url, amenities, phone, opens_at, closes_at
 		)
 		values ($1, $2, $3, $4, $5, $6, $7, nullif($8, ''), nullif($9, ''), $10,
 			nullif($11, ''), $12, $13)
-		returning ` + arenaColumns
+		returning ` + unaliasedArenaColumns
 
 	arena, err := scanArena(r.pool.QueryRow(ctx, q,
 		a.OwnerID, a.Name, a.Slug, a.Area, a.City, a.Lat, a.Lng, a.Description,
@@ -51,13 +60,15 @@ func (r *ArenaRepo) CreateArena(ctx context.Context, a domain.Arena) (domain.Are
 // shared, and changing it silently breaks all of them -- that wants a redirect
 // table and a deliberate decision, not a field on an edit form.
 func (r *ArenaRepo) UpdateArenaOwnerScoped(ctx context.Context, arenaID, ownerID uuid.UUID, a domain.Arena) (domain.Arena, error) {
+	// Aliased so the shared column list, which is written against `a.`, has
+	// something to qualify against.
 	const q = `
-		update arenas set
+		update arenas a set
 			name = $3, area = $4, city = $5, lat = $6, lng = $7,
 			description = nullif($8, ''), cover_url = nullif($9, ''),
 			amenities = $10, phone = nullif($11, ''),
 			opens_at = $12, closes_at = $13
-		where id = $1 and owner_id = $2
+		where a.id = $1 and a.owner_id = $2
 		returning ` + arenaColumns
 
 	arena, err := scanArena(r.pool.QueryRow(ctx, q,

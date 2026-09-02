@@ -76,7 +76,7 @@ func (s *Server) handleGetTeam(w http.ResponseWriter, r *http.Request) {
 	encode(w, http.StatusOK, teamDetailDTOFromDomain(team))
 }
 
-// handleUpdateTeam — PATCH /v1/teams/{teamID}
+// handleUpdateTeam — PUT /v1/teams/{teamID}. Replaces every field it owns.
 func (s *Server) handleUpdateTeam(w http.ResponseWriter, r *http.Request) {
 	userID, ok := s.currentUser(w, r)
 	if !ok {

@@ -95,7 +95,7 @@ func (s *Server) handleGetCall(w http.ResponseWriter, r *http.Request) {
 	encode(w, http.StatusOK, callDetailDTOFromDomain(call))
 }
 
-// handleUpdateCall — PATCH /v1/calls/{callID} (authenticated)
+// handleUpdateCall — PUT /v1/calls/{callID} (authenticated). Replaces.
 func (s *Server) handleUpdateCall(w http.ResponseWriter, r *http.Request) {
 	actorID, ok := s.currentUser(w, r)
 	if !ok {

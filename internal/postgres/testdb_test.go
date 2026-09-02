@@ -158,6 +158,30 @@ func (f *fixture) slotAt(t *testing.T, hour int, duration time.Duration) domain.
 	return slot
 }
 
+// pastSlotAt builds a slot that has genuinely already happened, `daysAgo`
+// back at a Kathmandu wall-clock hour.
+//
+// slotAt above works from a fixed 2031 date so a future slot never lapses
+// mid-run; anything testing "has this been played" needs the opposite, and
+// subtracting from 2031 would still be the future.
+func (f *fixture) pastSlotAt(t *testing.T, daysAgo, hour int) domain.Slot {
+	t.Helper()
+
+	ktm, err := time.LoadLocation("Asia/Kathmandu")
+	if err != nil {
+		t.Fatalf("loading Asia/Kathmandu: %v", err)
+	}
+
+	day := time.Now().In(ktm).AddDate(0, 0, -daysAgo)
+	start := time.Date(day.Year(), day.Month(), day.Day(), hour, 0, 0, 0, ktm)
+
+	slot, err := domain.NewSlot(start, start.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("building past slot: %v", err)
+	}
+	return slot
+}
+
 // hold builds an unsaved pending booking for a player.
 func (f *fixture) hold(t *testing.T, player uuid.UUID, slot domain.Slot) domain.Booking {
 	t.Helper()

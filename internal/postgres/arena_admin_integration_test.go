@@ -295,3 +295,62 @@ func arenaSlug(t *testing.T, f *fixture) string {
 	}
 	return slug
 }
+
+// Copying a rate card is one statement carrying its own authorization: both
+// courts are reached through a join to arenas filtered by owner.
+func TestCopyPricingRules(t *testing.T) {
+	f := newFixture(t, 1)
+	repo := NewArenaRepo(f.pool)
+	ctx := context.Background()
+
+	source := f.courtID
+	dest, err := repo.CreateCourtOwnerScoped(ctx, f.owner, domain.Court{
+		ArenaID: f.arenaID, Label: "Court B", Sport: domain.SportFutsal,
+		Surface: "turf", SideCount: 5, BasePriceNPR: 1200,
+	}, "")
+	if err != nil {
+		t.Fatalf("creating destination court: %v", err)
+	}
+
+	for _, label := range []string{"Evening peak", "Weekend mornings"} {
+		if _, err := repo.CreatePricingRuleOwnerScoped(ctx, f.owner, domain.PricingRule{
+			CourtID: source, Label: label, Days: []time.Weekday{time.Monday},
+			StartHour: 17, EndHour: 21, PriceNPR: 1800, Priority: 10,
+		}); err != nil {
+			t.Fatalf("seeding rule %q: %v", label, err)
+		}
+	}
+
+	// A stranger can copy nothing, in either direction.
+	if n, _ := repo.CopyPricingRulesOwnerScoped(ctx, source, dest.ID, f.players[0]); n != 0 {
+		t.Errorf("a stranger copied %d rules", n)
+	}
+
+	copied, err := repo.CopyPricingRulesOwnerScoped(ctx, source, dest.ID, f.owner)
+	if err != nil {
+		t.Fatalf("copying: %v", err)
+	}
+	if copied != 2 {
+		t.Errorf("copied = %d, want 2", copied)
+	}
+
+	detail, err := repo.BySlug(ctx, arenaSlug(t, f))
+	if err != nil {
+		t.Fatalf("reading arena: %v", err)
+	}
+	for _, c := range detail.Courts {
+		if c.ID == dest.ID && len(c.PricingRules) != 2 {
+			t.Errorf("destination has %d rules, want 2", len(c.PricingRules))
+		}
+	}
+
+	// Appends rather than replaces: copying twice doubles up rather than
+	// silently discarding what was there.
+	if n, _ := repo.CopyPricingRulesOwnerScoped(ctx, source, dest.ID, f.owner); n != 2 {
+		t.Errorf("second copy = %d, want 2 appended", n)
+	}
+
+	if _, err := repo.CopyPricingRulesOwnerScoped(ctx, source, source, f.owner); domain.CodeOf(err) != domain.CodeInvalid {
+		t.Errorf("copying onto itself: code = %q, want invalid", domain.CodeOf(err))
+	}
+}

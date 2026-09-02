@@ -1,11 +1,9 @@
 /**
  * The one error type every page catches, whichever transport produced it.
  *
- * It lives in its own module because both `mock.js` and `client.js` throw it.
- * When it was defined in the mock, the real client had to import from the fake
- * one to construct an error — a dependency pointing exactly the wrong way, and
- * one that would have kept the mock in the production bundle after the
- * switchover.
+ * It lives in its own module rather than beside the transport that throws it,
+ * so that a second transport — a test double, or whatever replaces client.js —
+ * can throw the same type without either importing the other.
  *
  * The shape mirrors what `domain.Error` reaches the wire as (apiPlan.md §4):
  * a machine-readable `code`, a message written for a person, and `fields` for

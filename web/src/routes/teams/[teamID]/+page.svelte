@@ -4,6 +4,7 @@
 	import { session } from '$lib/session.svelte.js';
 	import CentreMark from '$lib/components/CentreMark.svelte';
 	import TextAnimate from '$lib/components/TextAnimate.svelte';
+	import ResultsPanel from '$lib/components/ResultsPanel.svelte';
 	import { formatDate } from '$lib/time.js';
 
 	let { data } = $props();
@@ -105,6 +106,8 @@
 					</li>
 				{/each}
 			</ul>
+
+			<ResultsPanel {team} {captain} />
 		</div>
 
 		<aside class="panel card">

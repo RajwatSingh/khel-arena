@@ -363,6 +363,9 @@ func newTestServer(t *testing.T, auth *fakeAuth, bookings *fakeBookings, profile
 	if o, ok := opts.Owner.(*fakeOwner); ok && o != nil {
 		o.t = t
 	}
+	if m, ok := opts.Matches.(*fakeMatches); ok && m != nil {
+		m.t = t
+	}
 
 	return NewServer(opts).Handler()
 }
@@ -416,6 +419,7 @@ type fakeOwner struct {
 	updateCourt       func(context.Context, uuid.UUID, uuid.UUID, domain.Court, string) (postgres.CourtWithRules, error)
 	setCourtActive    func(context.Context, uuid.UUID, uuid.UUID, bool) error
 	createPricingRule func(context.Context, uuid.UUID, domain.PricingRule) (domain.PricingRule, error)
+	copyPricingRules  func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (int, error)
 	deletePricingRule func(context.Context, uuid.UUID, uuid.UUID) error
 	payments          func(context.Context, uuid.UUID, uuid.UUID, int) ([]postgres.OwnerPayment, error)
 	markCashReceived  func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
@@ -482,6 +486,13 @@ func (f *fakeOwner) CreatePricingRule(ctx context.Context, ownerID uuid.UUID, ru
 	return f.createPricingRule(ctx, ownerID, rule)
 }
 
+func (f *fakeOwner) CopyPricingRules(ctx context.Context, fromCourtID, toCourtID, ownerID uuid.UUID) (int, error) {
+	if f.copyPricingRules == nil {
+		f.unexpected("CopyPricingRules")
+	}
+	return f.copyPricingRules(ctx, fromCourtID, toCourtID, ownerID)
+}
+
 func (f *fakeOwner) DeletePricingRule(ctx context.Context, ruleID, ownerID uuid.UUID) error {
 	if f.deletePricingRule == nil {
 		f.unexpected("DeletePricingRule")
@@ -505,4 +516,57 @@ func (f *fakeOwner) MarkCashReceived(ctx context.Context, paymentID, ownerID uui
 
 func withOwner(o *fakeOwner) func(*Options) {
 	return func(opts *Options) { opts.Owner = o }
+}
+
+type fakeMatches struct {
+	t *testing.T
+
+	report      func(context.Context, uuid.UUID, domain.Match) (domain.Match, error)
+	confirm     func(context.Context, uuid.UUID, uuid.UUID) (domain.Match, error)
+	withdraw    func(context.Context, uuid.UUID, uuid.UUID) error
+	listForTeam func(context.Context, uuid.UUID, int) ([]domain.Match, error)
+	standings   func(context.Context, int) ([]domain.Standing, error)
+
+	gotActor uuid.UUID
+}
+
+func (f *fakeMatches) Report(ctx context.Context, actorID uuid.UUID, m domain.Match) (domain.Match, error) {
+	if f.report == nil {
+		f.t.Fatal("handler called MatchAPI.Report, which this test did not expect")
+	}
+	f.gotActor = actorID
+	return f.report(ctx, actorID, m)
+}
+
+func (f *fakeMatches) Confirm(ctx context.Context, matchID, actorID uuid.UUID) (domain.Match, error) {
+	if f.confirm == nil {
+		f.t.Fatal("handler called MatchAPI.Confirm, which this test did not expect")
+	}
+	f.gotActor = actorID
+	return f.confirm(ctx, matchID, actorID)
+}
+
+func (f *fakeMatches) Withdraw(ctx context.Context, matchID, actorID uuid.UUID) error {
+	if f.withdraw == nil {
+		f.t.Fatal("handler called MatchAPI.Withdraw, which this test did not expect")
+	}
+	return f.withdraw(ctx, matchID, actorID)
+}
+
+func (f *fakeMatches) ListForTeam(ctx context.Context, teamID uuid.UUID, limit int) ([]domain.Match, error) {
+	if f.listForTeam == nil {
+		f.t.Fatal("handler called MatchAPI.ListForTeam, which this test did not expect")
+	}
+	return f.listForTeam(ctx, teamID, limit)
+}
+
+func (f *fakeMatches) Standings(ctx context.Context, limit int) ([]domain.Standing, error) {
+	if f.standings == nil {
+		f.t.Fatal("handler called MatchAPI.Standings, which this test did not expect")
+	}
+	return f.standings(ctx, limit)
+}
+
+func withMatches(m *fakeMatches) func(*Options) {
+	return func(o *Options) { o.Matches = m }
 }

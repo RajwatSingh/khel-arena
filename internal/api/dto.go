@@ -1114,3 +1114,215 @@ func tournamentDetailDTOFromDomain(t service.TournamentWithEntries) tournamentDe
 		Entries:       entries,
 	}
 }
+
+// ---------------------------------------------------- matches and standings --
+
+type matchWriteRequest struct {
+	BookingID *uuid.UUID `json:"booking_id"`
+	HomeTeam  uuid.UUID  `json:"home_team"`
+	AwayTeam  uuid.UUID  `json:"away_team"`
+	HomeScore int        `json:"home_score"`
+	AwayScore int        `json:"away_score"`
+	PlayedAt  time.Time  `json:"played_at"`
+}
+
+func (r matchWriteRequest) match() domain.Match {
+	return domain.Match{
+		BookingID: r.BookingID,
+		HomeTeam:  r.HomeTeam,
+		AwayTeam:  r.AwayTeam,
+		HomeScore: r.HomeScore,
+		AwayScore: r.AwayScore,
+		PlayedAt:  r.PlayedAt,
+	}
+}
+
+// matchDTO carries `reported_by` so a client can tell whose turn it is: the
+// captain who filed a result sees "waiting on them", the other sees "confirm".
+type matchDTO struct {
+	ID         uuid.UUID  `json:"id"`
+	BookingID  *uuid.UUID `json:"booking_id"`
+	HomeTeam   uuid.UUID  `json:"home_team"`
+	HomeName   string     `json:"home_name"`
+	HomeTag    string     `json:"home_tag"`
+	AwayTeam   uuid.UUID  `json:"away_team"`
+	AwayName   string     `json:"away_name"`
+	AwayTag    string     `json:"away_tag"`
+	HomeScore  int        `json:"home_score"`
+	AwayScore  int        `json:"away_score"`
+	PlayedAt   time.Time  `json:"played_at"`
+	Verified   bool       `json:"verified"`
+	ReportedBy uuid.UUID  `json:"reported_by"`
+}
+
+type standingDTO struct {
+	Rank         int       `json:"rank"`
+	TeamID       uuid.UUID `json:"team_id"`
+	Name         string    `json:"name"`
+	Tag          string    `json:"tag"`
+	CrestURL     string    `json:"crest_url"`
+	Played       int       `json:"played"`
+	Won          int       `json:"won"`
+	Drawn        int       `json:"drawn"`
+	Lost         int       `json:"lost"`
+	GoalsFor     int       `json:"goals_for"`
+	GoalsAgainst int       `json:"goals_against"`
+	GoalDiff     int       `json:"goal_diff"`
+	Points       int       `json:"points"`
+}
+
+func matchDTOFromDomain(m domain.Match) matchDTO {
+	return matchDTO{
+		ID:         m.ID,
+		BookingID:  m.BookingID,
+		HomeTeam:   m.HomeTeam,
+		HomeName:   m.HomeName,
+		HomeTag:    m.HomeTag,
+		AwayTeam:   m.AwayTeam,
+		AwayName:   m.AwayName,
+		AwayTag:    m.AwayTag,
+		HomeScore:  m.HomeScore,
+		AwayScore:  m.AwayScore,
+		PlayedAt:   m.PlayedAt,
+		Verified:   m.Verified,
+		ReportedBy: m.ReportedBy,
+	}
+}
+
+func matchDTOsFromDomain(ms []domain.Match) []matchDTO {
+	out := make([]matchDTO, 0, len(ms))
+	for _, m := range ms {
+		out = append(out, matchDTOFromDomain(m))
+	}
+	return out
+}
+
+func standingDTOsFromDomain(ss []domain.Standing) []standingDTO {
+	out := make([]standingDTO, 0, len(ss))
+	for _, s := range ss {
+		out = append(out, standingDTO{
+			Rank: s.Rank, TeamID: s.TeamID, Name: s.Name, Tag: s.Tag, CrestURL: s.CrestURL,
+			Played: s.Played, Won: s.Won, Drawn: s.Drawn, Lost: s.Lost,
+			GoalsFor: s.GoalsFor, GoalsAgainst: s.GoalsAgainst,
+			GoalDiff: s.GoalDiff, Points: s.Points,
+		})
+	}
+	return out
+}
+
+// -------------------------------------- reviews, photos and highlights --
+
+type reviewWriteRequest struct {
+	Rating  int    `json:"rating"`
+	Comment string `json:"comment"`
+}
+
+type reviewDTO struct {
+	ID      uuid.UUID `json:"id"`
+	ArenaID uuid.UUID `json:"arena_id"`
+	UserID  uuid.UUID `json:"user_id"`
+	// Author is present when a review is read as part of a feed, and absent
+	// on the response to writing one -- the upsert does not join the user, and
+	// a hollow author object would be worse than no key at all. The client
+	// that just wrote it knows who they are.
+	Author    *userSummaryDTO `json:"author,omitempty"`
+	Rating    int             `json:"rating"`
+	Comment   string          `json:"comment"`
+	CreatedAt time.Time       `json:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at"`
+}
+
+func reviewDTOFromDomain(v domain.Review) reviewDTO {
+	var author *userSummaryDTO
+	if v.Author != nil {
+		summary := userSummaryDTOFromDomain(v.Author)
+		author = &summary
+	}
+
+	return reviewDTO{
+		ID:        v.ID,
+		ArenaID:   v.ArenaID,
+		UserID:    v.UserID,
+		Author:    author,
+		Rating:    v.Rating,
+		Comment:   v.Comment,
+		CreatedAt: v.CreatedAt,
+		UpdatedAt: v.UpdatedAt,
+	}
+}
+
+func reviewDTOsFromDomain(vs []domain.Review) []reviewDTO {
+	out := make([]reviewDTO, 0, len(vs))
+	for _, v := range vs {
+		out = append(out, reviewDTOFromDomain(v))
+	}
+	return out
+}
+
+type photoWriteRequest struct {
+	URL       string `json:"url"`
+	Caption   string `json:"caption"`
+	SortOrder int    `json:"sort_order"`
+}
+
+type photoDTO struct {
+	ID        uuid.UUID `json:"id"`
+	ArenaID   uuid.UUID `json:"arena_id"`
+	URL       string    `json:"url"`
+	Caption   string    `json:"caption"`
+	SortOrder int       `json:"sort_order"`
+}
+
+func photoDTOFromDomain(p postgres.Photo) photoDTO {
+	return photoDTO{ID: p.ID, ArenaID: p.ArenaID, URL: p.URL, Caption: p.Caption, SortOrder: p.SortOrder}
+}
+
+func photoDTOsFromDomain(ps []postgres.Photo) []photoDTO {
+	out := make([]photoDTO, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, photoDTOFromDomain(p))
+	}
+	return out
+}
+
+type highlightWriteRequest struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
+type highlightDTO struct {
+	ID    uuid.UUID `json:"id"`
+	Title string    `json:"title"`
+	URL   string    `json:"url"`
+}
+
+func highlightDTOFromDomain(h postgres.Highlight) highlightDTO {
+	return highlightDTO{ID: h.ID, Title: h.Title, URL: h.URL}
+}
+
+func highlightDTOsFromDomain(hs []postgres.Highlight) []highlightDTO {
+	out := make([]highlightDTO, 0, len(hs))
+	for _, h := range hs {
+		out = append(out, highlightDTOFromDomain(h))
+	}
+	return out
+}
+
+type copyPricingRequest struct {
+	FromCourtID uuid.UUID `json:"from_court_id"`
+}
+
+// copyPricingDTO reports how many windows were copied. Copying from a court
+// with no rules is not an error, but an owner who expected four and got none
+// should be told.
+type copyPricingDTO struct {
+	Copied int `json:"copied"`
+}
+
+// myReviewDTO answers two questions at once: what you said, and whether you
+// are allowed to say anything. A page needs both to decide between a form, an
+// edit and an explanation.
+type myReviewDTO struct {
+	CanReview bool       `json:"can_review"`
+	Review    *reviewDTO `json:"review"`
+}

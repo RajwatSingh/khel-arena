@@ -3,7 +3,14 @@ import { api, ApiError } from '$lib/api/index.js';
 
 export async function load({ params, fetch }) {
 	try {
-		return { arena: await api.getArena(params.slug, { fetch }) };
+		const arena = await api.getArena(params.slug, { fetch });
+
+		// The gallery is public and belongs to the page's first paint. Reviews
+		// are fetched by their own panel instead: what it shows depends on who
+		// is signed in, which this load does not know.
+		const photos = await api.arenaPhotos(arena.id, { fetch });
+
+		return { arena, photos };
 	} catch (err) {
 		// A slug nobody has is a 404 page, not an error banner: the address
 		// itself is wrong, so there is nothing on this page to recover to.

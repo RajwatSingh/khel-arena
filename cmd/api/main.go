@@ -106,6 +106,8 @@ func run() error {
 	callService := service.NewMatchmakingService(callRepo, bookings, clock)
 	teamRepo := postgres.NewTeamRepo(pool)
 	tournamentService := service.NewTournamentService(postgres.NewTournamentRepo(pool), teamRepo, clock)
+	matchService := service.NewMatchService(postgres.NewMatchRepo(pool), teamRepo, clock)
+	reviewService := service.NewReviewService(postgres.NewReviewRepo(pool))
 	janitor := service.NewJanitor(bookings, sessions, callRepo, janitorInterval, slog.Default())
 
 	// ── transport ────────────────────────────────────────────────────────
@@ -119,6 +121,8 @@ func run() error {
 		Teams:          teamService,
 		Calls:          callService,
 		Tournaments:    tournamentService,
+		Matches:        matchService,
+		Reviews:        reviewService,
 		Mailer:         notifier,
 		Pinger:         pool,
 		AppURL:         cfg.AppURL,

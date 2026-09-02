@@ -248,6 +248,38 @@ func (s *Server) handleCreatePricingRule(w http.ResponseWriter, r *http.Request)
 	encode(w, http.StatusCreated, pricingRuleDTOFromDomain(created))
 }
 
+// handleCopyPricingRules — POST /v1/owner/courts/{courtID}/pricing/copy
+//
+// Copies another of the caller's courts' rate windows onto this one. Appends
+// rather than replaces: overlapping windows are already resolved by priority,
+// and quietly deleting what an owner set up would be the worse surprise.
+func (s *Server) handleCopyPricingRules(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := s.currentUser(w, r)
+	if !ok {
+		return
+	}
+
+	toCourtID, err := uuid.Parse(r.PathValue("courtID"))
+	if err != nil {
+		writeError(w, r, domain.Invalid("court_id", "That isn't a court."))
+		return
+	}
+
+	req, err := decode[copyPricingRequest](w, r)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	copied, err := s.owner.CopyPricingRules(r.Context(), req.FromCourtID, toCourtID, ownerID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	encode(w, http.StatusOK, copyPricingDTO{Copied: copied})
+}
+
 // handleDeletePricingRule — DELETE /v1/owner/pricing/{ruleID}
 //
 // Deleted rather than deactivated, unlike a court: a rule holds no history.

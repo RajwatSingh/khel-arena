@@ -38,6 +38,7 @@ func TestOwnerRoutesAllRequireASession(t *testing.T) {
 		createPricingRule: func(context.Context, uuid.UUID, domain.PricingRule) (domain.PricingRule, error) {
 			return domain.PricingRule{}, nil
 		},
+		copyPricingRules:  func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (int, error) { return 2, nil },
 		deletePricingRule: func(context.Context, uuid.UUID, uuid.UUID) error { return nil },
 		payments:          func(context.Context, uuid.UUID, uuid.UUID, int) ([]postgres.OwnerPayment, error) { return nil, nil },
 		markCashReceived:  func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error) { return domain.Payment{}, nil },
@@ -59,6 +60,7 @@ func TestOwnerRoutesAllRequireASession(t *testing.T) {
 		{http.MethodPut, court, `{"name":"Court A","side_count":5,"base_price_npr":1200}`},
 		{http.MethodPut, court + "/active", `{"active":false}`},
 		{http.MethodPost, court + "/pricing", `{"label":"Peak","days":[1],"start_hour":17,"end_hour":21,"price_npr":1800}`},
+		{http.MethodPost, court + "/pricing/copy", `{"from_court_id":"` + uuid.New().String() + `"}`},
 		{http.MethodDelete, "/v1/owner/pricing/" + uuid.New().String(), ""},
 		{http.MethodPost, "/v1/owner/payments/" + testPaymentID.String() + "/received", ""},
 	}

@@ -34,6 +34,7 @@
 				<a class="foot-link" href="/games">Games needing players</a>
 				<a class="foot-link" href="/teams">My teams</a>
 				<a class="foot-link" href="/tournaments">Tournaments</a>
+				<a class="foot-link" href="/standings">The table</a>
 			</nav>
 
 			<nav aria-label="Account">

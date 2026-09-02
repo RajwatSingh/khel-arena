@@ -55,7 +55,7 @@ one type — `SessionContext`, which the service layer's own signatures require.
 
 ## The API
 
-Sixty endpoints.
+Seventy-six endpoints.
 Errors are one envelope (`{"error": {code, message, fields}}`) mapped from
 `domain.Code` in a single place, so no handler picks a status itself.
 
@@ -83,6 +83,10 @@ Errors are one envelope (`{"error": {code, message, fields}}`) mapped from
 | — | `/v1/teams/*` | 10 routes: squads, rosters, invite codes |
 | — | `/v1/calls/*` | 9 routes: the pickup-game board |
 | — | `/v1/tournaments/*` | 7 routes: brackets and entries |
+| GET | `/v1/standings` | The table — verified results only |
+| — | `/v1/matches/*` | Report a result, confirm it, withdraw it |
+| — | `/v1/arenas/{id}/reviews`, `/photos` | Reviews and galleries |
+| — | `/v1/me/highlights` | Clips on your own player card |
 | GET | `/v1/me` | Authenticated |
 | POST | `/v1/auth/password/change` | Authenticated |
 | POST | `/v1/bookings` | Authenticated, takes a hold, 201 |
@@ -243,6 +247,17 @@ out blanks it. That is a replace, and calling it PATCH would be a trap for any
 client sending less than the whole resource. The edit forms are pre-filled from
 current values for exactly this reason.
 
+**A review has to be earned.** You can rate an arena once you have played
+there -- a paid booking on one of its courts whose hour has passed. An arena's
+rating is a number the listing shows and a booking decision turns on, and the
+booking history is right there to check it against. The cost is deliberate: a
+venue's first review can only come from its first paying customer, afterwards.
+
+**A result counts only when both captains agree it.** One captain files a
+score, the other confirms; `matches.reported_by` records who filed it so the
+reporter cannot wave through their own. The standings view reads `verified`
+and nothing else, so that flag is the whole value of the table.
+
 **Refusals do not confirm existence.** Editing an arena you do not own, paying
 for a booking that is not yours, or managing a call you did not write all come
 back as 404 rather than 403. A distinct "forbidden" would tell a stranger the
@@ -262,31 +277,35 @@ services; the janitor; rate limiting; and the HTTP API over all of them, with
 `cmd/api` wiring it together.
 
 **The frontend reads from the service.** `web/src/lib/api/index.js` points at
-`client.js`, and every page -- the city ledger, the arena index, a venue, the
-availability grid, sign-in, booking and cancelling -- is served from Postgres.
-`mock.js` and `fixtures.js` are no longer imported by anything and stay only
-until payments land.
-
-Every table in the schema has a repository, a service and endpoints over it,
-and every surface has an interface:
+`client.js`, and every page is served from Postgres:
 
 ```
 /tonight, /arenas       book a court by the hour
 /games                  the call sheet -- games short of players
 /teams                  squads, rosters, invite codes
 /tournaments            brackets and entries
-/manage                 the back office: venues, courts, rates, the till
+/standings              the table -- agreed results only
+/manage                 the back office: venues, courts, rates, gallery, the till
 ```
 
-Not yet written:
+Reviews and photo galleries sit on the arena page; results are reported and
+confirmed from a team's page.
 
-1. **Matches and standings.** `matches` and the `Standing` type exist and
-   nothing writes them -- a recorded result needs both captains to confirm a
-   score, which is a flow rather than an endpoint.
-2. **Arena reviews and photos.** Tables from 0008, untouched.
-3. **Bulk work in the back office.** One venue at a time is fine at this
-   size; an owner with five would want to copy a rate card between courts
-   rather than set each one by hand.
+Every table in the schema has a repository, a service and endpoints over it,
+and nothing in `internal/domain` is unreachable from the API.
+
+What is left is smaller than what is here:
+
+1. **A player page.** `/v1/players/{id}/highlights` answers and
+   `POST /v1/me/highlights` writes, but there is no profile screen to put a
+   reel on -- the player card exists in the database and nowhere in the
+   interface.
+2. **Photo uploads.** Galleries take a URL you already host. Somewhere to put
+   the file is a storage decision (object store, signed uploads, a size cap)
+   rather than a missing endpoint.
+3. **Disputes.** A captain can withdraw an unagreed result, which is enough
+   for a typo. Two captains who genuinely disagree about a score have no
+   route but to talk to each other.
 
 Three things to know before this serves real traffic:
 

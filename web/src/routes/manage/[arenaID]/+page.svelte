@@ -21,6 +21,7 @@
 	const settled = $derived(data.payments.filter((p) => !outstanding.includes(p)));
 
 	let newCourt = $state({ name: '', format: '', side_count: 5, base_price_npr: 1200 });
+	let newPhoto = $state({ url: '', caption: '', sort_order: 0 });
 	let busy = $state(false);
 	let error = $state(null);
 	let fieldErrors = $state({});
@@ -79,6 +80,15 @@
 	}
 
 	const received = (payment) => act(() => api.markCashReceived(payment.id));
+	const removePhoto = (id) => act(() => api.deletePhoto(id));
+
+	async function addPhoto(event) {
+		event.preventDefault();
+		const ok = await act(() =>
+			api.addPhoto(arena.id, { ...newPhoto, sort_order: Number(newPhoto.sort_order) })
+		);
+		if (ok) newPhoto = { url: '', caption: '', sort_order: 0 };
+	}
 	const setActive = (active) => act(() => api.setArenaActive(arena.id, active));
 
 	async function saveVenue(event) {
@@ -197,7 +207,13 @@
 		</p>
 		<ul class="courts">
 			{#each courts as court (court.id)}
-				<li><CourtPanel {court} onchange={invalidateAll} /></li>
+				<li>
+					<CourtPanel
+						{court}
+						onchange={invalidateAll}
+						siblings={courts.filter((c) => c.id !== court.id)}
+					/>
+				</li>
 			{:else}
 				<li class="none small quiet">No courts yet. Add one below.</li>
 			{/each}
@@ -217,6 +233,39 @@
 					bind:value={newCourt.base_price_npr} error={fieldErrors.base_price} min="1" required />
 			</div>
 			<button class="btn btn-primary" class:loading={busy} disabled={busy}>Add</button>
+		</form>
+
+		<h2 class="display display-m">Gallery</h2>
+		<p class="small quiet">
+			Photographs of the place, shown on the venue's page. Images are linked, not uploaded —
+			point at one you already host.
+		</p>
+
+		{#if data.photos.length}
+			<ul class="gallery">
+				{#each data.photos as photo (photo.id)}
+					<li>
+						<img src={photo.url} alt={photo.caption || 'The arena'} loading="lazy" />
+						<span class="cap small">{photo.caption || '—'}</span>
+						<button class="btn btn-quiet" disabled={busy} onclick={() => removePhoto(photo.id)}>
+							Remove
+						</button>
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<p class="small quiet none-inline">No photographs yet.</p>
+		{/if}
+
+		<form class="card" onsubmit={addPhoto}>
+			<h3 class="display display-m">Add a photograph</h3>
+			<Field name="photo-url" label="Image address" bind:value={newPhoto.url}
+				error={fieldErrors.url} required placeholder="https://…/dhuku-court-a.jpg" />
+			<Field name="photo-caption" label="Caption" bind:value={newPhoto.caption}
+				maxlength="120" placeholder="The covered court, looking east" />
+			<Field name="photo-order" label="Position" type="number" bind:value={newPhoto.sort_order}
+				hint="Lower numbers come first." min="0" />
+			<button class="btn btn-secondary" class:loading={busy} disabled={busy}>Add</button>
 		</form>
 
 		<h2 class="display display-m">Venue details</h2>
@@ -331,6 +380,33 @@
 	}
 
 	.venue { max-width: 40rem; }
+
+	.gallery {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+		gap: 0.75rem;
+		margin: 1rem 0 0;
+	}
+
+	.gallery li {
+		display: grid;
+		gap: 0.4rem;
+		padding: 0.6rem;
+		border: 1px solid var(--line);
+		border-radius: var(--r-md);
+		background: var(--surface);
+	}
+
+	.gallery img {
+		width: 100%;
+		aspect-ratio: 4 / 3;
+		object-fit: cover;
+		border-radius: var(--r-sm);
+		background: var(--surface-sunk);
+	}
+
+	.cap { color: var(--faint); }
+	.none-inline { margin-top: 0.75rem; }
 
 	.pick { display: grid; gap: 0.35rem; }
 

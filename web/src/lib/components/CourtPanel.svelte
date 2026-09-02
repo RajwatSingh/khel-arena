@@ -10,9 +10,10 @@
 	import { untrack } from 'svelte';
 	import { api, ApiError } from '$lib/api/index.js';
 	import Field from './Field.svelte';
+	import Listbox from './Listbox.svelte';
 	import { formatNPR } from '$lib/time.js';
 
-	let { court, onchange } = $props();
+	let { court, onchange, siblings = [] } = $props();
 
 	// ISO weekdays, which is what the wire speaks: Monday is 1, Sunday is 7.
 	const DAYS = [
@@ -119,6 +120,28 @@
 
 	const dropRule = (id) => act(() => api.deletePricingRule(id));
 
+	// Setting the same four windows on five identical courts is the tedious
+	// part of running a venue. This appends rather than replaces — overlapping
+	// windows are already resolved by priority, and silently deleting what was
+	// there would be the worse surprise.
+	let copyFrom = $state('');
+	let copied = $state(0);
+
+	async function copyCard(event) {
+		event.preventDefault();
+		if (!copyFrom) return;
+
+		const before = copyFrom;
+		const ok = await act(async () => {
+			const result = await api.copyPricingRules(court.id, before);
+			copied = result.copied;
+		});
+		if (ok) {
+			copyFrom = '';
+			setTimeout(() => (copied = 0), 3000);
+		}
+	}
+
 	/** "Mon–Fri" where the days run together, "Mon, Wed, Sat" where they don't. */
 	function describeDays(days) {
 		if (!days?.length) return '';
@@ -205,6 +228,30 @@
 				<p class="small quiet none">
 					No rate windows. Every hour is charged at the base rate.
 				</p>
+			{/if}
+
+			{#if siblings.length}
+				<form class="copy" onsubmit={copyCard}>
+					<label class="pick">
+						<span class="label">Copy a rate card from</span>
+						<Listbox
+							value={copyFrom}
+							options={[
+								{ value: '', label: 'Another court…' },
+								...siblings.map((c) => ({
+									value: c.id,
+									label: `${c.name} (${c.rules?.length ?? 0} window${(c.rules?.length ?? 0) === 1 ? '' : 's'})`
+								}))
+							]}
+							label="Source court"
+							fill
+							onselect={(v) => (copyFrom = v)}
+						/>
+					</label>
+					<button class="btn btn-quiet" disabled={busy || !copyFrom}>
+						{copied ? `Copied ${copied}` : 'Copy'}
+					</button>
+				</form>
 			{/if}
 
 			<form class="new-rule" onsubmit={addRule}>
@@ -383,6 +430,18 @@
 		padding-top: 1rem;
 		border-top: 1px dashed var(--line);
 	}
+
+	.copy {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: 0.6rem;
+		padding-top: 1rem;
+		border-top: 1px dashed var(--line);
+	}
+
+	.copy .pick { flex: 1 1 12rem; }
+	.pick { display: grid; gap: 0.35rem; }
 
 	.days {
 		display: flex;

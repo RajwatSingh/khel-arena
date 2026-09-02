@@ -236,6 +236,59 @@ export const createBooking = (input, opts) =>
 export const cancelBooking = (id, opts) =>
 	request(`/bookings/${id}`, { method: 'DELETE', auth: true, ...opts });
 
+// -------------------------------------- results, reviews and galleries --
+
+export const standings = (opts) => request('/standings', opts);
+
+export const teamMatches = (teamId, opts) => request(`/teams/${teamId}/matches`, opts);
+
+export const reportMatch = (input, opts) =>
+	request('/matches', { method: 'POST', body: input, auth: true, ...opts });
+
+/** The *other* captain agreeing. The server refuses a self-confirmation. */
+export const confirmMatch = (id, opts) =>
+	request(`/matches/${id}/confirm`, { method: 'POST', auth: true, ...opts });
+
+export const withdrawMatch = (id, opts) =>
+	request(`/matches/${id}`, { method: 'DELETE', auth: true, ...opts });
+
+export const arenaReviews = (arenaId, opts) => request(`/arenas/${arenaId}/reviews`, opts);
+
+/** What you said and whether you may say anything — a review is earned by
+ *  having played there. */
+export const myReview = (arenaId, opts) =>
+	request(`/arenas/${arenaId}/reviews/mine`, { auth: true, ...opts });
+
+export const reviewArena = (arenaId, input, opts) =>
+	request(`/arenas/${arenaId}/reviews/mine`, { method: 'PUT', body: input, auth: true, ...opts });
+
+export const deleteReview = (arenaId, opts) =>
+	request(`/arenas/${arenaId}/reviews/mine`, { method: 'DELETE', auth: true, ...opts });
+
+export const arenaPhotos = (arenaId, opts) => request(`/arenas/${arenaId}/photos`, opts);
+
+export const addPhoto = (arenaId, input, opts) =>
+	request(`/owner/arenas/${arenaId}/photos`, { method: 'POST', body: input, auth: true, ...opts });
+
+export const deletePhoto = (photoId, opts) =>
+	request(`/owner/photos/${photoId}`, { method: 'DELETE', auth: true, ...opts });
+
+export const copyPricingRules = (toCourtId, fromCourtId, opts) =>
+	request(`/owner/courts/${toCourtId}/pricing/copy`, {
+		method: 'POST',
+		body: { from_court_id: fromCourtId },
+		auth: true,
+		...opts
+	});
+
+export const playerHighlights = (userId, opts) => request(`/players/${userId}/highlights`, opts);
+
+export const addHighlight = (input, opts) =>
+	request('/me/highlights', { method: 'POST', body: input, auth: true, ...opts });
+
+export const deleteHighlight = (id, opts) =>
+	request(`/me/highlights/${id}`, { method: 'DELETE', auth: true, ...opts });
+
 // ------------------------------------------------------------ tournaments --
 
 export const listTournaments = (opts) => request('/tournaments', opts);

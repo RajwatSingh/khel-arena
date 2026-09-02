@@ -4,6 +4,8 @@
 	import { session } from '$lib/session.svelte.js';
 	import DateRail from '$lib/components/DateRail.svelte';
 	import HoldPanel from '$lib/components/HoldPanel.svelte';
+	import PhotoStrip from '$lib/components/PhotoStrip.svelte';
+	import ReviewPanel from '$lib/components/ReviewPanel.svelte';
 	import CentreMark from '$lib/components/CentreMark.svelte';
 	import TextAnimate from '$lib/components/TextAnimate.svelte';
 	import { reveal } from '$lib/actions/reveal.js';
@@ -302,7 +304,18 @@
 	</div>
 </section>
 
+<section class="extras">
+	<div class="shell">
+		<PhotoStrip photos={data.photos} />
+		<ReviewPanel arenaId={arena.id} />
+	</div>
+</section>
+
 <style>
+	.extras {
+		padding-bottom: var(--band);
+	}
+
 	.crumbs {
 		display: flex;
 		align-items: center;

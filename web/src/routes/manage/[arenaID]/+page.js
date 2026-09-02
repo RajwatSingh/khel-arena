@@ -25,10 +25,11 @@ export async function load({ params, fetch }) {
 		error(404, 'No venue of yours at that address.');
 	}
 
-	const [arena, payments] = await Promise.all([
+	const [arena, payments, photos] = await Promise.all([
 		api.getArena(listing.slug, { fetch }),
-		api.arenaPayments(params.arenaID, 50, { fetch })
+		api.arenaPayments(params.arenaID, 50, { fetch }),
+		api.arenaPhotos(params.arenaID, { fetch })
 	]);
 
-	return { arena, listing, payments };
+	return { arena, listing, payments, photos };
 }

@@ -88,6 +88,12 @@ func (j *Janitor) sweep(ctx context.Context) {
 		j.log.Info("released stale booking holds", "count", released)
 	}
 
+	if played, err := j.bookings.MarkPlayed(ctx); err != nil {
+		j.log.Error("marking played bookings", "error", err)
+	} else if played > 0 {
+		j.log.Info("marked bookings played", "count", played)
+	}
+
 	if j.tokens != nil {
 		if deleted, err := j.tokens.DeleteExpiredTokens(ctx, retainRevokedTokensFor); err != nil {
 			j.log.Error("deleting expired refresh tokens", "error", err)

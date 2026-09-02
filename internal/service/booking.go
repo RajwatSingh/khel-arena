@@ -27,6 +27,9 @@ type BookingStore interface {
 	Cancel(ctx context.Context, bookingID, userID uuid.UUID) error
 	ListForUser(ctx context.Context, userID uuid.UUID, limit int) ([]domain.BookingDetail, error)
 	ReleaseStaleHolds(ctx context.Context) (int, error)
+	// MarkPlayed promotes confirmed bookings whose hour has passed. The
+	// janitor's, like ReleaseStaleHolds, and reachable from no request.
+	MarkPlayed(ctx context.Context) (int, error)
 }
 
 // Clock supplies the current time. Injecting it keeps every time-dependent

@@ -28,6 +28,7 @@ type OwnerStore interface {
 	SetCourtActiveOwnerScoped(ctx context.Context, courtID, ownerID uuid.UUID, active bool) error
 
 	CreatePricingRuleOwnerScoped(ctx context.Context, ownerID uuid.UUID, rule domain.PricingRule) (domain.PricingRule, error)
+	CopyPricingRulesOwnerScoped(ctx context.Context, fromCourtID, toCourtID, ownerID uuid.UUID) (int, error)
 	DeletePricingRuleOwnerScoped(ctx context.Context, ruleID, ownerID uuid.UUID) error
 }
 
@@ -167,6 +168,18 @@ func (s *OwnerService) CreatePricingRule(ctx context.Context, ownerID uuid.UUID,
 		return domain.PricingRule{}, err
 	}
 	return s.arenas.CreatePricingRuleOwnerScoped(ctx, ownerID, rule)
+}
+
+// CopyPricingRules copies a rate card between two of the caller's courts.
+//
+// Reports how many windows were copied rather than just succeeding: copying
+// from a court with no rules is not an error, but an owner who expected four
+// and got none should be told.
+func (s *OwnerService) CopyPricingRules(ctx context.Context, fromCourtID, toCourtID, ownerID uuid.UUID) (int, error) {
+	if ownerID == uuid.Nil {
+		return 0, domain.Unauthenticated("Sign in to manage an arena.")
+	}
+	return s.arenas.CopyPricingRulesOwnerScoped(ctx, fromCourtID, toCourtID, ownerID)
 }
 
 func (s *OwnerService) DeletePricingRule(ctx context.Context, ruleID, ownerID uuid.UUID) error {

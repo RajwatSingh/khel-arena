@@ -270,6 +270,29 @@ func (r *BookingRepo) Confirm(ctx context.Context, tx DB, bookingID uuid.UUID) e
 //
 // The join is done here rather than by fetching bookings and then looking up
 // each court: that shape is what made the previous version slow.
+// MarkPlayed promotes confirmed bookings whose hour has passed.
+//
+// `completed` existed in the enum and nothing ever set it, which made it a
+// status the system could describe but never reach. The janitor calls this
+// alongside its other sweeps: a booking whose slot ended is played whether or
+// not anything has got round to writing that down.
+//
+// Only `confirmed` moves. A pending hold that lapsed is the janitor's other
+// job and becomes cancelled, not played -- nobody turned up to an hour nobody
+// paid for.
+func (r *BookingRepo) MarkPlayed(ctx context.Context) (int, error) {
+	const q = `
+		update bookings
+		   set status = 'completed'
+		 where status = 'confirmed' and upper(slot) <= now()`
+
+	tag, err := r.pool.Exec(ctx, q)
+	if err != nil {
+		return 0, domain.Internal(err, "marking played bookings")
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (r *BookingRepo) ListForUser(ctx context.Context, userID uuid.UUID, limit int) ([]domain.BookingDetail, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50

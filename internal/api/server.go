@@ -93,6 +93,7 @@ type OwnerAPI interface {
 	SetCourtActive(ctx context.Context, courtID, ownerID uuid.UUID, active bool) error
 
 	CreatePricingRule(ctx context.Context, ownerID uuid.UUID, rule domain.PricingRule) (domain.PricingRule, error)
+	CopyPricingRules(ctx context.Context, fromCourtID, toCourtID, ownerID uuid.UUID) (int, error)
 	DeletePricingRule(ctx context.Context, ruleID, ownerID uuid.UUID) error
 
 	Payments(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]postgres.OwnerPayment, error)
@@ -138,6 +139,31 @@ type TournamentAPI interface {
 	SetStatus(ctx context.Context, tournamentID, actorID uuid.UUID, status domain.TournamentStatus) error
 }
 
+// MatchAPI is the part of service.MatchService the handlers reach for.
+type MatchAPI interface {
+	Report(ctx context.Context, actorID uuid.UUID, m domain.Match) (domain.Match, error)
+	Confirm(ctx context.Context, matchID, actorID uuid.UUID) (domain.Match, error)
+	Withdraw(ctx context.Context, matchID, actorID uuid.UUID) error
+	ListForTeam(ctx context.Context, teamID uuid.UUID, limit int) ([]domain.Match, error)
+	Standings(ctx context.Context, limit int) ([]domain.Standing, error)
+}
+
+// ReviewAPI is the part of service.ReviewService the handlers reach for.
+type ReviewAPI interface {
+	Review(ctx context.Context, arenaID, userID uuid.UUID, rating int, comment string) (domain.Review, error)
+	MyReview(ctx context.Context, arenaID, userID uuid.UUID) (domain.Review, bool, error)
+	DeleteReview(ctx context.Context, arenaID, userID uuid.UUID) error
+	ListReviews(ctx context.Context, arenaID uuid.UUID, limit int) ([]domain.Review, error)
+
+	ListPhotos(ctx context.Context, arenaID uuid.UUID) ([]postgres.Photo, error)
+	AddPhoto(ctx context.Context, ownerID uuid.UUID, p postgres.Photo) (postgres.Photo, error)
+	DeletePhoto(ctx context.Context, photoID, ownerID uuid.UUID) error
+
+	ListHighlights(ctx context.Context, userID uuid.UUID) ([]postgres.Highlight, error)
+	AddHighlight(ctx context.Context, userID uuid.UUID, title, url string) (postgres.Highlight, error)
+	DeleteHighlight(ctx context.Context, highlightID, userID uuid.UUID) error
+}
+
 // Mailer sends the reset link. One method, because that is the only message
 // this layer triggers.
 type Mailer interface {
@@ -164,6 +190,8 @@ type Options struct {
 	Teams       TeamAPI
 	Calls       MatchmakingAPI
 	Tournaments TournamentAPI
+	Matches     MatchAPI
+	Reviews     ReviewAPI
 
 	// Mailer delivers the password-reset link. Optional: with none, the token
 	// is only logged (see LogResetTokens), which is the development path.
@@ -221,6 +249,8 @@ type Server struct {
 	teams       TeamAPI
 	calls       MatchmakingAPI
 	tournaments TournamentAPI
+	matches     MatchAPI
+	reviews     ReviewAPI
 	mailer      Mailer
 	pinger      Pinger
 
@@ -252,6 +282,8 @@ func NewServer(opts Options) *Server {
 		teams:          opts.Teams,
 		calls:          opts.Calls,
 		tournaments:    opts.Tournaments,
+		matches:        opts.Matches,
+		reviews:        opts.Reviews,
 		mailer:         opts.Mailer,
 		pinger:         opts.Pinger,
 		appURL:         strings.TrimRight(opts.AppURL, "/"),
@@ -296,6 +328,11 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /v1/courts/{courtID}/availability", s.handleAvailability)
 	mux.HandleFunc("GET /v1/payments/providers", s.handleListProviders)
 	mux.HandleFunc("GET /v1/calls", s.handleCallFeed)
+	mux.HandleFunc("GET /v1/standings", s.handleStandings)
+	mux.HandleFunc("GET /v1/teams/{teamID}/matches", s.handleTeamMatches)
+	mux.HandleFunc("GET /v1/arenas/{arenaID}/reviews", s.handleListReviews)
+	mux.HandleFunc("GET /v1/arenas/{arenaID}/photos", s.handleListPhotos)
+	mux.HandleFunc("GET /v1/players/{userID}/highlights", s.handleListHighlights)
 	mux.HandleFunc("GET /v1/tournaments", s.handleListTournaments)
 	mux.HandleFunc("GET /v1/tournaments/{slug}", s.handleGetTournament)
 
@@ -331,6 +368,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("PUT /v1/owner/courts/{courtID}", protected(s.handleUpdateCourt))
 	mux.Handle("PUT /v1/owner/courts/{courtID}/active", protected(s.handleSetCourtActive))
 	mux.Handle("POST /v1/owner/courts/{courtID}/pricing", protected(s.handleCreatePricingRule))
+	mux.Handle("POST /v1/owner/courts/{courtID}/pricing/copy", protected(s.handleCopyPricingRules))
 	mux.Handle("DELETE /v1/owner/pricing/{ruleID}", protected(s.handleDeletePricingRule))
 	mux.Handle("POST /v1/owner/payments/{paymentID}/received", protected(s.handleMarkCashReceived))
 
@@ -367,6 +405,20 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("DELETE /v1/tournaments/{tournamentID}/teams/{teamID}", protected(s.handleWithdrawTeam))
 	mux.Handle("PUT /v1/tournaments/{tournamentID}/teams/{teamID}/paid", protected(s.handleSetEntryPaid))
 	mux.Handle("PUT /v1/tournaments/{tournamentID}/status", protected(s.handleSetTournamentStatus))
+
+	// Results. One captain files, the other agrees.
+	mux.Handle("POST /v1/matches", protected(s.handleReportMatch))
+	mux.Handle("POST /v1/matches/{matchID}/confirm", protected(s.handleConfirmMatch))
+	mux.Handle("DELETE /v1/matches/{matchID}", protected(s.handleWithdrawMatch))
+
+	// Reviews, galleries and player highlights.
+	mux.Handle("GET /v1/arenas/{arenaID}/reviews/mine", protected(s.handleMyReview))
+	mux.Handle("PUT /v1/arenas/{arenaID}/reviews/mine", protected(s.handleReviewArena))
+	mux.Handle("DELETE /v1/arenas/{arenaID}/reviews/mine", protected(s.handleDeleteReview))
+	mux.Handle("POST /v1/owner/arenas/{arenaID}/photos", protected(s.handleAddPhoto))
+	mux.Handle("DELETE /v1/owner/photos/{photoID}", protected(s.handleDeletePhoto))
+	mux.Handle("POST /v1/me/highlights", protected(s.handleAddHighlight))
+	mux.Handle("DELETE /v1/me/highlights/{highlightID}", protected(s.handleDeleteHighlight))
 
 	// Outermost first. Recovery has to be able to catch a panic thrown by any
 	// of the others, request ID has to exist before anything logs, and CORS

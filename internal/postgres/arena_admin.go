@@ -285,6 +285,42 @@ func (r *ArenaRepo) CreatePricingRuleOwnerScoped(ctx context.Context, ownerID uu
 	return created, nil
 }
 
+// CopyPricingRulesOwnerScoped copies one court's rate card onto another.
+//
+// The tedious part of running a venue with five identical courts is setting
+// the same four rate windows five times. This does it in one statement, and
+// the statement is what carries the authorization: both courts are reached
+// through a join to `arenas` filtered by owner, so a card cannot be copied
+// from or onto somebody else's pitch.
+//
+// It appends rather than replaces. Two overlapping windows are already a
+// situation the pricing rules handle -- highest priority wins, ties break to
+// the narrower -- and silently deleting what an owner had set up would be a
+// worse surprise than a duplicate they can remove.
+func (r *ArenaRepo) CopyPricingRulesOwnerScoped(ctx context.Context, fromCourtID, toCourtID, ownerID uuid.UUID) (int, error) {
+	if fromCourtID == toCourtID {
+		return 0, domain.Invalid("from_court_id", "That's the same court.")
+	}
+
+	const q = `
+		insert into pricing_rules (court_id, label, days, start_hour, end_hour, price_npr, is_peak, priority)
+		select $2, p.label, p.days, p.start_hour, p.end_hour, p.price_npr, p.is_peak, p.priority
+		from pricing_rules p
+		join courts src on src.id = p.court_id
+		join arenas sa  on sa.id = src.arena_id
+		-- The destination is joined in as well, so a copy onto a court the
+		-- caller does not own inserts nothing rather than inserting freely.
+		join courts dst on dst.id = $2
+		join arenas da  on da.id = dst.arena_id
+		where p.court_id = $1 and sa.owner_id = $3 and da.owner_id = $3`
+
+	tag, err := r.pool.Exec(ctx, q, fromCourtID, toCourtID, ownerID)
+	if err != nil {
+		return 0, domain.Internal(err, "copying pricing rules from court %s", fromCourtID)
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 // DeletePricingRuleOwnerScoped removes a rate window.
 //
 // Deleted rather than deactivated, unlike a court: a rule holds no history.

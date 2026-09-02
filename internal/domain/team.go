@@ -122,7 +122,62 @@ type Match struct {
 	AwayScore int
 	PlayedAt  time.Time
 	Verified  bool
-	CreatedAt time.Time
+	// ReportedBy is the captain who filed the score. Confirmation has to come
+	// from the other side, so this is what makes `Verified` mean "both agreed"
+	// rather than "somebody said so twice".
+	ReportedBy uuid.UUID
+	CreatedAt  time.Time
+
+	// Populated when a result is read for display.
+	HomeName string
+	HomeTag  string
+	AwayName string
+	AwayTag  string
+}
+
+// Involves reports whether a team played in this match.
+func (m Match) Involves(teamID uuid.UUID) bool {
+	return m.HomeTeam == teamID || m.AwayTeam == teamID
+}
+
+// CanBeConfirmedBy states whether the captain of teamID may confirm this
+// result, and why not.
+//
+// The rule is the point of the whole flow: one captain reports, the other
+// agrees. A captain confirming their own report would make `verified` a
+// synonym for `reported`, and the standings are built on verified results
+// alone.
+func (m Match) CanBeConfirmedBy(actorID, teamID uuid.UUID) error {
+	if m.Verified {
+		return Conflict("That result is already agreed.")
+	}
+	if !m.Involves(teamID) {
+		return Forbidden("Only the two captains can confirm a result.")
+	}
+	if m.ReportedBy == uuid.Nil {
+		// A result with no reporter -- one filed before this was recorded --
+		// cannot be confirmed by anybody. Safer than letting either side
+		// wave it through.
+		return Conflict("We can't tell who filed that result. Report it again.")
+	}
+	if m.ReportedBy == actorID {
+		return Conflict("The other captain has to agree the score.")
+	}
+	return nil
+}
+
+// CanBeWithdrawnBy states whether a captain may delete a result.
+//
+// Either side, and only while it is unagreed: once both captains have said the
+// same thing it is a record of what happened, not a draft.
+func (m Match) CanBeWithdrawnBy(teamID uuid.UUID) error {
+	if !m.Involves(teamID) {
+		return Forbidden("Only the two captains can withdraw a result.")
+	}
+	if m.Verified {
+		return Conflict("Both captains agreed that result. It stands.")
+	}
+	return nil
 }
 
 func (m *Match) Validate() error {

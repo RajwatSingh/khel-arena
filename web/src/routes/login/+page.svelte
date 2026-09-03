@@ -1,5 +1,6 @@
 <script>
 	import { goto } from '$app/navigation';
+	import { dev } from '$app/environment';
 	import { page } from '$app/state';
 	import { ApiError } from '$lib/api/index.js';
 	import { session } from '$lib/session.svelte.js';
@@ -54,10 +55,12 @@
 				An hour held without a name is just an hour. Sign in and the court comes off the board in
 				yours.
 			</p>
-			<p class="demo small fade-up fade-up-3">
-				Nothing is wired to a server yet. Try <strong>rajwat@khelarena.np</strong> with
-				<strong>kathmandu2026</strong>.
-			</p>
+			{#if dev}
+				<p class="demo small fade-up fade-up-3">
+					Local dev seed account: <strong>rajwat@khelarena.np</strong> /
+					<strong>kathmandu2026</strong>. Run <strong>make seed</strong> if it's missing.
+				</p>
+			{/if}
 		</div>
 
 		<form class="card fade-up fade-up-1" onsubmit={submit} novalidate>

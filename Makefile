@@ -33,6 +33,10 @@ run: ## Run the API on $(HTTP_ADDR), reading .env if present
 smoke: ## Smoke-test a running API (BASE_URL, COURT_ID override)
 	@DATABASE_URL="$${DATABASE_URL:-$(DB_URL)}" ./scripts/smoke.sh
 
+.PHONY: seed
+seed: ## Seed a running API with demo accounts + a venue (BASE_URL override)
+	@./scripts/seed-dev.sh
+
 # ── Test ────────────────────────────────────────────────────────────────────
 
 .PHONY: test

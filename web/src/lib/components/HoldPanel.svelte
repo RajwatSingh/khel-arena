@@ -6,13 +6,17 @@
 	/**
 	 * The right-hand column of the booking page: what you picked, what it costs,
 	 * and — once held — how long you have left to pay for it.
+	 *
+	 * `summary` describes the selection before anything is held (total hours,
+	 * how many separate bookings, the price). `holds` is what came back from
+	 * "Hold" — one booking, or more when the picked hours weren't all in a row.
 	 */
 	let {
 		arena,
 		court,
 		date,
-		slot,
-		hold,
+		summary = null,
+		holds = [],
 		busy = false,
 		error = null,
 		signedIn = false,
@@ -23,48 +27,58 @@
 
 	const ticking = clock();
 
-	const remaining = $derived(
-		hold?.hold_expires_at ? new Date(hold.hold_expires_at).getTime() - ticking.now : 0
+	const pending = $derived(holds.filter((h) => h.status === 'pending'));
+	const soonest = $derived(
+		pending.length ? Math.min(...pending.map((h) => new Date(h.hold_expires_at).getTime())) : 0
 	);
-	const lapsed = $derived(hold?.status === 'pending' && remaining <= 0);
+	const remaining = $derived(soonest ? soonest - ticking.now : 0);
 
-	// What the panel is showing right now, not how it got there — used only
-	// to key the transition below, so a status change slides the panel's
-	// content rather than snapping it.
+	const allConfirmed = $derived(holds.length > 0 && holds.every((h) => h.status === 'confirmed'));
+	const lapsed = $derived(pending.length > 0 && remaining <= 0);
+	const single = $derived(holds.length === 1 ? holds[0] : null);
+	const heldHours = $derived(
+		holds.reduce(
+			(n, h) => n + Math.round((new Date(h.ends_at).getTime() - new Date(h.starts_at).getTime()) / 3_600_000),
+			0
+		)
+	);
+
+	// Keys the slide transition to the panel's current shape, not how it got
+	// there.
 	const stateKey = $derived(
-		hold && hold.status === 'confirmed'
-			? 'confirmed'
-			: hold && lapsed
-				? 'lapsed'
-				: hold
-					? 'held'
-					: slot
-						? 'selected'
-						: 'empty'
+		allConfirmed ? 'confirmed' : lapsed ? 'lapsed' : holds.length ? 'held' : summary ? 'selected' : 'empty'
 	);
 </script>
 
 <aside class="card panel" aria-live="polite">
 {#key stateKey}
 <div in:fly={{ y: 10, duration: 260 }}>
-	{#if hold && hold.status === 'confirmed'}
+	{#if allConfirmed}
 		<p class="label">Confirmed</p>
-		<p class="headline display num">{hold.reference}</p>
-		<p class="body">
-			{court.name} at {arena.name}, {formatDateLong(date)}, {formatTime(hold.starts_at)}–{formatTime(
-				hold.ends_at
-			)}. Read the reference out at the gate.
-		</p>
+		{#if single}
+			<p class="headline display num">{single.reference}</p>
+			<p class="body">
+				{court.name} at {arena.name}, {formatDateLong(date)}, {formatTime(single.starts_at)}–{formatTime(
+					single.ends_at
+				)}. Read the reference out at the gate.
+			</p>
+		{:else}
+			<p class="headline display">{holds.length} bookings</p>
+			<p class="body">
+				All {holds.length} are paid and confirmed for {formatDateLong(date)}. The references are on
+				your bookings page.
+			</p>
+		{/if}
 		<a class="btn btn-secondary wide" href="/bookings">See my bookings</a>
-	{:else if hold && lapsed}
+	{:else if lapsed}
 		<p class="label">Hold lapsed</p>
 		<p class="headline display">Time up</p>
 		<p class="body">
-			Fifteen minutes went by, so the hour went back on the board. Pick it again if it is still
-			there.
+			Fifteen minutes went by, so the {pending.length === 1 ? 'hour' : 'hours'} went back on the
+			board. Pick again if still free.
 		</p>
 		<button class="btn btn-secondary wide" onclick={onrelease}>Start over</button>
-	{:else if hold}
+	{:else if holds.length}
 		<p class="label">Held for you</p>
 		<p
 			class="headline display num"
@@ -73,11 +87,20 @@
 		>
 			{formatCountdown(remaining)}
 		</p>
-		<p class="body">
-			{court.name} · {formatTime(hold.starts_at)}–{formatTime(hold.ends_at)} · {formatDateLong(date)}
-		</p>
+		{#if single}
+			<p class="body">
+				{court.name} · {formatTime(single.starts_at)}–{formatTime(single.ends_at)} · {formatDateLong(
+					date
+				)}
+			</p>
+		{:else}
+			<p class="body">
+				{heldHours} hours across {holds.length} bookings · {formatDateLong(date)}
+			</p>
+		{/if}
 		<p class="body dim">
-			Pay before the clock runs out or the hour is released. Nobody else can take it until then.
+			Pay before the clock runs out or {single ? 'the hour is' : 'the hours are'} released. Nobody
+			else can take {single ? 'it' : 'them'} until then.
 		</p>
 
 		{#if error}
@@ -85,48 +108,78 @@
 		{/if}
 
 		<div class="actions">
-			<button class="btn btn-primary grow" class:loading={busy} onclick={() => onpay()} disabled={busy}>
-				{busy ? 'Talking to the gateway…' : `Pay NPR ${formatNPR(hold.price_npr)}`}
+			<button
+				class="btn btn-primary grow"
+				class:loading={busy}
+				onclick={() => onpay()}
+				disabled={busy}
+			>
+				{#if busy && single}Talking to the gateway…{:else if single}Pay NPR {formatNPR(
+						single.price_npr
+					)}{:else}Pay in My bookings{/if}
 			</button>
-			<button class="btn btn-secondary" onclick={onrelease} disabled={busy}>Cancel hold</button>
+			<button class="btn btn-secondary" onclick={onrelease} disabled={busy}>
+				{single ? 'Cancel hold' : 'Cancel all'}
+			</button>
 		</div>
-	{:else if slot}
-		{@const hours = slot.hours ?? 1}
+	{:else if summary}
 		<p class="label">Selected</p>
-		<p class="headline display num">{formatTime(slot.starts_at)}–{formatTime(slot.ends_at)}</p>
+		{#if summary.ends_at}
+			<p class="headline display num">
+				{formatTime(summary.starts_at)}–{formatTime(summary.ends_at)}
+			</p>
+		{:else}
+			<p class="headline display num">{summary.hours} hours</p>
+		{/if}
 		<dl class="lines">
 			<div><dt>Court</dt><dd>{court.name} · {court.format}</dd></div>
 			<div><dt>Date</dt><dd>{formatDateLong(date)}</dd></div>
-			<div><dt>Rate</dt><dd>{slot.rule}{slot.is_peak ? ' · peak' : ''}</dd></div>
+			<div><dt>Rate</dt><dd>{summary.rule}{summary.is_peak ? ' · peak' : ''}</dd></div>
+			{#if summary.blocks > 1}
+				<div><dt>Bookings</dt><dd>{summary.blocks} separate holds</dd></div>
+			{/if}
 			<div class="total">
-				<dt>{hours === 1 ? 'One hour' : `${hours} hours`}</dt>
-				<dd class="num">NPR {formatNPR(slot.price_npr)}</dd>
+				<dt>{summary.hours === 1 ? 'One hour' : `${summary.hours} hours`}</dt>
+				<dd class="num">NPR {formatNPR(summary.price_npr)}</dd>
 			</div>
 		</dl>
 
-		{#if error}
+		{#if summary.overlong}
+			<p class="error" role="alert">
+				One block runs over four hours. Drop an hour, or leave a gap so it splits into two
+				bookings.
+			</p>
+		{:else if error}
 			<p class="error" role="alert">{error}</p>
 		{/if}
 
 		{#if signedIn}
-			<button class="btn btn-primary wide" class:loading={busy} onclick={onhold} disabled={busy}>
-				{busy ? 'Taking the hours…' : hours === 1 ? 'Hold this hour' : `Hold ${hours} hours`}
+			<button
+				class="btn btn-primary wide"
+				class:loading={busy}
+				onclick={onhold}
+				disabled={busy || summary.overlong}
+			>
+				{#if busy}Taking the {summary.hours === 1 ? 'hour' : 'hours'}…{:else if summary.hours === 1}Hold
+					this hour{:else}Hold {summary.hours} hours{/if}
 			</button>
 			<p class="body dim">
-				Nothing is charged yet. You get fifteen minutes to pay before it goes back on the board.
+				Nothing is charged yet. You get fifteen minutes to pay before
+				{summary.hours === 1 ? 'it goes' : 'they go'} back on the board.
 			</p>
 		{:else}
-			<a class="btn btn-primary wide" href="/login">Sign in to hold it</a>
+			<a class="btn btn-primary wide" href="/login">Sign in to hold {summary.hours === 1 ? 'it' : 'them'}</a>
 			<p class="body dim">
-				Holding an hour puts it in your name, so we need to know whose name that is.
+				Holding {summary.hours === 1 ? 'an hour' : 'hours'} puts {summary.hours === 1 ? 'it' : 'them'}
+				in your name, so we need to know whose name that is.
 			</p>
 		{/if}
 	{:else}
 		<p class="label">Nothing picked yet</p>
-		<p class="headline display quiet">Choose an hour</p>
+		<p class="headline display quiet">Choose your hours</p>
 		<p class="body">
-			Tap a free hour on the left and it appears here with the price. Struck-through hours are
-			already taken; hatched ones have been and gone.
+			Tap any free hours on the left — back to back or not — and they appear here with the price.
+			Struck-through hours are taken; hatched ones have been and gone.
 		</p>
 	{/if}
 </div>

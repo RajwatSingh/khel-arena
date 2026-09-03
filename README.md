@@ -148,7 +148,10 @@ make run                      # the API on :8080
 
 With the API up, `make web` serves the frontend on :5173 and proxies `/v1` to
 it, so both sides share an origin and the refresh cookie works as configured.
-A quick check that it is alive:
+`make seed` then creates two demo accounts (`rajwat@khelarena.np` and
+`owner@khelarena.np`, both `kathmandu2026`) and a bookable venue by calling the
+running API; it is idempotent and for development only. A quick check that it is
+alive:
 
 ```sh
 curl -s localhost:8080/healthz

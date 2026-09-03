@@ -7,16 +7,27 @@
 	 * of empty rows for venues that only uploaded two.
 	 */
 	let { photos } = $props();
+
+	// A photo row whose file has gone missing (or a seed row pointing at a
+	// host that never resolves) should drop out of the strip rather than
+	// leave a broken-image box behind.
+	let broken = $state(new Set());
+	const shown = $derived(photos.filter((p) => !broken.has(p.id)));
 </script>
 
-{#if photos.length}
+{#if shown.length}
 	<section class="gallery">
 		<h2 class="display display-m">The place</h2>
 		<ul>
-			{#each photos as photo (photo.id)}
+			{#each shown as photo (photo.id)}
 				<li>
 					<figure>
-						<img src={photo.url} alt={photo.caption || 'The arena'} loading="lazy" />
+						<img
+							src={photo.url}
+							alt={photo.caption || 'The arena'}
+							loading="lazy"
+							onerror={() => (broken = new Set(broken).add(photo.id))}
+						/>
 						{#if photo.caption}<figcaption class="small">{photo.caption}</figcaption>{/if}
 					</figure>
 				</li>

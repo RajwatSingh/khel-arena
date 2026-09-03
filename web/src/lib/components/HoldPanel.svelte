@@ -86,11 +86,12 @@
 
 		<div class="actions">
 			<button class="btn btn-primary grow" class:loading={busy} onclick={() => onpay()} disabled={busy}>
-				{busy ? 'Talking to eSewa…' : `Pay NPR ${formatNPR(hold.price_npr)}`}
+				{busy ? 'Talking to the gateway…' : `Pay NPR ${formatNPR(hold.price_npr)}`}
 			</button>
-			<button class="btn btn-secondary" onclick={onrelease} disabled={busy}>Release</button>
+			<button class="btn btn-secondary" onclick={onrelease} disabled={busy}>Cancel hold</button>
 		</div>
 	{:else if slot}
+		{@const hours = slot.hours ?? 1}
 		<p class="label">Selected</p>
 		<p class="headline display num">{formatTime(slot.starts_at)}–{formatTime(slot.ends_at)}</p>
 		<dl class="lines">
@@ -98,7 +99,7 @@
 			<div><dt>Date</dt><dd>{formatDateLong(date)}</dd></div>
 			<div><dt>Rate</dt><dd>{slot.rule}{slot.is_peak ? ' · peak' : ''}</dd></div>
 			<div class="total">
-				<dt>One hour</dt>
+				<dt>{hours === 1 ? 'One hour' : `${hours} hours`}</dt>
 				<dd class="num">NPR {formatNPR(slot.price_npr)}</dd>
 			</div>
 		</dl>
@@ -109,7 +110,7 @@
 
 		{#if signedIn}
 			<button class="btn btn-primary wide" class:loading={busy} onclick={onhold} disabled={busy}>
-				{busy ? 'Taking the hour…' : 'Hold this hour'}
+				{busy ? 'Taking the hours…' : hours === 1 ? 'Hold this hour' : `Hold ${hours} hours`}
 			</button>
 			<p class="body dim">
 				Nothing is charged yet. You get fifteen minutes to pay before it goes back on the board.

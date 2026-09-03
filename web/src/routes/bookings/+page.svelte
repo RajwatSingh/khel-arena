@@ -196,7 +196,7 @@
 						<div class="acts">
 							{#if booking.status === 'pending' && remaining > 0}
 								<button class="btn btn-primary" onclick={() => pay(booking)}>Pay</button>
-								<button class="btn btn-secondary" onclick={() => cancel(booking)}>Release</button>
+								<button class="btn btn-secondary" onclick={() => cancel(booking)}>Cancel hold</button>
 							{:else if booking.status === 'confirmed'}
 								<button class="btn btn-secondary" onclick={() => cancel(booking)}>Cancel</button>
 							{/if}

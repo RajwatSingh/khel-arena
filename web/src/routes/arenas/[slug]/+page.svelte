@@ -18,7 +18,14 @@
 
 	let courtId = $state(page.url.searchParams.get('court'));
 	let date = $state(page.url.searchParams.get('date') ?? dates[0]);
-	let picked = $state(page.url.searchParams.get('at'));
+
+	// A booking can span up to four consecutive free hours. `anchor` is the
+	// first hour tapped; `head` is the far end of the block (null while only
+	// one hour is picked). The deep link from the search pages sets the
+	// anchor.
+	let anchor = $state(page.url.searchParams.get('at'));
+	let head = $state(null);
+
 	let hold = $state(null);
 	let busy = $state(false);
 	let error = $state(null);
@@ -81,8 +88,55 @@
 		};
 	});
 
-	const slot = $derived(grid.slots.find((s) => s.starts_at === picked && s.available) ?? null);
 	const freeCount = $derived(grid.slots.filter((s) => s.available).length);
+
+	// The most consecutive free hours the domain allows in one booking.
+	const MAX_HOURS = 4;
+
+	/**
+	 * The run of grid slots from one start time to another, in order — or an
+	 * empty array if that run isn't a bookable block: a gap, a taken hour, or
+	 * longer than the four-hour limit.
+	 */
+	function runBetween(aStart, bStart) {
+		const slots = grid.slots;
+		let i = slots.findIndex((x) => x.starts_at === aStart);
+		let j = slots.findIndex((x) => x.starts_at === bStart);
+		if (i < 0 || j < 0) return [];
+		if (i > j) [i, j] = [j, i];
+		const run = slots.slice(i, j + 1);
+		if (run.length > MAX_HOURS) return [];
+		for (let k = 0; k < run.length; k++) {
+			if (!run[k].available) return [];
+			if (k > 0 && run[k - 1].ends_at !== run[k].starts_at) return [];
+		}
+		return run;
+	}
+
+	// The hours currently selected, as grid slots.
+	const selection = $derived(anchor ? runBetween(anchor, head ?? anchor) : []);
+	const selectedStarts = $derived(new Set(selection.map((s) => s.starts_at)));
+
+	/**
+	 * One synthetic "slot" standing for the whole block, so the panel and the
+	 * hold request work the same for one hour or four.
+	 *
+	 * The price follows the service's rule: the rate at the *start* hour,
+	 * charged for every hour of the block — an evening block that starts in
+	 * peak is peak throughout, not split at the boundary.
+	 */
+	const slot = $derived(
+		selection.length
+			? {
+					starts_at: selection[0].starts_at,
+					ends_at: selection[selection.length - 1].ends_at,
+					hours: selection.length,
+					price_npr: selection[0].price_npr * selection.length,
+					rule: selection[0].rule,
+					is_peak: selection[0].is_peak
+				}
+			: null
+	);
 
 	let lastArenaId;
 	$effect(() => {
@@ -93,28 +147,54 @@
 		}
 		lastArenaId = id;
 		courtId = null;
-		picked = null;
+		clearSelection();
 		hold = null;
 		error = null;
 	});
 
 	const shownError = $derived(error ?? gridError);
 
+	function clearSelection() {
+		anchor = null;
+		head = null;
+	}
+
+	/**
+	 * Tap once to pick an hour; tap another free hour to book the block
+	 * between them. Tapping the sole picked hour again clears it; tapping
+	 * somewhere a block can't reach starts a new selection there.
+	 */
 	function choose(next) {
-		picked = next.starts_at;
 		error = null;
+		if (hold) return;
+
+		if (!anchor || (next.starts_at === anchor && head === null)) {
+			const sameHour = anchor === next.starts_at && head === null;
+			anchor = sameHour ? null : next.starts_at;
+			head = null;
+			return;
+		}
+
+		const run = runBetween(anchor, next.starts_at);
+		if (run.length) {
+			head = next.starts_at;
+		} else {
+			// A gap, a taken hour, or over four hours — restart from here.
+			anchor = next.starts_at;
+			head = null;
+		}
 	}
 
 	function switchCourt(id) {
 		courtId = id;
-		picked = null;
+		clearSelection();
 		hold = null;
 		error = null;
 	}
 
 	function switchDate(next) {
 		date = next;
-		picked = null;
+		clearSelection();
 		hold = null;
 		error = null;
 	}
@@ -125,10 +205,9 @@
 		try {
 			hold = await api.createBooking({
 				court_id: court.id,
+				// The whole block, start to finish. One booking covers one to
+				// four consecutive hours; the service prices and locks the span.
 				starts_at: slot.starts_at,
-				// Both ends, explicitly. The mock inferred the end from the
-				// grid; the service will not guess at what it is being asked
-				// to reserve.
 				ends_at: slot.ends_at
 			});
 		} catch (err) {
@@ -164,7 +243,7 @@
 	async function release() {
 		const id = hold?.id;
 		hold = null;
-		picked = null;
+		clearSelection();
 		error = null;
 		if (id) await api.cancelBooking(id).catch(() => {});
 	}
@@ -259,6 +338,15 @@
 					{court.name} · {freeCount}
 					{freeCount === 1 ? 'hour' : 'hours'} free
 				</h2>
+				<p class="hours-hint small">
+					{#if selection.length > 1}
+						{selection.length} hours selected — {formatTime(slot.starts_at)}–{formatTime(
+							slot.ends_at
+						)}. Tap another hour to change the block, or tap the first one to clear it.
+					{:else}
+						Tap an hour, then tap another to book a block of up to four.
+					{/if}
+				</p>
 				<ul class="hours">
 					{#each grid.slots as s, i (s.starts_at)}
 						<li style="--i: {Math.min(i, 10)}">
@@ -267,8 +355,8 @@
 									type="button"
 									class="hour"
 									class:peak={s.is_peak}
-									class:on={picked === s.starts_at}
-									aria-pressed={picked === s.starts_at}
+									class:on={selectedStarts.has(s.starts_at)}
+									aria-pressed={selectedStarts.has(s.starts_at)}
 									onclick={() => choose(s)}
 								>
 									<span class="at num">{formatTime(s.starts_at)}</span>
@@ -425,6 +513,12 @@
 
 	.section-label {
 		margin-bottom: 0.8rem;
+	}
+
+	.hours-hint {
+		margin: -0.4rem 0 1rem;
+		color: var(--muted);
+		max-width: 40ch;
 	}
 
 	/* A pick-list, not a rack of tiles: rows in a register, told apart by a

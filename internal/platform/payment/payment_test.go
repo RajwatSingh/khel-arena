@@ -324,22 +324,31 @@ func TestCashNeverVerifies(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------- registry --
+// ---------------------------------------------------------------- factory --
 
-func TestRegistryOffersOnlyWhatIsConfigured(t *testing.T) {
-	r := Registry{
-		domain.ProviderCash:  NewCash(),
-		domain.ProviderEsewa: NewEsewa([]byte("s"), "EPAYTEST", "", ""),
+func TestFromAccountPicksTheHostFromLive(t *testing.T) {
+	sandbox, err := FromAccount(domain.ArenaPaymentAccount{
+		Provider: domain.ProviderEsewa, SecretKey: "s", MerchantCode: "EPAYTEST", Live: false,
+	}, "https://khelarena.test")
+	if err != nil {
+		t.Fatalf("building sandbox eSewa: %v", err)
+	}
+	if got := sandbox.(*Esewa).FormURL; got != EsewaFormURLSandbox {
+		t.Errorf("form URL = %q, want the sandbox host", got)
 	}
 
-	if got := r.Providers(); len(got) != 2 {
-		t.Errorf("providers = %v, want two", got)
+	live, err := FromAccount(domain.ArenaPaymentAccount{
+		Provider: domain.ProviderKhalti, SecretKey: "s", Live: true,
+	}, "https://khelarena.test")
+	if err != nil {
+		t.Fatalf("building live Khalti: %v", err)
 	}
-	if _, err := r.Get(domain.ProviderKhalti); domain.CodeOf(err) != domain.CodeInvalid {
-		t.Errorf("code = %q, want invalid for an unconfigured provider", domain.CodeOf(err))
+	if got := live.(*Khalti).BaseURL; got != KhaltiBaseURLLive {
+		t.Errorf("base URL = %q, want the live host", got)
 	}
-	if _, err := r.Get(domain.ProviderEsewa); err != nil {
-		t.Errorf("a configured provider was refused: %v", err)
+
+	if _, err := FromAccount(domain.ArenaPaymentAccount{Provider: domain.ProviderCash}, ""); domain.CodeOf(err) != domain.CodeInvalid {
+		t.Errorf("code = %q, want invalid for a provider with no per-venue account", domain.CodeOf(err))
 	}
 }
 

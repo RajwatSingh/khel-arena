@@ -30,10 +30,14 @@ type PaymentBookings interface {
 // records; the player is sent to a gateway; and what comes back through their
 // browser is used only to decide which payment to ask the gateway about. The
 // gateway's own answer is the only thing that confirms anything.
+//
+// The gateway itself is resolved per booking: an online payment goes through
+// the venue's own merchant account, so there is no one place a platform key
+// lives. See GatewayResolver.
 type PaymentService struct {
 	payments   PaymentStore
 	bookings   PaymentBookings
-	gateways   payment.Registry
+	gateways   GatewayResolver
 	returnURLs func(domain.PaymentProvider) payment.ReturnURLs
 	clock      Clock
 }
@@ -41,7 +45,7 @@ type PaymentService struct {
 func NewPaymentService(
 	payments PaymentStore,
 	bookings PaymentBookings,
-	gateways payment.Registry,
+	gateways GatewayResolver,
 	returnURLs func(domain.PaymentProvider) payment.ReturnURLs,
 	clock Clock,
 ) *PaymentService {
@@ -57,10 +61,6 @@ func NewPaymentService(
 	}
 }
 
-// Providers lists the gateways that are actually configured, so the interface
-// offers only options that will work.
-func (s *PaymentService) Providers() []domain.PaymentProvider { return s.gateways.Providers() }
-
 // Checkout starts a payment and describes where to send the player.
 //
 // Ownership is checked here rather than in the repository, unlike
@@ -74,11 +74,6 @@ func (s *PaymentService) Checkout(ctx context.Context, bookingID, userID uuid.UU
 		return payment.Checkout{}, domain.Payment{}, domain.Unauthenticated("Sign in to pay for a booking.")
 	}
 
-	gateway, err := s.gateways.Get(provider)
-	if err != nil {
-		return payment.Checkout{}, domain.Payment{}, err
-	}
-
 	booking, err := s.bookings.ByID(ctx, bookingID)
 	if err != nil {
 		return payment.Checkout{}, domain.Payment{}, err
@@ -87,6 +82,13 @@ func (s *PaymentService) Checkout(ctx context.Context, bookingID, userID uuid.UU
 		// Not found rather than forbidden: whether a booking exists is not
 		// something a stranger gets to learn by asking to pay for it.
 		return payment.Checkout{}, domain.Payment{}, domain.NotFound("No booking with that reference.")
+	}
+
+	// The gateway is the venue's, resolved from the booking. An unconfigured
+	// provider fails here, before a payment row exists.
+	gateway, err := s.gateways.ForCheckout(ctx, bookingID, provider)
+	if err != nil {
+		return payment.Checkout{}, domain.Payment{}, err
 	}
 
 	// The amount comes from the booking, which got it from the pricing rules
@@ -119,10 +121,6 @@ func (s *PaymentService) Checkout(ctx context.Context, bookingID, userID uuid.UU
 // The booking is confirmed in the same transaction as the payment write. See
 // PaymentRepo.Settle for why that is not two writes.
 func (s *PaymentService) Settle(ctx context.Context, provider domain.PaymentProvider, ref payment.CallbackRef) (domain.Payment, error) {
-	gateway, err := s.gateways.Get(provider)
-	if err != nil {
-		return domain.Payment{}, err
-	}
 	if ref.TransactionUUID == "" {
 		return domain.Payment{}, domain.Invalid("transaction", "That payment link names no transaction.")
 	}
@@ -140,6 +138,13 @@ func (s *PaymentService) Settle(ctx context.Context, provider domain.PaymentProv
 		// Already done. Gateways retry and players refresh; neither should
 		// reach the gateway again or change anything.
 		return p, nil
+	}
+
+	// The gateway is resolved from the payment's own arena, so verification
+	// goes back to the same merchant account the money went to.
+	gateway, err := s.gateways.ForSettlement(ctx, p)
+	if err != nil {
+		return domain.Payment{}, err
 	}
 
 	result, err := gateway.Verify(ctx, p, ref)

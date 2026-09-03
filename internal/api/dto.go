@@ -583,6 +583,28 @@ type activeRequest struct {
 	Active bool `json:"active"`
 }
 
+// paymentAccountWriteRequest is the per-venue gateway credentials form.
+//
+// The provider is in the path, not the body: a body that could name one would
+// let an owner store an eSewa key under Khalti's row. secret_key is
+// write-only — it never comes back out (see domain.ArenaPaymentAccountInfo).
+type paymentAccountWriteRequest struct {
+	SecretKey    string `json:"secret_key"`
+	MerchantCode string `json:"merchant_code"`
+	Live         bool   `json:"live"`
+	Enabled      bool   `json:"enabled"`
+}
+
+func (r paymentAccountWriteRequest) account(provider domain.PaymentProvider) domain.ArenaPaymentAccount {
+	return domain.ArenaPaymentAccount{
+		Provider:     provider,
+		SecretKey:    r.SecretKey,
+		MerchantCode: r.MerchantCode,
+		Live:         r.Live,
+		Enabled:      r.Enabled,
+	}
+}
+
 // arenaWriteRequest is the venue form.
 //
 // No owner_id and no slug. The owner is the caller, and the slug is in every

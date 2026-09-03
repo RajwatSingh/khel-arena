@@ -305,6 +305,92 @@ func (s *Server) handleDeletePricingRule(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleListPaymentAccounts — GET /v1/owner/arenas/{arenaID}/payment-accounts
+//
+// The state of each gateway account on one of the caller's venues. Secrets are
+// never in the reply — only a four-character hint, so an owner can tell which
+// key is in place.
+func (s *Server) handleListPaymentAccounts(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := s.currentUser(w, r)
+	if !ok {
+		return
+	}
+
+	arenaID, err := uuid.Parse(r.PathValue("arenaID"))
+	if err != nil {
+		writeError(w, r, domain.Invalid("arena_id", "That isn't an arena."))
+		return
+	}
+
+	accounts, err := s.owner.PaymentAccounts(r.Context(), arenaID, ownerID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if accounts == nil {
+		accounts = []domain.ArenaPaymentAccountInfo{}
+	}
+	encode(w, http.StatusOK, accounts)
+}
+
+// handleSetPaymentAccount — PUT /v1/owner/arenas/{arenaID}/payment-accounts/{provider}
+//
+// Stores or replaces the venue's credentials for one gateway. The money for a
+// booking settles into the account named here, which is the whole point of
+// this being per venue.
+func (s *Server) handleSetPaymentAccount(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := s.currentUser(w, r)
+	if !ok {
+		return
+	}
+
+	arenaID, err := uuid.Parse(r.PathValue("arenaID"))
+	if err != nil {
+		writeError(w, r, domain.Invalid("arena_id", "That isn't an arena."))
+		return
+	}
+
+	provider := domain.PaymentProvider(r.PathValue("provider"))
+	if !provider.CanBePerArena() {
+		writeError(w, r, domain.Invalid("provider", "%q isn't a per-venue payment method.", provider))
+		return
+	}
+
+	req, err := decode[paymentAccountWriteRequest](w, r)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	if err := s.owner.SetPaymentAccount(r.Context(), arenaID, ownerID, req.account(provider)); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDeletePaymentAccount — DELETE /v1/owner/arenas/{arenaID}/payment-accounts/{provider}
+func (s *Server) handleDeletePaymentAccount(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := s.currentUser(w, r)
+	if !ok {
+		return
+	}
+
+	arenaID, err := uuid.Parse(r.PathValue("arenaID"))
+	if err != nil {
+		writeError(w, r, domain.Invalid("arena_id", "That isn't an arena."))
+		return
+	}
+
+	provider := domain.PaymentProvider(r.PathValue("provider"))
+
+	if err := s.owner.RemovePaymentAccount(r.Context(), arenaID, ownerID, provider); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleOwnerPayments — GET /v1/owner/arenas/{arenaID}/payments
 func (s *Server) handleOwnerPayments(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := s.currentUser(w, r)

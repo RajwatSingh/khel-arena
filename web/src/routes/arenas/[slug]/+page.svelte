@@ -23,18 +23,18 @@
 	let busy = $state(false);
 	let error = $state(null);
 
-	// The gateways this deployment can actually take money through. Asked for
-	// rather than hardcoded, so a provider whose credentials are absent is
-	// never offered. Cash is excluded: it is settled with the venue, and the
-	// server refuses to start a checkout for it.
+	// The gateways *this venue* takes. Each arena holds its own eSewa/Khalti
+	// credentials, so this is per arena, not per deployment. Asked for rather
+	// than hardcoded, so a provider the owner has not set up is never offered.
 	let providers = $state([]);
 
 	$effect(() => {
+		const id = arena.id;
 		let cancelled = false;
 		api
-			.paymentProviders()
+			.arenaPaymentProviders(id)
 			.then((next) => {
-				if (!cancelled) providers = next.filter((p) => p !== 'cash');
+				if (!cancelled) providers = next;
 			})
 			.catch(() => {
 				if (!cancelled) providers = [];

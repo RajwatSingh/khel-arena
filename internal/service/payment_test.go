@@ -97,9 +97,39 @@ func heldBooking() domain.Booking {
 	}
 }
 
+// stubResolver stands in for the per-arena gateway lookup: it hands back the
+// one stub gateway when asked for its provider, and refuses anything else the
+// way the real resolver refuses a provider a venue has not configured.
+type stubResolver struct {
+	gateways map[domain.PaymentProvider]payment.Gateway
+}
+
+func (r stubResolver) find(provider domain.PaymentProvider) (payment.Gateway, error) {
+	if g, ok := r.gateways[provider]; ok {
+		return g, nil
+	}
+	return nil, domain.Invalid("provider", "This venue isn't set up to take %s.", provider)
+}
+
+func (r stubResolver) ForCheckout(_ context.Context, _ uuid.UUID, provider domain.PaymentProvider) (payment.Gateway, error) {
+	return r.find(provider)
+}
+
+func (r stubResolver) ForSettlement(_ context.Context, p domain.Payment) (payment.Gateway, error) {
+	return r.find(p.Provider)
+}
+
+func resolverWith(gws ...*stubGateway) stubResolver {
+	m := map[domain.PaymentProvider]payment.Gateway{}
+	for _, g := range gws {
+		m[g.provider] = g
+	}
+	return stubResolver{gateways: m}
+}
+
 func newPaymentService(gw *stubGateway, payments *stubPayments, bookings stubBookings) *PaymentService {
 	return NewPaymentService(payments, bookings,
-		payment.Registry{gw.provider: gw},
+		resolverWith(gw),
 		func(domain.PaymentProvider) payment.ReturnURLs { return payment.ReturnURLs{} },
 		SystemClock{})
 }
@@ -288,7 +318,7 @@ func TestSettleRefusesAProviderMismatch(t *testing.T) {
 
 	payments := &stubPayments{}
 	svc := NewPaymentService(payments, stubBookings{booking: booking},
-		payment.Registry{domain.ProviderEsewa: esewa, domain.ProviderKhalti: khalti},
+		resolverWith(esewa, khalti),
 		func(domain.PaymentProvider) payment.ReturnURLs { return payment.ReturnURLs{} },
 		SystemClock{})
 

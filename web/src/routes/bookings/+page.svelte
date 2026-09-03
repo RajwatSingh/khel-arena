@@ -12,23 +12,32 @@
 	let error = $state(null);
 	let bookings = $state([]);
 
-	// Only the gateways this deployment is actually configured for. Offering
-	// one whose credentials are absent means a player picks it and fails at the
-	// last step, so the server is asked rather than the list being hardcoded.
-	let providers = $state([]);
+	// The gateways each venue takes, keyed by arena id. Payment credentials
+	// are per arena now, so "what can I pay this with" is answered per booking,
+	// not once for the whole site. Fetched for the arenas that actually have a
+	// hold waiting on them.
+	let providersByArena = $state({});
 
 	$effect(() => {
+		const pending = bookings.filter((b) => b.status === 'pending');
+		const arenaIds = [...new Set(pending.map((b) => b.arena_id))].filter(
+			(id) => !(id in providersByArena)
+		);
+		if (!arenaIds.length) return;
+
 		let cancelled = false;
-		api
-			.paymentProviders()
-			.then((next) => {
-				if (!cancelled) providers = next.filter((p) => p !== 'cash');
-			})
-			.catch(() => {
-				// Not worth an error banner: the pay button reports it if the
-				// player actually reaches for it.
-				if (!cancelled) providers = [];
-			});
+		for (const id of arenaIds) {
+			api
+				.arenaPaymentProviders(id)
+				.then((next) => {
+					if (!cancelled) providersByArena = { ...providersByArena, [id]: next };
+				})
+				.catch(() => {
+					// Not worth an error banner: the pay button reports it if
+					// the player actually reaches for it.
+					if (!cancelled) providersByArena = { ...providersByArena, [id]: [] };
+				});
+		}
 		return () => {
 			cancelled = true;
 		};
@@ -89,10 +98,10 @@
 	}
 
 	// Leaves the site for the gateway; see the note on the arena page.
-	async function pay(booking, provider = providers[0]) {
+	async function pay(booking, provider = (providersByArena[booking.arena_id] ?? [])[0]) {
 		error = null;
 		if (!provider) {
-			error = 'No payment method is available right now.';
+			error = 'This venue has no online payment set up. Settle at the arena.';
 			return;
 		}
 		try {

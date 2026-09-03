@@ -9,14 +9,29 @@ import (
 	"github.com/google/uuid"
 )
 
-// handleListProviders — GET /v1/payments/providers
+// handleArenaPaymentProviders — GET /v1/arenas/{arenaID}/payment-providers
 //
-// What this deployment can actually take. Offering a gateway whose
-// credentials are absent means a player picks it and fails at the last step.
-func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
-	providers := s.payments.Providers()
-	if providers == nil {
-		providers = []domain.PaymentProvider{}
+// The online providers one venue is currently taking. Public: which methods a
+// shop accepts is not a secret, and the arena page needs it to decide which
+// pay buttons to show. Cash is never in this list — it is settled with the
+// venue, not started here.
+//
+// An empty list is the honest answer for a venue that has configured nothing,
+// or for a deployment with online payments switched off entirely.
+func (s *Server) handleArenaPaymentProviders(w http.ResponseWriter, r *http.Request) {
+	arenaID, err := uuid.Parse(r.PathValue("arenaID"))
+	if err != nil {
+		writeError(w, r, domain.Invalid("arena_id", "That isn't an arena."))
+		return
+	}
+
+	providers := []domain.PaymentProvider{}
+	if s.paymentAccounts != nil {
+		providers, err = s.paymentAccounts.ProvidersForArena(r.Context(), arenaID)
+		if err != nil {
+			writeError(w, r, err)
+			return
+		}
 	}
 	encode(w, http.StatusOK, providers)
 }

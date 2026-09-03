@@ -23,12 +23,19 @@ func esewaCallbackQuery(transactionUUID string) string {
 	return "?data=" + url.QueryEscape(payload)
 }
 
-func TestHandleListProviders(t *testing.T) {
-	payments := &fakePayments{providers: func() []domain.PaymentProvider {
-		return []domain.PaymentProvider{domain.ProviderEsewa, domain.ProviderCash}
-	}}
+func TestHandleArenaPaymentProviders(t *testing.T) {
+	arenaID := uuid.New()
+	accounts := &fakePaymentAccounts{
+		providersForArena: func(_ context.Context, got uuid.UUID) ([]domain.PaymentProvider, error) {
+			if got != arenaID {
+				t.Errorf("arena = %v, want %v", got, arenaID)
+			}
+			return []domain.PaymentProvider{domain.ProviderEsewa, domain.ProviderKhalti}, nil
+		},
+	}
 
-	w := do(newTestServer(t, nil, nil, nil, withPayments(payments)), http.MethodGet, "/v1/payments/providers", "")
+	w := do(newTestServer(t, nil, nil, nil, withPaymentAccounts(accounts)),
+		http.MethodGet, "/v1/arenas/"+arenaID.String()+"/payment-providers", "")
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
@@ -37,6 +44,20 @@ func TestHandleListProviders(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &got)
 	if len(got) != 2 || got[0] != "esewa" {
 		t.Errorf("providers = %v", got)
+	}
+}
+
+// With online payments off (no PaymentAccountAPI wired), the endpoint still
+// answers — with an empty list, not a 500.
+func TestHandleArenaPaymentProvidersEmptyWhenDisabled(t *testing.T) {
+	w := do(newTestServer(t, nil, nil, nil),
+		http.MethodGet, "/v1/arenas/"+uuid.New().String()+"/payment-providers", "")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if strings.TrimSpace(w.Body.String()) != "[]" {
+		t.Errorf("body = %q, want []", w.Body.String())
 	}
 }
 

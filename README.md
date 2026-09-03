@@ -74,7 +74,7 @@ Errors are one envelope (`{"error": {code, message, fields}}`) mapped from
 | GET | `/v1/areas` | Neighbourhoods with something bookable |
 | GET | `/v1/ledger` | Every court in the city for one day |
 | GET | `/v1/courts/{courtID}/availability` | `?date=YYYY-MM-DD` |
-| GET | `/v1/payments/providers` | Gateways this deployment is configured for |
+| GET | `/v1/arenas/{arenaID}/payment-providers` | Online gateways this venue takes |
 | GET | `/v1/payments/{provider}/callback` | Where a gateway returns the payer |
 | POST | `/v1/bookings/{bookingID}/checkout` | Authenticated, starts a payment |
 | GET | `/v1/bookings/{bookingID}/payment` | Authenticated, latest attempt |
@@ -124,11 +124,14 @@ has been charged and whose hour the janitor releases fifteen minutes later; a
 booking confirmed against a payment we failed to record is an hour given away.
 No ordering of two separate writes avoids both, so they are one write.
 
-Providers are configured, not compiled in: a gateway whose credentials are
-absent is not offered, and `/v1/payments/providers` reports only what will
-actually work. Cash is always present and never verifies anything -- settling
-at the arena is confirmed by the venue, which is owner-facing work that does
-not exist yet.
+Gateway credentials are per venue, not per deployment (migration 0011): an
+arena owner stores their own eSewa/Khalti merchant keys on the venue's
+management page, and the money for a booking settles into that account —
+nothing passes through a platform one. The adapter is built per booking from
+those keys; `/v1/arenas/{id}/payment-providers` reports what a given venue
+takes. Stored secrets are encrypted at rest with `PAYMENT_ENC_KEY`; with it
+unset, online payments are off and every booking settles in cash, confirmed by
+the venue.
 
 ## Running it
 

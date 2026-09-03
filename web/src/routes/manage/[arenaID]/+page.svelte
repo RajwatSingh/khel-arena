@@ -87,6 +87,54 @@
 	const received = (payment) => act(() => api.markCashReceived(payment.id));
 	const removePhoto = (id) => act(() => api.deletePhoto(id));
 
+	// Per-venue gateway credentials. The money for a booking settles into the
+	// account set here, not a platform one — that is the whole point of this
+	// being on the venue's own page.
+	const PROVIDERS = [
+		['esewa', 'eSewa'],
+		['khalti', 'Khalti']
+	];
+
+	const accountByProvider = $derived(
+		Object.fromEntries((data.paymentAccounts ?? []).map((a) => [a.provider, a]))
+	);
+
+	function seedAccountForms(accounts) {
+		const byProvider = Object.fromEntries((accounts ?? []).map((a) => [a.provider, a]));
+		return Object.fromEntries(
+			PROVIDERS.map(([id]) => {
+				const a = byProvider[id];
+				return [
+					id,
+					{
+						secret_key: '',
+						merchant_code: a?.merchant_code ?? '',
+						live: a?.live ?? false,
+						enabled: a?.enabled ?? true
+					}
+				];
+			})
+		);
+	}
+
+	let acctForms = $state(untrack(() => seedAccountForms(data.paymentAccounts)));
+
+	async function saveAccount(provider) {
+		const f = acctForms[provider];
+		const ok = await act(() =>
+			api.setArenaPaymentAccount(arena.id, provider, {
+				secret_key: f.secret_key,
+				merchant_code: f.merchant_code,
+				live: f.live,
+				enabled: f.enabled
+			})
+		);
+		// The key is write-only; clear it so it is never left sitting in a field.
+		if (ok) acctForms[provider].secret_key = '';
+	}
+
+	const removeAccount = (provider) => act(() => api.removeArenaPaymentAccount(arena.id, provider));
+
 	async function upload(event) {
 		event.preventDefault();
 		if (!file) return;
@@ -222,6 +270,76 @@
 				</ul>
 			</details>
 		{/if}
+
+		<h2 class="display display-m">Taking payment</h2>
+		<p class="small quiet">
+			Your own eSewa or Khalti merchant keys. What a player pays for a court lands in the account
+			you set here — nothing passes through Khel Arena. Leave both unset and every booking settles
+			in cash, confirmed above.
+		</p>
+		<ul class="accounts">
+			{#each PROVIDERS as [id, label] (id)}
+				{@const live = accountByProvider[id]}
+				<li class="account card">
+					<div class="account-head">
+						<h3 class="display display-m">{label}</h3>
+						{#if live}
+							<span class="chip" class:paid={live.enabled}>
+								{live.enabled ? 'accepting' : 'paused'} · {live.live ? 'live' : 'test'} · key {live.secret_hint}
+							</span>
+						{:else}
+							<span class="chip">not set up</span>
+						{/if}
+					</div>
+
+					<Field
+						name="{id}-secret"
+						label="Secret key"
+						type="password"
+						bind:value={acctForms[id].secret_key}
+						hint={live
+							? 'Re-enter the key to save any change.'
+							: `From your ${label} merchant dashboard.`}
+						autocomplete="off"
+					/>
+					{#if id === 'esewa'}
+						<Field
+							name="esewa-merchant"
+							label="Merchant (product) code"
+							bind:value={acctForms[id].merchant_code}
+							hint="“EPAYTEST” on the sandbox; your real code in production."
+						/>
+					{/if}
+
+					<div class="toggles">
+						<label class="toggle">
+							<input type="checkbox" bind:checked={acctForms[id].live} />
+							Live account (unchecked talks to the {label} sandbox)
+						</label>
+						<label class="toggle">
+							<input type="checkbox" bind:checked={acctForms[id].enabled} />
+							Offer this to players
+						</label>
+					</div>
+
+					<div class="account-acts">
+						<button
+							class="btn btn-primary"
+							class:loading={busy}
+							disabled={busy}
+							onclick={() => saveAccount(id)}
+						>
+							{live ? 'Save' : 'Connect'}
+						</button>
+						{#if live}
+							<button class="btn btn-secondary" disabled={busy} onclick={() => removeAccount(id)}>
+								Remove
+							</button>
+						{/if}
+					</div>
+				</li>
+			{/each}
+		</ul>
 
 		<h2 class="display display-m">Courts and rates</h2>
 		<p class="small quiet">
@@ -399,6 +517,49 @@
 	}
 
 	.chip.paid { background: var(--pine-wash); color: var(--pine-deep); }
+
+	.accounts {
+		display: grid;
+		gap: 1rem;
+		margin: 1rem 0 2.5rem;
+	}
+
+	.account {
+		display: grid;
+		gap: 1rem;
+		padding: clamp(1.25rem, 3vw, 1.6rem);
+		max-width: 34rem;
+	}
+
+	.account-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0.5rem 0.75rem;
+	}
+
+	.account-head h3 { margin: 0; }
+
+	.toggles {
+		display: grid;
+		gap: 0.5rem;
+	}
+
+	.toggle {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+		font-size: 0.9rem;
+		color: var(--muted);
+		cursor: pointer;
+	}
+
+	.toggle input { margin-top: 0.15rem; flex: none; }
+
+	.account-acts {
+		display: flex;
+		gap: 0.6rem;
+	}
 
 	.ledger { margin-top: 1.25rem; }
 	.ledger summary { cursor: pointer; color: var(--faint); }

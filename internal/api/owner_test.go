@@ -42,6 +42,11 @@ func TestOwnerRoutesAllRequireASession(t *testing.T) {
 		deletePricingRule: func(context.Context, uuid.UUID, uuid.UUID) error { return nil },
 		payments:          func(context.Context, uuid.UUID, uuid.UUID, int) ([]postgres.OwnerPayment, error) { return nil, nil },
 		markCashReceived:  func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error) { return domain.Payment{}, nil },
+		paymentAccounts: func(context.Context, uuid.UUID, uuid.UUID) ([]domain.ArenaPaymentAccountInfo, error) {
+			return nil, nil
+		},
+		setPaymentAccount:    func(context.Context, uuid.UUID, uuid.UUID, domain.ArenaPaymentAccount) error { return nil },
+		removePaymentAccount: func(context.Context, uuid.UUID, uuid.UUID, domain.PaymentProvider) error { return nil },
 	}
 
 	auth := &fakeAuth{authenticate: signedIn(testAccessToken)}
@@ -63,6 +68,9 @@ func TestOwnerRoutesAllRequireASession(t *testing.T) {
 		{http.MethodPost, court + "/pricing/copy", `{"from_court_id":"` + uuid.New().String() + `"}`},
 		{http.MethodDelete, "/v1/owner/pricing/" + uuid.New().String(), ""},
 		{http.MethodPost, "/v1/owner/payments/" + testPaymentID.String() + "/received", ""},
+		{http.MethodGet, arena + "/payment-accounts", ""},
+		{http.MethodPut, arena + "/payment-accounts/esewa", `{"secret_key":"k","merchant_code":"EPAYTEST","live":false,"enabled":true}`},
+		{http.MethodDelete, arena + "/payment-accounts/esewa", ""},
 	}
 
 	for _, route := range routes {
@@ -74,6 +82,66 @@ func TestOwnerRoutesAllRequireASession(t *testing.T) {
 				t.Errorf("with a token: status = %d (%s)", w.Code, w.Body.String())
 			}
 		})
+	}
+}
+
+func TestSetPaymentAccountTakesTheProviderFromThePath(t *testing.T) {
+	auth := &fakeAuth{authenticate: signedIn(testAccessToken)}
+
+	var got domain.ArenaPaymentAccount
+	owner := &fakeOwner{
+		setPaymentAccount: func(_ context.Context, arenaID, ownerID uuid.UUID, acct domain.ArenaPaymentAccount) error {
+			got = acct
+			return nil
+		},
+	}
+
+	w := do(newTestServer(t, auth, nil, nil, withOwner(owner)), http.MethodPut,
+		"/v1/owner/arenas/"+testArenaID.String()+"/payment-accounts/khalti",
+		`{"secret_key":"live-secret","merchant_code":"ignored","live":true,"enabled":true}`,
+		bearer(testAccessToken))
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d (%s)", w.Code, w.Body.String())
+	}
+	if got.Provider != domain.ProviderKhalti {
+		t.Errorf("provider = %q, want khalti from the path", got.Provider)
+	}
+	if got.SecretKey != "live-secret" || !got.Live {
+		t.Errorf("account not carried through: %+v", got)
+	}
+}
+
+func TestSetPaymentAccountRejectsANonPerVenueProvider(t *testing.T) {
+	auth := &fakeAuth{authenticate: signedIn(testAccessToken)}
+
+	w := do(newTestServer(t, auth, nil, nil, withOwner(&fakeOwner{})), http.MethodPut,
+		"/v1/owner/arenas/"+testArenaID.String()+"/payment-accounts/cash",
+		`{"secret_key":"k"}`, bearer(testAccessToken))
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400 for cash (not a per-venue method)", w.Code)
+	}
+}
+
+func TestListPaymentAccountsNeverReturnsASecret(t *testing.T) {
+	auth := &fakeAuth{authenticate: signedIn(testAccessToken)}
+	owner := &fakeOwner{
+		paymentAccounts: func(context.Context, uuid.UUID, uuid.UUID) ([]domain.ArenaPaymentAccountInfo, error) {
+			return []domain.ArenaPaymentAccountInfo{
+				{Provider: domain.ProviderEsewa, MerchantCode: "EPAYTEST", Live: false, Enabled: true, SecretHint: "…a1b2"},
+			}, nil
+		},
+	}
+
+	w := do(newTestServer(t, auth, nil, nil, withOwner(owner)), http.MethodGet,
+		"/v1/owner/arenas/"+testArenaID.String()+"/payment-accounts", "", bearer(testAccessToken))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	if body := w.Body.String(); strings.Contains(body, "secret_key") {
+		t.Errorf("the reply carries a secret_key field: %s", body)
 	}
 }
 

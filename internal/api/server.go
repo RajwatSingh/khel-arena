@@ -72,10 +72,17 @@ type ArenaAPI interface {
 // succeeded. Settle takes a callback reference and reports what the gateway
 // said; there is no method that marks a booking paid on a client's word.
 type PaymentAPI interface {
-	Providers() []domain.PaymentProvider
 	Checkout(ctx context.Context, bookingID, userID uuid.UUID, provider domain.PaymentProvider) (payment.Checkout, domain.Payment, error)
 	Settle(ctx context.Context, provider domain.PaymentProvider, ref payment.CallbackRef) (domain.Payment, error)
 	Status(ctx context.Context, bookingID, userID uuid.UUID) (domain.Payment, error)
+}
+
+// PaymentAccountAPI is the public read behind the arena page: which online
+// providers a venue is currently taking payment through. Backed directly by
+// the credential store; nil when the deployment has online payments off, and
+// the handler then answers with an empty list.
+type PaymentAccountAPI interface {
+	ProvidersForArena(ctx context.Context, arenaID uuid.UUID) ([]domain.PaymentProvider, error)
 }
 
 // OwnerAPI is the part of service.OwnerService the handlers reach for.
@@ -99,6 +106,10 @@ type OwnerAPI interface {
 
 	Payments(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]postgres.OwnerPayment, error)
 	MarkCashReceived(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
+
+	PaymentAccounts(ctx context.Context, arenaID, ownerID uuid.UUID) ([]domain.ArenaPaymentAccountInfo, error)
+	SetPaymentAccount(ctx context.Context, arenaID, ownerID uuid.UUID, acct domain.ArenaPaymentAccount) error
+	RemovePaymentAccount(ctx context.Context, arenaID, ownerID uuid.UUID, provider domain.PaymentProvider) error
 }
 
 // TeamAPI is the part of service.TeamService the handlers reach for.
@@ -191,17 +202,18 @@ type ProfileAPI interface {
 // a call site NewServer(a, b, c, nil, true, false, true) says nothing about
 // which flag is which.
 type Options struct {
-	Auth        AuthAPI
-	Bookings    BookingAPI
-	Profiles    ProfileAPI
-	Arenas      ArenaAPI
-	Payments    PaymentAPI
-	Owner       OwnerAPI
-	Teams       TeamAPI
-	Calls       MatchmakingAPI
-	Tournaments TournamentAPI
-	Matches     MatchAPI
-	Reviews     ReviewAPI
+	Auth            AuthAPI
+	Bookings        BookingAPI
+	Profiles        ProfileAPI
+	Arenas          ArenaAPI
+	Payments        PaymentAPI
+	PaymentAccounts PaymentAccountAPI
+	Owner           OwnerAPI
+	Teams           TeamAPI
+	Calls           MatchmakingAPI
+	Tournaments     TournamentAPI
+	Matches         MatchAPI
+	Reviews         ReviewAPI
 
 	// Mailer delivers the password-reset link. Optional: with none, the token
 	// is only logged (see LogResetTokens), which is the development path.
@@ -255,20 +267,21 @@ type Options struct {
 const defaultRequestTimeout = 10 * time.Second
 
 type Server struct {
-	auth        AuthAPI
-	bookings    BookingAPI
-	profiles    ProfileAPI
-	arenas      ArenaAPI
-	payments    PaymentAPI
-	owner       OwnerAPI
-	teams       TeamAPI
-	calls       MatchmakingAPI
-	tournaments TournamentAPI
-	matches     MatchAPI
-	reviews     ReviewAPI
-	media       MediaStore
-	mailer      Mailer
-	pinger      Pinger
+	auth            AuthAPI
+	bookings        BookingAPI
+	profiles        ProfileAPI
+	arenas          ArenaAPI
+	payments        PaymentAPI
+	paymentAccounts PaymentAccountAPI
+	owner           OwnerAPI
+	teams           TeamAPI
+	calls           MatchmakingAPI
+	tournaments     TournamentAPI
+	matches         MatchAPI
+	reviews         ReviewAPI
+	media           MediaStore
+	mailer          Mailer
+	pinger          Pinger
 
 	appURL string
 
@@ -289,26 +302,27 @@ func NewServer(opts Options) *Server {
 		timeout = defaultRequestTimeout
 	}
 	return &Server{
-		auth:           opts.Auth,
-		bookings:       opts.Bookings,
-		profiles:       opts.Profiles,
-		arenas:         opts.Arenas,
-		payments:       opts.Payments,
-		owner:          opts.Owner,
-		teams:          opts.Teams,
-		calls:          opts.Calls,
-		tournaments:    opts.Tournaments,
-		matches:        opts.Matches,
-		reviews:        opts.Reviews,
-		media:          opts.Media,
-		mailer:         opts.Mailer,
-		pinger:         opts.Pinger,
-		appURL:         strings.TrimRight(opts.AppURL, "/"),
-		allowedOrigins: opts.AllowedOrigins,
-		secureCookies:  opts.SecureCookies,
-		logResetTokens: opts.LogResetTokens,
-		requestTimeout: timeout,
-		loginLimiter:   newLimiter(opts.LoginRateLimit, nil),
+		auth:            opts.Auth,
+		bookings:        opts.Bookings,
+		profiles:        opts.Profiles,
+		arenas:          opts.Arenas,
+		payments:        opts.Payments,
+		paymentAccounts: opts.PaymentAccounts,
+		owner:           opts.Owner,
+		teams:           opts.Teams,
+		calls:           opts.Calls,
+		tournaments:     opts.Tournaments,
+		matches:         opts.Matches,
+		reviews:         opts.Reviews,
+		media:           opts.Media,
+		mailer:          opts.Mailer,
+		pinger:          opts.Pinger,
+		appURL:          strings.TrimRight(opts.AppURL, "/"),
+		allowedOrigins:  opts.AllowedOrigins,
+		secureCookies:   opts.SecureCookies,
+		logResetTokens:  opts.LogResetTokens,
+		requestTimeout:  timeout,
+		loginLimiter:    newLimiter(opts.LoginRateLimit, nil),
 	}
 }
 
@@ -343,7 +357,10 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /v1/areas", s.handleListAreas)
 	mux.HandleFunc("GET /v1/ledger", s.handleLedger)
 	mux.HandleFunc("GET /v1/courts/{courtID}/availability", s.handleAvailability)
-	mux.HandleFunc("GET /v1/payments/providers", s.handleListProviders)
+	// Which online providers a specific venue takes. Per arena now: the
+	// credentials belong to the owner, so "what can I pay with" is answered
+	// per arena, not per deployment.
+	mux.HandleFunc("GET /v1/arenas/{arenaID}/payment-providers", s.handleArenaPaymentProviders)
 	mux.HandleFunc("GET /v1/calls", s.handleCallFeed)
 	mux.HandleFunc("GET /v1/standings", s.handleStandings)
 	mux.HandleFunc("GET /v1/teams/{teamID}/matches", s.handleTeamMatches)
@@ -383,6 +400,9 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("PUT /v1/owner/arenas/{arenaID}/active", protected(s.handleSetArenaActive))
 	mux.Handle("POST /v1/owner/arenas/{arenaID}/courts", protected(s.handleCreateCourt))
 	mux.Handle("GET /v1/owner/arenas/{arenaID}/payments", protected(s.handleOwnerPayments))
+	mux.Handle("GET /v1/owner/arenas/{arenaID}/payment-accounts", protected(s.handleListPaymentAccounts))
+	mux.Handle("PUT /v1/owner/arenas/{arenaID}/payment-accounts/{provider}", protected(s.handleSetPaymentAccount))
+	mux.Handle("DELETE /v1/owner/arenas/{arenaID}/payment-accounts/{provider}", protected(s.handleDeletePaymentAccount))
 	mux.Handle("PUT /v1/owner/courts/{courtID}", protected(s.handleUpdateCourt))
 	mux.Handle("PUT /v1/owner/courts/{courtID}/active", protected(s.handleSetCourtActive))
 	mux.Handle("POST /v1/owner/courts/{courtID}/pricing", protected(s.handleCreatePricingRule))

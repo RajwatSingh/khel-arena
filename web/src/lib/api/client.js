@@ -413,6 +413,33 @@ export const deletePricingRule = (ruleId, opts) =>
 export const arenaPayments = (arenaId, limit = 50, opts) =>
 	request(`/owner/arenas/${arenaId}/payments?limit=${limit}`, { auth: true, ...opts });
 
+// -------------------------------------------------- per-venue payment accounts
+
+/**
+ * The state of a venue's own gateway credentials, secrets reduced to a hint.
+ *
+ * Payment keys are per arena: the money for a court settles into the account
+ * an owner stores here, not a platform one.
+ */
+export const arenaPaymentAccounts = (arenaId, opts) =>
+	request(`/owner/arenas/${arenaId}/payment-accounts`, { auth: true, ...opts });
+
+/** Store or replace one venue's credentials for one provider ('esewa' | 'khalti'). */
+export const setArenaPaymentAccount = (arenaId, provider, input, opts) =>
+	request(`/owner/arenas/${arenaId}/payment-accounts/${provider}`, {
+		method: 'PUT',
+		body: input,
+		auth: true,
+		...opts
+	});
+
+export const removeArenaPaymentAccount = (arenaId, provider, opts) =>
+	request(`/owner/arenas/${arenaId}/payment-accounts/${provider}`, {
+		method: 'DELETE',
+		auth: true,
+		...opts
+	});
+
 /** The venue confirming that cash changed hands — the only way a cash booking
  *  becomes confirmed. */
 export const markCashReceived = (paymentId, opts) =>
@@ -492,8 +519,15 @@ export const acceptResponder = (callId, userId, opts) =>
 
 // ---------------------------------------------------------------- payments --
 
-/** Which gateways this deployment can actually take money through. */
-export const paymentProviders = (opts) => request('/payments/providers', opts);
+/**
+ * The online providers one venue is currently taking.
+ *
+ * Per arena, not per deployment: the credentials belong to the owner, so
+ * "what can I pay with" is answered for the specific venue. Cash is never in
+ * this list — it is settled with the venue, not started here. Public.
+ */
+export const arenaPaymentProviders = (arenaId, opts) =>
+	request(`/arenas/${arenaId}/payment-providers`, opts);
 
 /**
  * Starts a payment and returns how to hand the player to the gateway.

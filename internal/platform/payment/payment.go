@@ -94,33 +94,6 @@ func httpClient() *http.Client {
 	return &http.Client{Timeout: 15 * time.Second}
 }
 
-// Registry resolves a provider name to its adapter.
-type Registry map[domain.PaymentProvider]Gateway
-
-// Get returns the adapter for a provider, or a domain error naming what is
-// available. A provider that is in the enum but not configured is a
-// deployment fact, not a client mistake, but the client still has to be told
-// it cannot use it.
-func (r Registry) Get(provider domain.PaymentProvider) (Gateway, error) {
-	g, ok := r[provider]
-	if !ok {
-		return nil, domain.Invalid("provider", "We can't take payment through %s right now.", provider)
-	}
-	return g, nil
-}
-
-// Providers lists what is configured, so the interface can offer only the
-// options that will actually work.
-func (r Registry) Providers() []domain.PaymentProvider {
-	out := make([]domain.PaymentProvider, 0, len(r))
-	for _, p := range []domain.PaymentProvider{domain.ProviderEsewa, domain.ProviderKhalti, domain.ProviderCash} {
-		if _, ok := r[p]; ok {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
 // badGateway wraps a transport-level failure talking to a provider.
 //
 // Deliberately CodeUnavailable rather than CodeInternal: the gateway being

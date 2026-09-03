@@ -109,7 +109,7 @@ func TestRoutes(t *testing.T) {
 		{http.MethodGet, "/v1/arenas/dhuku-futsal", "", false, http.StatusOK},
 		{http.MethodGet, "/v1/areas", "", false, http.StatusOK},
 		{http.MethodGet, "/v1/ledger?date=2026-08-14", "", false, http.StatusOK},
-		{http.MethodGet, "/v1/payments/providers", "", false, http.StatusOK},
+		{http.MethodGet, "/v1/arenas/" + testArenaID.String() + "/payment-providers", "", false, http.StatusOK},
 		{http.MethodGet, "/v1/standings", "", false, http.StatusOK},
 
 		{http.MethodPost, "/v1/auth/password/change", `{"current_password":"a","new_password":"kathmandu2026"}`, true, http.StatusNoContent},

@@ -38,6 +38,17 @@ type OwnerPayments interface {
 	ListForArenaOwner(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]postgres.OwnerPayment, error)
 }
 
+// OwnerPaymentAccounts is the credential store the owner surface writes to.
+//
+// nil on a deployment with no PAYMENT_ENC_KEY: there is nothing to seal a
+// secret with, so an owner cannot configure online payments and every method
+// here answers that plainly.
+type OwnerPaymentAccounts interface {
+	UpsertOwnerScoped(ctx context.Context, arenaID, ownerID uuid.UUID, acct domain.ArenaPaymentAccount) error
+	DeleteOwnerScoped(ctx context.Context, arenaID, ownerID uuid.UUID, provider domain.PaymentProvider) error
+	ListOwnerScoped(ctx context.Context, arenaID, ownerID uuid.UUID) ([]domain.ArenaPaymentAccountInfo, error)
+}
+
 // OwnerService is everything an arena owner can do.
 //
 // This is the first place `domain.AccountArenaOwner` does real work. Until
@@ -46,6 +57,7 @@ type OwnerPayments interface {
 type OwnerService struct {
 	arenas   OwnerStore
 	payments OwnerPayments
+	accounts OwnerPaymentAccounts // nil when online payments are off
 	users    ProfileReader
 	clock    Clock
 }
@@ -56,11 +68,11 @@ type ProfileReader interface {
 	ByID(ctx context.Context, id uuid.UUID) (domain.User, error)
 }
 
-func NewOwnerService(arenas OwnerStore, payments OwnerPayments, users ProfileReader, clock Clock) *OwnerService {
+func NewOwnerService(arenas OwnerStore, payments OwnerPayments, accounts OwnerPaymentAccounts, users ProfileReader, clock Clock) *OwnerService {
 	if clock == nil {
 		clock = SystemClock{}
 	}
-	return &OwnerService{arenas: arenas, payments: payments, users: users, clock: clock}
+	return &OwnerService{arenas: arenas, payments: payments, accounts: accounts, users: users, clock: clock}
 }
 
 // requireOwnerAccount checks the caller is registered as an arena owner.
@@ -199,6 +211,55 @@ func (s *OwnerService) Payments(ctx context.Context, arenaID, ownerID uuid.UUID,
 		return nil, domain.Unauthenticated("Sign in to manage an arena.")
 	}
 	return s.payments.ListForArenaOwner(ctx, arenaID, ownerID, limit)
+}
+
+// ---------------------------------------------------------------------------
+// Payment accounts — a venue's own gateway credentials
+// ---------------------------------------------------------------------------
+
+// PaymentAccounts lists the state of a venue's gateway accounts, secrets
+// reduced to a hint.
+func (s *OwnerService) PaymentAccounts(ctx context.Context, arenaID, ownerID uuid.UUID) ([]domain.ArenaPaymentAccountInfo, error) {
+	if ownerID == uuid.Nil {
+		return nil, domain.Unauthenticated("Sign in to manage an arena.")
+	}
+	if s.accounts == nil {
+		// Not an error: an owner should see an empty, explained state rather
+		// than a failure. The handler layer says why it is empty.
+		return []domain.ArenaPaymentAccountInfo{}, nil
+	}
+	return s.accounts.ListOwnerScoped(ctx, arenaID, ownerID)
+}
+
+// SetPaymentAccount stores or replaces a venue's credentials for one provider.
+//
+// The money for a court settles into the account named here, so the write is
+// owner-scoped in the statement and this service only validates the shape.
+func (s *OwnerService) SetPaymentAccount(ctx context.Context, arenaID, ownerID uuid.UUID, acct domain.ArenaPaymentAccount) error {
+	if ownerID == uuid.Nil {
+		return domain.Unauthenticated("Sign in to manage an arena.")
+	}
+	if s.accounts == nil {
+		return domain.Unavailable("Online payments aren't switched on for this deployment. Bookings settle in cash.")
+	}
+	if err := acct.Validate(); err != nil {
+		return err
+	}
+	return s.accounts.UpsertOwnerScoped(ctx, arenaID, ownerID, acct)
+}
+
+// RemovePaymentAccount deletes a venue's credentials for one provider.
+func (s *OwnerService) RemovePaymentAccount(ctx context.Context, arenaID, ownerID uuid.UUID, provider domain.PaymentProvider) error {
+	if ownerID == uuid.Nil {
+		return domain.Unauthenticated("Sign in to manage an arena.")
+	}
+	if s.accounts == nil {
+		return domain.Unavailable("Online payments aren't switched on for this deployment.")
+	}
+	if !provider.CanBePerArena() {
+		return domain.Invalid("provider", "%s isn't a per-venue payment method.", provider)
+	}
+	return s.accounts.DeleteOwnerScoped(ctx, arenaID, ownerID, provider)
 }
 
 // MarkCashReceived confirms that a player settled at the venue.

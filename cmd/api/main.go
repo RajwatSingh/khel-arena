@@ -24,6 +24,7 @@ import (
 	"github.com/RajwatSingh/khel-arena/internal/api"
 	"github.com/RajwatSingh/khel-arena/internal/domain"
 	"github.com/RajwatSingh/khel-arena/internal/platform/config"
+	"github.com/RajwatSingh/khel-arena/internal/platform/crypto"
 	"github.com/RajwatSingh/khel-arena/internal/platform/mail"
 	"github.com/RajwatSingh/khel-arena/internal/platform/media"
 	"github.com/RajwatSingh/khel-arena/internal/platform/payment"
@@ -96,12 +97,33 @@ func run() error {
 	profileService := service.NewProfileService(users)
 	arenaService := service.NewArenaService(arenas, bookings, clock, cfg.Booking.Timezone)
 
-	gateways := buildGateways(cfg)
-	paymentService := service.NewPaymentService(payments, bookings, gateways,
+	// Payment credentials are per venue (see migration 0011). The only
+	// deployment-wide piece is the key their stored secrets are sealed with;
+	// with it unset there is nothing to seal them with, so online payments
+	// are off and every booking settles in cash.
+	var (
+		accountReader   service.PaymentAccountReader
+		ownerAccounts   service.OwnerPaymentAccounts
+		accountProvider api.PaymentAccountAPI
+	)
+	if cfg.Payment.OnlineEnabled() {
+		box, err := crypto.NewBox(cfg.Payment.EncKey)
+		if err != nil {
+			return err
+		}
+		accounts := postgres.NewArenaPaymentAccountRepo(pool, box)
+		accountReader, ownerAccounts, accountProvider = accounts, accounts, accounts
+		slog.Info("online payments enabled", "model", "per-arena merchant accounts")
+	} else {
+		slog.Warn("PAYMENT_ENC_KEY is unset; online payments are disabled (every booking settles in cash)")
+	}
+
+	resolver := service.NewGatewayResolver(accountReader, cfg.AppURL)
+	paymentService := service.NewPaymentService(payments, bookings, resolver,
 		returnURLs(cfg.HTTPAddr, cfg.AppURL), clock)
 
 	notifier := service.NewNotifier(buildMailSender(cfg), cfg.AppURL, slog.Default())
-	ownerService := service.NewOwnerService(arenas, payments, users, clock)
+	ownerService := service.NewOwnerService(arenas, payments, ownerAccounts, users, clock)
 	teamService := service.NewTeamService(postgres.NewTeamRepo(pool))
 	callRepo := postgres.NewMatchmakingRepo(pool)
 	callService := service.NewMatchmakingService(callRepo, bookings, clock)
@@ -127,21 +149,22 @@ func run() error {
 
 	// ── transport ────────────────────────────────────────────────────────
 	opts := api.Options{
-		Auth:           authService,
-		Bookings:       bookingService,
-		Profiles:       profileService,
-		Arenas:         arenaService,
-		Payments:       paymentService,
-		Owner:          ownerService,
-		Teams:          teamService,
-		Calls:          callService,
-		Tournaments:    tournamentService,
-		Matches:        matchService,
-		Reviews:        reviewService,
-		Mailer:         notifier,
-		Pinger:         pool,
-		AppURL:         cfg.AppURL,
-		AllowedOrigins: cfg.AllowedOrigins,
+		Auth:            authService,
+		Bookings:        bookingService,
+		Profiles:        profileService,
+		Arenas:          arenaService,
+		Payments:        paymentService,
+		PaymentAccounts: accountProvider,
+		Owner:           ownerService,
+		Teams:           teamService,
+		Calls:           callService,
+		Tournaments:     tournamentService,
+		Matches:         matchService,
+		Reviews:         reviewService,
+		Mailer:          notifier,
+		Pinger:          pool,
+		AppURL:          cfg.AppURL,
+		AllowedOrigins:  cfg.AllowedOrigins,
 		// No TLS on http://localhost, so a Secure cookie would simply never
 		// be stored there. Everywhere else it must be set, or the refresh
 		// token can travel in clear text.
@@ -243,35 +266,6 @@ func run() error {
 
 	slog.Info("stopped")
 	return nil
-}
-
-// buildGateways assembles the payment adapters that are actually configured.
-//
-// A provider with no credentials is simply absent from the registry, and
-// /v1/payments/providers reports only what is there -- so a deployment that
-// takes only cash offers only cash, rather than offering a gateway that fails
-// at the moment somebody tries to use it.
-func buildGateways(cfg config.Config) payment.Registry {
-	registry := payment.Registry{
-		// Always available: settling at the arena needs no credentials. It
-		// refuses to verify anything by itself, which is the honest state of
-		// affairs until owner-facing reconciliation exists.
-		domain.ProviderCash: payment.NewCash(),
-	}
-
-	if cfg.Payment.EsewaConfigured() {
-		registry[domain.ProviderEsewa] = payment.NewEsewa(
-			cfg.Payment.EsewaSecretKey, cfg.Payment.EsewaProductCode,
-			cfg.Payment.EsewaFormURL, cfg.Payment.EsewaStatusURL)
-		slog.Info("payment gateway configured", "provider", domain.ProviderEsewa)
-	}
-	if cfg.Payment.KhaltiConfigured() {
-		registry[domain.ProviderKhalti] = payment.NewKhalti(
-			cfg.Payment.KhaltiSecretKey, cfg.Payment.KhaltiBaseURL, cfg.AppURL)
-		slog.Info("payment gateway configured", "provider", domain.ProviderKhalti)
-	}
-
-	return registry
 }
 
 // returnURLs builds where a gateway sends the player back to.

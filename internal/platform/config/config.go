@@ -6,12 +6,15 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/RajwatSingh/khel-arena/internal/platform/crypto"
 )
 
 type Config struct {
@@ -60,24 +63,22 @@ type Mail struct {
 // Configured reports whether a real mail server was named.
 func (m Mail) Configured() bool { return m.SMTPHost != "" && m.From != "" }
 
-// Payment configures the gateways. A provider whose credentials are absent is
-// simply not offered, which is why these are not required: a deployment that
-// takes only cash is a real deployment.
+// Payment configures online payments.
+//
+// There are no per-gateway credentials here any more: eSewa and Khalti keys
+// belong to individual venues, stored per arena (see migration 0011), so the
+// only deployment-wide setting is the key those stored secrets are encrypted
+// with. With it unset, venues cannot configure online payments and every
+// booking is settled in cash — a real deployment, just a smaller one.
 type Payment struct {
-	EsewaSecretKey   []byte
-	EsewaProductCode string
-	EsewaFormURL     string
-	EsewaStatusURL   string
-
-	KhaltiSecretKey string
-	KhaltiBaseURL   string
+	// EncKey is the 32-byte AES key for arena_payment_accounts.secret_key,
+	// decoded from PAYMENT_ENC_KEY (base64). Empty when unset.
+	EncKey []byte
 }
 
-func (p Payment) EsewaConfigured() bool {
-	return len(p.EsewaSecretKey) > 0 && p.EsewaProductCode != ""
-}
-
-func (p Payment) KhaltiConfigured() bool { return p.KhaltiSecretKey != "" }
+// OnlineEnabled reports whether venues can store gateway credentials on this
+// deployment.
+func (p Payment) OnlineEnabled() bool { return len(p.EncKey) == crypto.KeySize }
 
 type Database struct {
 	URL             string
@@ -173,22 +174,16 @@ func Load() (Config, error) {
 		FromName: envOr("MAIL_FROM_NAME", "Khel Arena"),
 	}
 
-	cfg.Payment = Payment{
-		EsewaSecretKey:   []byte(os.Getenv("ESEWA_SECRET_KEY")),
-		EsewaProductCode: os.Getenv("ESEWA_PRODUCT_CODE"),
-		EsewaFormURL:     os.Getenv("ESEWA_FORM_URL"),
-		EsewaStatusURL:   os.Getenv("ESEWA_STATUS_URL"),
-		KhaltiSecretKey:  os.Getenv("KHALTI_SECRET_KEY"),
-		KhaltiBaseURL:    os.Getenv("KHALTI_BASE_URL"),
-	}
-
-	// A half-configured gateway is worse than an absent one: it is offered to
-	// players and then fails at the moment they try to pay.
-	if cfg.Payment.EsewaConfigured() && (cfg.Payment.EsewaFormURL == "" || cfg.Payment.EsewaStatusURL == "") {
-		fail("ESEWA_FORM_URL and ESEWA_STATUS_URL are required when ESEWA_SECRET_KEY is set")
-	}
-	if cfg.Payment.KhaltiConfigured() && cfg.Payment.KhaltiBaseURL == "" {
-		fail("KHALTI_BASE_URL is required when KHALTI_SECRET_KEY is set")
+	if raw := os.Getenv("PAYMENT_ENC_KEY"); raw != "" {
+		key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(raw))
+		if err != nil {
+			fail("PAYMENT_ENC_KEY is not valid base64: %v", err)
+		} else if len(key) != crypto.KeySize {
+			fail("PAYMENT_ENC_KEY decodes to %d bytes, need %d (generate with: openssl rand -base64 32)",
+				len(key), crypto.KeySize)
+		} else {
+			cfg.Payment.EncKey = key
+		}
 	}
 
 	// Production has to be able to send mail. Password reset is the only way

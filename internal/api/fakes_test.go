@@ -236,21 +236,13 @@ func (f *fakeArenas) CityLedger(ctx context.Context, date time.Time, sport domai
 type fakePayments struct {
 	t *testing.T
 
-	providers func() []domain.PaymentProvider
-	checkout  func(context.Context, uuid.UUID, uuid.UUID, domain.PaymentProvider) (payment.Checkout, domain.Payment, error)
-	settle    func(context.Context, domain.PaymentProvider, payment.CallbackRef) (domain.Payment, error)
-	status    func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
+	checkout func(context.Context, uuid.UUID, uuid.UUID, domain.PaymentProvider) (payment.Checkout, domain.Payment, error)
+	settle   func(context.Context, domain.PaymentProvider, payment.CallbackRef) (domain.Payment, error)
+	status   func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
 
 	gotProvider domain.PaymentProvider
 	gotRef      payment.CallbackRef
 	gotUserID   uuid.UUID
-}
-
-func (f *fakePayments) Providers() []domain.PaymentProvider {
-	if f.providers == nil {
-		return []domain.PaymentProvider{domain.ProviderEsewa}
-	}
-	return f.providers()
 }
 
 func (f *fakePayments) Checkout(ctx context.Context, bookingID, userID uuid.UUID, provider domain.PaymentProvider) (payment.Checkout, domain.Payment, error) {
@@ -330,6 +322,21 @@ func withArenas(a *fakeArenas) func(*Options) {
 
 func withPayments(p *fakePayments) func(*Options) {
 	return func(o *Options) { o.Payments = p }
+}
+
+type fakePaymentAccounts struct {
+	providersForArena func(context.Context, uuid.UUID) ([]domain.PaymentProvider, error)
+}
+
+func (f *fakePaymentAccounts) ProvidersForArena(ctx context.Context, arenaID uuid.UUID) ([]domain.PaymentProvider, error) {
+	if f.providersForArena == nil {
+		return nil, nil
+	}
+	return f.providersForArena(ctx, arenaID)
+}
+
+func withPaymentAccounts(p *fakePaymentAccounts) func(*Options) {
+	return func(o *Options) { o.PaymentAccounts = p }
 }
 
 func newTestServer(t *testing.T, auth *fakeAuth, bookings *fakeBookings, profiles *fakeProfiles, extras ...func(*Options)) http.Handler {
@@ -431,6 +438,10 @@ type fakeOwner struct {
 	deletePricingRule func(context.Context, uuid.UUID, uuid.UUID) error
 	payments          func(context.Context, uuid.UUID, uuid.UUID, int) ([]postgres.OwnerPayment, error)
 	markCashReceived  func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
+
+	paymentAccounts      func(context.Context, uuid.UUID, uuid.UUID) ([]domain.ArenaPaymentAccountInfo, error)
+	setPaymentAccount    func(context.Context, uuid.UUID, uuid.UUID, domain.ArenaPaymentAccount) error
+	removePaymentAccount func(context.Context, uuid.UUID, uuid.UUID, domain.PaymentProvider) error
 }
 
 func (f *fakeOwner) unexpected(method string) {
@@ -520,6 +531,27 @@ func (f *fakeOwner) MarkCashReceived(ctx context.Context, paymentID, ownerID uui
 		f.unexpected("MarkCashReceived")
 	}
 	return f.markCashReceived(ctx, paymentID, ownerID)
+}
+
+func (f *fakeOwner) PaymentAccounts(ctx context.Context, arenaID, ownerID uuid.UUID) ([]domain.ArenaPaymentAccountInfo, error) {
+	if f.paymentAccounts == nil {
+		f.unexpected("PaymentAccounts")
+	}
+	return f.paymentAccounts(ctx, arenaID, ownerID)
+}
+
+func (f *fakeOwner) SetPaymentAccount(ctx context.Context, arenaID, ownerID uuid.UUID, acct domain.ArenaPaymentAccount) error {
+	if f.setPaymentAccount == nil {
+		f.unexpected("SetPaymentAccount")
+	}
+	return f.setPaymentAccount(ctx, arenaID, ownerID, acct)
+}
+
+func (f *fakeOwner) RemovePaymentAccount(ctx context.Context, arenaID, ownerID uuid.UUID, provider domain.PaymentProvider) error {
+	if f.removePaymentAccount == nil {
+		f.unexpected("RemovePaymentAccount")
+	}
+	return f.removePaymentAccount(ctx, arenaID, ownerID, provider)
 }
 
 func withOwner(o *fakeOwner) func(*Options) {

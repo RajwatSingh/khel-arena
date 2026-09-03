@@ -9,12 +9,25 @@
 	// two registers behind them. Teams, tournaments and the back office are
 	// reachable from the pages that need them and from the footer, rather
 	// than crowding a bar that has to survive a phone.
-	const links = [
+	// A venue operator and a player want different bars. The operator's four
+	// are their dashboard and back office plus the two public boards they
+	// still need to see; the player's are the two ways in and their holds.
+	const playerLinks = [
 		{ href: '/tonight', label: 'Find a court' },
 		{ href: '/games', label: 'Games' },
 		{ href: '/arenas', label: 'Arenas' },
 		{ href: '/bookings', label: 'My bookings' }
 	];
+
+	const ownerLinks = [
+		{ href: '/dashboard', label: 'Dashboard' },
+		{ href: '/manage', label: 'My venues' },
+		{ href: '/arenas', label: 'Arenas' },
+		{ href: '/games', label: 'Games' }
+	];
+
+	const isOwner = $derived(session.user?.account_type === 'arena_owner');
+	const links = $derived(isOwner ? ownerLinks : playerLinks);
 
 	// Kathmandu runs at UTC+05:45 all year.
 	const kathmandu = $derived(
@@ -50,7 +63,7 @@
 				</a>
 			{:else}
 				<a class="btn btn-quiet" href="/login">Sign in</a>
-				<a class="btn btn-primary" href="/tonight">Book a court</a>
+				<a class="btn btn-primary" href="/register">Get started</a>
 			{/if}
 		</div>
 	</div>

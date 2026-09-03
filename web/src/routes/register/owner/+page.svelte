@@ -1,37 +1,37 @@
 <script>
 	import { goto } from '$app/navigation';
-	import { page } from '$app/state';
 	import { ApiError } from '$lib/api/index.js';
 	import { session } from '$lib/session.svelte.js';
 	import Field from '$lib/components/Field.svelte';
 	import CentreMark from '$lib/components/CentreMark.svelte';
 	import TextAnimate from '$lib/components/TextAnimate.svelte';
 
-	let email = $state('');
-	let password = $state('');
+	let form = $state({
+		full_name: '',
+		username: '',
+		email: '',
+		password: '',
+		account_type: 'arena_owner'
+	});
 	let busy = $state(false);
 	let error = $state(null);
+	let fieldErrors = $state({});
 
 	async function submit(event) {
 		event.preventDefault();
 		busy = true;
 		error = null;
+		fieldErrors = {};
 		try {
-			const signedIn = await session.signIn({ email, password });
-			// Pages that require a session send people here with ?next=, so
-			// signing in returns them to what they were reaching for. Only
-			// same-site paths are honoured: an absolute URL in a query
-			// parameter is an open redirect.
-			const next = page.url.searchParams.get('next');
-			if (next?.startsWith('/') && !next.startsWith('//')) {
-				goto(next);
-			} else {
-				// No explicit destination: send each account to its own home.
-				// A venue operator has no use for the player booking list.
-				goto(signedIn?.user?.account_type === 'arena_owner' ? '/dashboard' : '/bookings');
-			}
+			await session.signUp({ ...form });
+			goto('/dashboard');
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Something went wrong on our side.';
+			if (err instanceof ApiError) {
+				error = err.fields.length ? null : err.message;
+				fieldErrors = Object.fromEntries(err.fields.map((f) => [f.field, f.message]));
+			} else {
+				error = 'Something went wrong on our side.';
+			}
 		} finally {
 			busy = false;
 		}
@@ -39,44 +39,55 @@
 </script>
 
 <svelte:head>
-	<title>Sign in | Khel Arena</title>
+	<title>Open a venue account | Khel Arena</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
 <section class="auth forest-band">
 	<div class="shell split">
 		<div class="say">
-			<h1 class="display display-l"><TextAnimate text="Sign in" /></h1>
+			<h1 class="display display-l"><TextAnimate text="Open a venue account" /></h1>
 			<div class="pitch-mark fade-up fade-up-1">
 				<CentreMark wide />
 			</div>
 			<p class="lede fade-up fade-up-2">
-				An hour held without a name is just an hour. Sign in and the court comes off the board in
-				yours.
-			</p>
-			<p class="demo small fade-up fade-up-3">
-				Nothing is wired to a server yet. Try <strong>rajwat@khelarena.np</strong> with
-				<strong>kathmandu2026</strong>.
+				This is the operator's login. Once you're in, list your futsal, add its courts and rates,
+				and watch the bookings, earnings and unpaid cash on your dashboard.
 			</p>
 		</div>
 
 		<form class="card fade-up fade-up-1" onsubmit={submit} novalidate>
 			<Field
+				name="full_name"
+				label="Your name"
+				bind:value={form.full_name}
+				error={fieldErrors.full_name}
+				autocomplete="name"
+			/>
+			<Field
+				name="username"
+				label="Username"
+				bind:value={form.username}
+				error={fieldErrors.username}
+				hint="Used on your public venue pages."
+				autocomplete="username"
+			/>
+			<Field
 				name="email"
 				label="Email"
 				type="email"
-				bind:value={email}
+				bind:value={form.email}
+				error={fieldErrors.email}
 				autocomplete="email"
-				placeholder="you@example.com"
-				required
 			/>
 			<Field
 				name="password"
 				label="Password"
 				type="password"
-				bind:value={password}
-				autocomplete="current-password"
-				required
+				bind:value={form.password}
+				error={fieldErrors.password}
+				hint="At least 10 characters."
+				autocomplete="new-password"
 			/>
 
 			{#if error}
@@ -84,10 +95,11 @@
 			{/if}
 
 			<button class="btn btn-primary" class:loading={busy} type="submit" disabled={busy}>
-				{busy ? 'Checking…' : 'Sign in'}
+				{busy ? 'Creating…' : 'Create venue account'}
 			</button>
 
-			<p class="alt small">No account yet? <a class="link" href="/register">Create one</a>.</p>
+			<p class="alt small">Already have one? <a class="link" href="/login">Sign in</a>.</p>
+			<p class="alt small">Just here to play? <a class="link" href="/register/player">Make a player card</a>.</p>
 		</form>
 	</div>
 </section>
@@ -95,27 +107,13 @@
 <style>
 	.split {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(0, 24rem);
+		grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
 		gap: clamp(2rem, 6vw, 5rem);
 		align-items: start;
 	}
 
 	.say .lede {
 		margin-top: 1.1rem;
-	}
-
-	.demo {
-		margin-top: 1.75rem;
-		padding: 0.9rem 1.1rem;
-		border-radius: var(--r-sm);
-		background: var(--sand);
-		color: #7a3b22;
-		max-width: 44ch;
-	}
-
-	.demo strong {
-		color: inherit;
-		font-weight: 600;
 	}
 
 	form {

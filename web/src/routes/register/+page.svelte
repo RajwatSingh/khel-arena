@@ -1,52 +1,6 @@
 <script>
-	import { goto } from '$app/navigation';
-	import { ApiError } from '$lib/api/index.js';
-	import { session } from '$lib/session.svelte.js';
-	import Field from '$lib/components/Field.svelte';
 	import CentreMark from '$lib/components/CentreMark.svelte';
 	import TextAnimate from '$lib/components/TextAnimate.svelte';
-
-	let form = $state({
-		full_name: '',
-		username: '',
-		email: '',
-		password: '',
-		skill: 'casual',
-		position: ''
-	});
-	let busy = $state(false);
-	let error = $state(null);
-	let fieldErrors = $state({});
-
-	const skills = [
-		['casual', 'Casual'],
-		['intermediate', 'Intermediate'],
-		['competitive', 'Competitive'],
-		['semi_pro', 'Semi-pro']
-	];
-
-	// Futsal position names, as they are used on the pitch.
-	const positions = ['Goleiro', 'Fixo', 'Ala', 'Pivo', 'Universal'];
-
-	async function submit(event) {
-		event.preventDefault();
-		busy = true;
-		error = null;
-		fieldErrors = {};
-		try {
-			await session.signUp({ ...form, position: form.position || null });
-			goto('/tonight');
-		} catch (err) {
-			if (err instanceof ApiError) {
-				error = err.fields.length ? null : err.message;
-				fieldErrors = Object.fromEntries(err.fields.map((f) => [f.field, f.message]));
-			} else {
-				error = 'Something went wrong on our side.';
-			}
-		} finally {
-			busy = false;
-		}
-	}
 </script>
 
 <svelte:head>
@@ -55,188 +9,102 @@
 </svelte:head>
 
 <section class="auth forest-band">
-	<div class="shell split">
+	<div class="shell">
 		<div class="say">
-			<h1 class="display display-l"><TextAnimate text="Make a player card" /></h1>
+			<h1 class="display display-l"><TextAnimate text="Which way in?" /></h1>
 			<div class="pitch-mark fade-up fade-up-1">
 				<CentreMark wide />
 			</div>
 			<p class="lede fade-up fade-up-2">
-				Name, email, password. The rest is how other players find you when someone is a man short.
-				Leave it blank and fill it in later.
+				Two kinds of account. Pick the one that fits — you can't be both on the same login.
 			</p>
 		</div>
 
-		<form class="card fade-up fade-up-1" onsubmit={submit} novalidate>
-			<Field
-				name="full_name"
-				label="Full name"
-				bind:value={form.full_name}
-				error={fieldErrors.full_name}
-				autocomplete="name"
-			/>
-			<Field
-				name="username"
-				label="Username"
-				bind:value={form.username}
-				error={fieldErrors.username}
-				hint="How you show up on the find-a-player board."
-				autocomplete="username"
-			/>
-			<Field
-				name="email"
-				label="Email"
-				type="email"
-				bind:value={form.email}
-				error={fieldErrors.email}
-				autocomplete="email"
-			/>
-			<Field
-				name="password"
-				label="Password"
-				type="password"
-				bind:value={form.password}
-				error={fieldErrors.password}
-				hint="At least 10 characters."
-				autocomplete="new-password"
-			/>
+		<div class="choices">
+			<a class="choice card fade-up fade-up-1" href="/register/player">
+				<span class="tag">Play</span>
+				<h2 class="display display-m">I'm here to book and play</h2>
+				<p>
+					Hold a court by the hour, find a game when you're a man short, track your record and
+					reviews.
+				</p>
+				<span class="go">Create a player card →</span>
+			</a>
 
-			<div class="field">
-				<span class="field-label" id="skill-label">Level</span>
-				<div class="chips" role="radiogroup" aria-labelledby="skill-label">
-					{#each skills as [value, label] (value)}
-						<button
-							type="button"
-							class="chip"
-							class:on={form.skill === value}
-							role="radio"
-							aria-checked={form.skill === value}
-							onclick={() => (form.skill = value)}
-						>
-							{label}
-						</button>
-					{/each}
-				</div>
-			</div>
+			<a class="choice card fade-up fade-up-2" href="/register/owner">
+				<span class="tag">Run a venue</span>
+				<h2 class="display display-m">I run a futsal</h2>
+				<p>
+					List your courts, set your own hours and rates, and see every booking, the money it made
+					and the cash still owed on one dashboard.
+				</p>
+				<span class="go">Open a venue account →</span>
+			</a>
+		</div>
 
-			<div class="field">
-				<label class="field-label" for="position">Position</label>
-				<select id="position" bind:value={form.position}>
-					<option value="">Not sure yet</option>
-					{#each positions as position (position)}
-						<option value={position}>{position}</option>
-					{/each}
-				</select>
-			</div>
-
-			{#if error}
-				<p class="error" role="alert">{error}</p>
-			{/if}
-
-			<button class="btn btn-primary" class:loading={busy} type="submit" disabled={busy}>
-				{busy ? 'Creating…' : 'Create account'}
-			</button>
-
-			<p class="alt small">Already have one? <a class="link" href="/login">Sign in</a>.</p>
-		</form>
+		<p class="alt small">Already have an account? <a class="link" href="/login">Sign in</a>.</p>
 	</div>
 </section>
 
 <style>
-	.split {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
-		gap: clamp(2rem, 6vw, 5rem);
-		align-items: start;
-	}
-
 	.say .lede {
 		margin-top: 1.1rem;
+		max-width: 52ch;
 	}
 
-	form {
+	.choices {
 		display: grid;
-		gap: 1.35rem;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+		gap: clamp(1rem, 3vw, 1.75rem);
+		margin-top: clamp(1.75rem, 4vw, 2.75rem);
+	}
+
+	.choice {
+		display: grid;
+		gap: 0.75rem;
+		align-content: start;
 		padding: clamp(1.5rem, 3vw, 2rem);
+		color: inherit;
+		text-decoration: none;
+		transition:
+			border-color var(--dur-hover) var(--ease),
+			transform var(--dur-hover) var(--ease);
 	}
 
-	.field {
-		display: grid;
-		gap: 0.55rem;
+	.choice:hover,
+	.choice:focus-visible {
+		border-color: var(--pine);
+		transform: translateY(-2px);
 	}
 
-	.field-label {
+	.choice h2 {
+		margin: 0;
+	}
+
+	.choice p {
+		margin: 0;
+		color: var(--muted);
 		font-size: 0.9375rem;
+	}
+
+	.tag {
+		justify-self: start;
+		padding: 0.2rem 0.6rem;
+		border-radius: var(--r-pill);
+		background: var(--pine-wash);
+		color: var(--pine-deep);
+		font-size: 0.8125rem;
 		font-weight: 600;
 	}
 
-	.chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.4rem;
-	}
-
-	.chip {
-		padding: 0.45rem 0.9rem;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-pill);
-		background: var(--surface);
-		font-size: 0.9375rem;
-		font-weight: 500;
-		color: var(--muted);
-		cursor: pointer;
-		transition:
-			border-color 0.18s var(--ease),
-			background-color 0.18s var(--ease),
-			color 0.18s var(--ease),
-			transform 0.12s var(--ease);
-	}
-
-	.chip:hover:not(.on) {
-		color: var(--ink);
-	}
-
-	.chip:active {
-		transform: scale(0.96);
-	}
-
-	.chip.on {
-		background: var(--pine);
-		border-color: var(--pine);
-		color: #ffffff;
-	}
-
-	select {
-		width: 100%;
-		padding: 0.75rem 0.95rem;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-sm);
-		background: var(--surface);
-		font-size: 1rem;
-		cursor: pointer;
-	}
-
-	select:focus {
-		outline: none;
-		border-color: var(--pine);
-		box-shadow: 0 0 0 3px var(--pine-wash);
-	}
-
-	.error {
-		padding: 0.8rem 1rem;
-		border-radius: var(--r-sm);
-		background: var(--brick-wash);
-		color: var(--brick);
-		font-size: 0.9375rem;
+	.go {
+		margin-top: 0.35rem;
+		font-weight: 600;
+		color: var(--pine-deep);
 	}
 
 	.alt {
+		margin-top: clamp(1.5rem, 4vw, 2.5rem);
 		color: var(--muted);
-	}
-
-	@media (max-width: 820px) {
-		.split {
-			grid-template-columns: minmax(0, 1fr);
-		}
 	}
 </style>

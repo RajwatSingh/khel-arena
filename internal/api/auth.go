@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/RajwatSingh/khel-arena/internal/postgres"
@@ -76,23 +77,78 @@ func (s *Server) clearRefreshCookie(w http.ResponseWriter) {
 }
 
 // sessionContext describes the caller for the session audit trail.
-func sessionContext(r *http.Request) postgres.SessionContext {
+func (s *Server) sessionContext(r *http.Request) postgres.SessionContext {
 	return postgres.SessionContext{
 		UserAgent: r.UserAgent(),
-		IP:        clientIP(r),
+		IP:        clientIP(r, s.trustedProxyHops),
 	}
 }
 
-// clientIP is the address recorded against a session.
+// clientIP is the address recorded against a session and keyed on by the rate
+// limiter. Both uses want the same answer, and both are wrong in a different
+// way if it is wrong, so there is one function.
 //
-// X-Forwarded-For is deliberately ignored. It is set by the client and can
-// say anything; trusting it without knowing exactly how many trusted proxies
-// sit in front means anyone can forge the IP written into their own session
-// row, which is the one thing that audit trail is for. This service is
-// deployed reachable directly or behind a proxy on the same host that leaves
-// RemoteAddr alone. Put a real proxy in front and this is the one function to
-// change -- and it needs a trusted-hop count, not a header read.
-func clientIP(r *http.Request) string {
+// The hop count is the whole design. X-Forwarded-For is written by whoever
+// sent the request, so reading it blindly lets anyone forge the address in
+// their own audit row and, worse, mint a fresh rate-limit bucket per attempt
+// -- a limit that can be stepped around is more dangerous than no limit,
+// because it reads as protection. Ignoring it entirely is just as wrong once
+// a proxy is in front: every request then carries the proxy's address, the
+// audit trail records nothing, and the login limiter has one bucket for the
+// whole internet, so one attacker locks out every user.
+//
+// What makes the header safe to read is knowing how many hops to discard.
+// With hops == 0 nothing is trusted and RemoteAddr is the answer. With
+// hops == N the last N entries of the chain were appended by infrastructure
+// we run, and the entry before them is the furthest address we have evidence
+// for. Anything an attacker prepends sits to the left of that and is skipped.
+//
+// This depends on every proxy in front *appending* to X-Forwarded-For rather
+// than replacing it: Caddy's reverse_proxy and nginx's
+// $proxy_add_x_forwarded_for both do. A proxy that overwrites the header
+// makes the chain shorter than the count says, which lands on the fallback
+// below rather than on anything a caller chose.
+func clientIP(r *http.Request, hops int) string {
+	remote := remoteHost(r)
+	if hops <= 0 {
+		return remote
+	}
+
+	// The chain as the last proxy saw it: what was forwarded, then the peer
+	// that handed us the request. Header.Values covers a client that split
+	// the list across several X-Forwarded-For headers, which is legal and
+	// which Get would silently truncate to the first.
+	chain := make([]string, 0, 8)
+	for _, header := range r.Header.Values("X-Forwarded-For") {
+		for _, addr := range strings.Split(header, ",") {
+			if addr = strings.TrimSpace(addr); addr != "" {
+				chain = append(chain, addr)
+			}
+		}
+	}
+	chain = append(chain, remote)
+
+	// Count back past the proxies we run. A chain shorter than the count is a
+	// misconfiguration or a proxy that replaced the header rather than
+	// appending; either way the honest answer is the peer we can actually
+	// see, not a guess taken from further left where a caller could have put
+	// it.
+	i := len(chain) - 1 - hops
+	if i < 0 {
+		return remote
+	}
+
+	// A forged entry can be any string at all. An unparseable one must not
+	// become a rate-limit key -- that is the unbounded-distinct-keys hole the
+	// limiter's own sweep exists to avoid -- so it falls back to the peer.
+	if net.ParseIP(chain[i]) == nil {
+		return remote
+	}
+	return chain[i]
+}
+
+// remoteHost is the peer address with any port stripped.
+func remoteHost(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		// RemoteAddr is not always host:port -- a unix socket, or a test
@@ -116,7 +172,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := s.auth.Register(r.Context(), req.registration(), sessionContext(r))
+	session, err := s.auth.Register(r.Context(), req.registration(), s.sessionContext(r))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -152,7 +208,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := s.auth.Login(r.Context(), req.Email, req.Password, sessionContext(r))
+	session, err := s.auth.Login(r.Context(), req.Email, req.Password, s.sessionContext(r))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -167,7 +223,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 // goes to the service, which answers "sign in again" -- the handler does not
 // get its own opinion about what an empty token means.
 func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
-	session, err := s.auth.Refresh(r.Context(), readRefreshToken(r), sessionContext(r))
+	session, err := s.auth.Refresh(r.Context(), readRefreshToken(r), s.sessionContext(r))
 	if err != nil {
 		// The presented token is now either invalid or rotated away. Either
 		// way it will never work again, so clear it rather than leaving the

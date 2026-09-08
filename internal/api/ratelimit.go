@@ -158,14 +158,16 @@ func (l *limiter) sweep(now time.Time) {
 // withRateLimit throttles a handler per client address.
 //
 // Keyed on the same address the session audit records -- see clientIP in
-// auth.go, and the note there about why X-Forwarded-For is not read. That
-// matters more here than there: if this trusted a client-supplied header, an
-// attacker would lift their own limit by varying it, which is worse than
-// having no limit at all because it would look like one.
-func withRateLimit(l *limiter) func(http.HandlerFunc) http.Handler {
+// auth.go, and the note there on how the hop count makes X-Forwarded-For
+// safe to read. Both directions of getting that count wrong land here. Too
+// high and an attacker varies a header to mint a fresh bucket per attempt,
+// which is worse than no limit because it looks like one. Too low behind a
+// proxy and every request keys on the proxy, so the burst is shared by
+// everyone and one attacker locks out every user.
+func withRateLimit(l *limiter, hops int) func(http.HandlerFunc) http.Handler {
 	return func(next http.HandlerFunc) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ok, wait := l.allow(clientIP(r))
+			ok, wait := l.allow(clientIP(r, hops))
 			if !ok {
 				seconds := int(wait.Seconds())
 				if seconds < 1 {

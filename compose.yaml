@@ -1,0 +1,166 @@
+# The production stack: Postgres, a one-shot migrator, the Go API, the
+# SvelteKit server, and Caddy in front of both.
+#
+#   cp .env.example .env    and fill it in -- see the checklist in README
+#   docker compose up -d --build
+#
+# Only Caddy publishes a port. The API and the web server are reachable on the
+# internal network and nowhere else, which is what makes the same-origin
+# arrangement in the Caddyfile the only way in rather than merely the intended
+# one -- a direct hit on :8080 would arrive with no X-Forwarded-For and be
+# rate-limited as if it were the proxy.
+
+name: khel-arena
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-khel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-khel_arena}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    # Everything below waits on this, so it has to mean "accepting queries",
+    # not "the container started". A migrator that starts a second too early
+    # fails the deploy on a connection refused.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-khel} -d ${POSTGRES_DB:-khel_arena}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Runs to completion and exits. The API waits for it to succeed, so a
+  # migration that fails stops the deploy there rather than starting code
+  # against a schema that cannot support it.
+  #
+  # It builds the same image as the API and overrides the entrypoint: the two
+  # binaries must come from one commit, and one image is how that is
+  # guaranteed rather than hoped for.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: khel-arena-api:latest
+    entrypoint: ["/usr/local/bin/migrate"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      # config.Load runs in this process too and validates every field,
+      # including one this binary never uses. Passing the real secret rather
+      # than a placeholder keeps the migrator from being the one place a
+      # malformed value goes unnoticed.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      APP_ENV: ${APP_ENV:-production}
+      # Production refuses to boot without a mail server, and that check is in
+      # the shared loader. The migrator needs the value to satisfy it.
+      SMTP_HOST: ${SMTP_HOST}
+      MAIL_FROM: ${MAIL_FROM}
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: khel-arena-api:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_URL: ${APP_URL:?set APP_URL in .env}
+      HTTP_ADDR: ":8080"
+      DATABASE_URL: ${DATABASE_URL}
+
+      # Caddy, and nothing else. See clientIP in internal/api/auth.go: at 0
+      # every request would carry Caddy's address, so the login limiter would
+      # have one bucket for every client at once. Raise it only if you put
+      # something in front of Caddy -- a CDN makes it 2.
+      TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
+
+      # Empty on purpose. Caddy serves both halves from one origin, so no
+      # request is cross-origin and there is nothing to grant.
+      CORS_ALLOWED_ORIGINS: ""
+
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-khel-arena}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-720h}
+
+      BOOKING_HOLD_WINDOW: ${BOOKING_HOLD_WINDOW:-15m}
+      ARENA_TIMEZONE: ${ARENA_TIMEZONE:-Asia/Kathmandu}
+
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Khel Arena}
+
+      # Unset turns online payments off and settles every booking in cash --
+      # a smaller deployment, not a broken one. Back this up somewhere other
+      # than this host: losing it makes every venue's stored gateway
+      # credential permanently unreadable.
+      PAYMENT_ENC_KEY: ${PAYMENT_ENC_KEY}
+
+      MEDIA_DIR: /var/lib/khel/media
+      MEDIA_URL_PREFIX: /media
+    volumes:
+      # Uploads are on local disk, which is why this stack runs exactly one
+      # API replica: a second would not see the first's files, and the login
+      # rate limiter is per process besides. Both limits are written out in
+      # internal/platform/media and internal/api/ratelimit.go, and both want
+      # object storage plus a shared counter before scaling out.
+      - media:/var/lib/khel/media
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    image: khel-arena-web:latest
+    restart: unless-stopped
+    environment:
+      # adapter-node has no way to know the public origin, and guesses one
+      # from the request when this is unset -- which is how the sitemap ends
+      # up advertising the container's own address. Naming it here also fixes
+      # the origin SvelteKit checks form POSTs against, and takes that answer
+      # out of a header a caller could set.
+      ORIGIN: ${APP_URL}
+    depends_on:
+      # Only so a server-rendered page does not fail its first load. The web
+      # server itself has no dependency on the API being up.
+      api:
+        condition: service_started
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env (a hostname, or http://localhost to test)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Issued certificates and the ACME account key. Without this volume
+      # every restart re-requests a certificate, which runs into Let's
+      # Encrypt's rate limits after a handful of deploys.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - web
+
+volumes:
+  db-data:
+  media:
+  caddy-data:
+  caddy-config:

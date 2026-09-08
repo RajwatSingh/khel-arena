@@ -235,6 +235,12 @@ type Options struct {
 	// production).
 	AllowedOrigins []string
 
+	// TrustedProxyHops is how many reverse proxies sit in front. It decides
+	// whether X-Forwarded-For is read at all and how much of it to discard --
+	// see clientIP in auth.go, which both the session audit trail and the
+	// login rate limiter go through. Zero, the default, trusts nothing.
+	TrustedProxyHops int
+
 	// SecureCookies marks the refresh cookie Secure. Off in development
 	// because http://localhost has no TLS; on everywhere else.
 	SecureCookies bool
@@ -285,10 +291,11 @@ type Server struct {
 
 	appURL string
 
-	allowedOrigins []string
-	secureCookies  bool
-	logResetTokens bool
-	requestTimeout time.Duration
+	allowedOrigins   []string
+	trustedProxyHops int
+	secureCookies    bool
+	logResetTokens   bool
+	requestTimeout   time.Duration
 
 	// loginLimiter throttles the two endpoints worth grinding on. Held on the
 	// Server rather than built inside routes() so its buckets survive for the
@@ -302,27 +309,28 @@ func NewServer(opts Options) *Server {
 		timeout = defaultRequestTimeout
 	}
 	return &Server{
-		auth:            opts.Auth,
-		bookings:        opts.Bookings,
-		profiles:        opts.Profiles,
-		arenas:          opts.Arenas,
-		payments:        opts.Payments,
-		paymentAccounts: opts.PaymentAccounts,
-		owner:           opts.Owner,
-		teams:           opts.Teams,
-		calls:           opts.Calls,
-		tournaments:     opts.Tournaments,
-		matches:         opts.Matches,
-		reviews:         opts.Reviews,
-		media:           opts.Media,
-		mailer:          opts.Mailer,
-		pinger:          opts.Pinger,
-		appURL:          strings.TrimRight(opts.AppURL, "/"),
-		allowedOrigins:  opts.AllowedOrigins,
-		secureCookies:   opts.SecureCookies,
-		logResetTokens:  opts.LogResetTokens,
-		requestTimeout:  timeout,
-		loginLimiter:    newLimiter(opts.LoginRateLimit, nil),
+		auth:             opts.Auth,
+		bookings:         opts.Bookings,
+		profiles:         opts.Profiles,
+		arenas:           opts.Arenas,
+		payments:         opts.Payments,
+		paymentAccounts:  opts.PaymentAccounts,
+		owner:            opts.Owner,
+		teams:            opts.Teams,
+		calls:            opts.Calls,
+		tournaments:      opts.Tournaments,
+		matches:          opts.Matches,
+		reviews:          opts.Reviews,
+		media:            opts.Media,
+		mailer:           opts.Mailer,
+		pinger:           opts.Pinger,
+		appURL:           strings.TrimRight(opts.AppURL, "/"),
+		allowedOrigins:   opts.AllowedOrigins,
+		trustedProxyHops: opts.TrustedProxyHops,
+		secureCookies:    opts.SecureCookies,
+		logResetTokens:   opts.LogResetTokens,
+		requestTimeout:   timeout,
+		loginLimiter:     newLimiter(opts.LoginRateLimit, nil),
 	}
 }
 
@@ -343,7 +351,7 @@ func (s *Server) routes() http.Handler {
 	// Login and password/forgot are throttled: the first is the online
 	// password-guessing target, the second sprays somebody's inbox on
 	// request. Everything else here is a read whose cost is a cached query.
-	throttle := withRateLimit(s.loginLimiter)
+	throttle := withRateLimit(s.loginLimiter, s.trustedProxyHops)
 
 	mux.HandleFunc("POST /v1/auth/register", s.handleRegister)
 	mux.Handle("POST /v1/auth/login", throttle(s.handleLogin))

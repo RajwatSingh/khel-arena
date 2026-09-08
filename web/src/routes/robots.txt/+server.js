@@ -1,5 +1,14 @@
 /** Personal, auth and machine routes stay out of search indexes. */
-const DISALLOW = ['/bookings', '/dashboard', '/login', '/manage', '/register', '/v1/'];
+const DISALLOW = [
+	'/bookings',
+	'/dashboard',
+	'/healthz',
+	'/login',
+	'/manage',
+	'/readyz',
+	'/register',
+	'/v1/'
+];
 
 export function GET({ url }) {
 	const body = [

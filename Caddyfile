@@ -1,0 +1,75 @@
+# The single origin both halves are served from.
+#
+# This is not a convenience. Three things in the codebase assume it:
+#
+#   * web/src/lib/api/client.js uses a relative `/v1` base, so the browser
+#     resolves the API against whatever origin served the page.
+#   * The refresh token is an httpOnly cookie. Same-origin means it travels
+#     with no CORS grant and no SameSite negotiation -- which is why
+#     CORS_ALLOWED_ORIGINS is empty in production rather than listing a
+#     second host.
+#   * returnURLs in cmd/api/main.go builds gateway callbacks as
+#     APP_URL/v1/payments/<provider>/callback. A payer coming back from eSewa
+#     or Khalti lands on APP_URL, and /v1 has to reach the Go service from
+#     there or the booking is paid for and never confirmed.
+#
+# Split the two onto separate hostnames and all three break at once.
+
+{$SITE_ADDRESS} {
+	# Caddy provisions and renews a certificate automatically for a real
+	# hostname. Set SITE_ADDRESS to `http://localhost` to run the whole stack
+	# locally without one -- and note that APP_ENV=production sets Secure on
+	# the refresh cookie, so over plain http nobody can stay signed in. That
+	# combination is for smoke-testing the topology, not for serving anyone.
+
+	encode zstd gzip
+
+	header {
+		# Told once, remembered by the browser. Worth keeping the max-age
+		# modest until the domain is settled: a long one is a promise that
+		# cannot be withdrawn early.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# Stops a browser from second-guessing a Content-Type. The upload
+		# path already sniffs and pins the type it stores; this is the other
+		# half, so a stored file cannot be re-interpreted as script.
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# The API sets no CSP of its own. Leaving frame-ancestors here means
+		# the click-jacking answer does not depend on which backend replied.
+		-Server
+	}
+
+	# ── the Go service ──────────────────────────────────────────────────────
+	# Matched before the catch-all below.
+	#
+	#   /v1       the JSON API
+	#   /media    uploaded arena photos, served off disk by the API itself
+	#             (MEDIA_URL_PREFIX). Without this route every uploaded image
+	#             resolves against the SvelteKit server and 404s -- the same
+	#             pair the vite dev proxy sets up, for the same reason.
+	#   /healthz  liveness, and /readyz readiness. The API's, not the web
+	#   /readyz   server's: /readyz is the one that pings the database, so it
+	#             is the answer an uptime monitor actually wants, and
+	#             scripts/smoke.sh walks both before it touches /v1. The web
+	#             container keeps its own /healthz for Docker to poll on
+	#             127.0.0.1:3000, which this does not shadow.
+	@api path /v1 /v1/* /media /media/* /healthz /readyz
+	handle @api {
+		reverse_proxy api:8080 {
+			# Caddy appends the peer address to X-Forwarded-For rather than
+			# replacing it. That is precisely what TRUSTED_PROXY_HOPS=1
+			# depends on: clientIP counts one entry back from the right, so
+			# anything a caller forged sits to the left and is skipped. A
+			# proxy that overwrote the header instead would leave the chain
+			# a hop short and fall back to this container's address, which
+			# would collapse the login limiter into one bucket.
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# ── everything else: the SvelteKit server ───────────────────────────────
+	handle {
+		reverse_proxy web:3000
+	}
+}

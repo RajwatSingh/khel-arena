@@ -1,0 +1,13 @@
+# The Go build stage copies cmd/ and internal/ explicitly, so this mainly
+# keeps the build context small and secrets out of it.
+.git
+.github
+.env
+.env.local
+.media
+bin/
+legacy-frontend/
+web/
+scripts/
+DEVELOPER.html
+*.md

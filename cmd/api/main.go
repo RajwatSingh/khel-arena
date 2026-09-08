@@ -165,6 +165,10 @@ func run() error {
 		Pinger:          pool,
 		AppURL:          cfg.AppURL,
 		AllowedOrigins:  cfg.AllowedOrigins,
+		// How many proxies to discard from X-Forwarded-For before believing
+		// an address. Zero behind a proxy would give the login limiter one
+		// bucket for every client at once -- see clientIP in internal/api.
+		TrustedProxyHops: cfg.TrustedProxyHops,
 		// No TLS on http://localhost, so a Secure cookie would simply never
 		// be stored there. Everywhere else it must be set, or the refresh
 		// token can travel in clear text.

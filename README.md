@@ -209,6 +209,259 @@ deployment error — the database cannot be brought to the state the code now
 expects — so it is reported rather than silently skipped. Write a new
 migration instead.
 
+## Deploying
+
+Five containers: Postgres, a one-shot migrator, the Go API, the SvelteKit
+server, and Caddy in front of both.
+
+```
+cp .env.example .env          # then fill it in -- see below
+docker compose up -d --build
+```
+
+Only Caddy publishes a port. The other four are reachable on the internal
+network and nowhere else.
+
+### From a fresh server
+
+What follows is the whole path from nothing to a running site. It assumes
+Ubuntu 24.04 on a plain VPS -- not a managed platform: this stack brings its
+own Postgres and its own reverse proxy, and wants a machine it can run five
+containers on.
+
+**Size it for the database and the photos.** 2 vCPU / 4 GB RAM / 80 GB disk is
+comfortable; 2 GB is tight once Postgres and the Node server are both resident.
+The disk matters more than it looks, because uploads live on it rather than in
+object storage -- see "One instance, deliberately" below. Pick a region near
+the people using it: Mumbai or Singapore for a Nepal audience.
+
+**1. Point the domain at the machine.** An `A` record for the apex, and
+another for `www` if you want it, both to the server's IPv4 address. Do this
+first: Caddy proves it controls the name over HTTP to get a certificate, and
+until DNS resolves it will retry and fail.
+
+```
+dig +short khelarena.com.np        # should print the server's IP
+```
+
+**2. Make a user that is not root.**
+
+```
+adduser khel && usermod -aG sudo khel
+rsync --archive --chown=khel:khel ~/.ssh /home/khel
+```
+
+Then log back in as that user. Everything below is run as them.
+
+**3. Close everything but the three ports that are used.**
+
+```
+sudo ufw allow OpenSSH
+sudo ufw allow 80,443/proto tcp
+sudo ufw enable
+```
+
+Postgres is deliberately absent from that list. It is reachable on the compose
+network and must not be reachable from anywhere else; the compose file
+publishes no port for it, and this is the second lock on the same door.
+
+**4. Install Docker.**
+
+```
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
+```
+
+Log out and back in for the group to take effect, then check both halves:
+
+```
+docker compose version
+```
+
+**5. Get the code onto it.**
+
+```
+git clone https://github.com/RajwatSingh/khel-arena.git
+cd khel-arena
+```
+
+**6. Write `.env`.** It is gitignored, so it does not arrive with the clone --
+this is the one file you create by hand on the server, and the one thing worth
+being slow and careful about.
+
+```
+cp .env.example .env
+openssl rand -base64 48        # paste as JWT_SECRET
+openssl rand -base64 32        # paste as PAYMENT_ENC_KEY
+openssl rand -base64 24        # paste as POSTGRES_PASSWORD
+```
+
+Then set, at minimum:
+
+```
+APP_ENV=production
+APP_URL=https://khelarena.com.np
+SITE_ADDRESS=khelarena.com.np
+DATABASE_URL=postgres://khel:<POSTGRES_PASSWORD>@db:5432/khel_arena?sslmode=disable
+TRUSTED_PROXY_HOPS=1
+CORS_ALLOWED_ORIGINS=
+SMTP_HOST=...          # from the mail provider
+SMTP_USERNAME=...
+SMTP_PASSWORD=...
+MAIL_FROM=noreply@khelarena.com.np
+```
+
+Three of those are easy to get subtly wrong. The database host is `db`, the
+service name on the compose network, not `localhost`. `sslmode=disable` is
+correct for that hop and only that hop -- it never leaves the container
+network -- and becomes `sslmode=require` the day this points at a managed
+database instead. And `APP_URL` needs the scheme and no trailing slash,
+because it is concatenated into gateway callback URLs.
+
+**7. Start it.**
+
+```
+docker compose up -d --build
+```
+
+The first build compiles Go and bundles the frontend, so give it a few
+minutes. Then watch it come up:
+
+```
+docker compose ps
+docker compose logs -f api
+```
+
+`migrate` is expected to show as exited -- it runs once and stops. `api`
+should log `api listening`, and a certificate should appear in Caddy's log
+within a minute of the first request.
+
+### Checking it actually works
+
+In this order, because each one rules out the layer below it:
+
+```
+curl -I https://khelarena.com.np/healthz     # Caddy, TLS, and the API process
+curl -I https://khelarena.com.np/readyz      # ...and the database behind it
+BASE_URL=https://khelarena.com.np make smoke # the endpoints a real client uses
+```
+
+`smoke.sh` registers a fresh account each run, so it leaves a `smoke<stamp>@`
+user behind in the database. That is harmless and worth knowing about before
+you find them. Do not run `make seed` against production -- it creates
+accounts with published passwords, and says so at the top of the script.
+
+Then the one thing no probe covers: **trigger a password reset and confirm the
+mail arrives in a Gmail inbox rather than its spam folder.** Add the SPF, DKIM
+and DMARC records your mail provider asks for before testing, not after. Reset
+is the only route back into a locked-out account, so mail that silently lands
+in spam is a user permanently locked out -- and it is the failure most likely
+to go unnoticed, because nothing errors.
+
+### Updating it later
+
+```
+git pull
+docker compose up -d --build
+```
+
+Compose recreates only what changed, runs any new migrations first, and leaves
+the volumes alone. Rolling back is `git checkout <previous>` and the same
+command -- with the caveat that a migration is not undone by checking out the
+commit before it, so a release that migrates needs a considered rollback
+rather than this one.
+
+### Backups
+
+Nothing above backs anything up. Two things are worth losing sleep over:
+
+```
+docker compose exec -T db pg_dump -U khel khel_arena | gzip > khel-$(date +%F).sql.gz
+docker run --rm -v khel-arena_media:/m -v "$PWD":/out alpine \
+    tar czf /out/media-$(date +%F).tar.gz -C /m .
+```
+
+The database and the media volume. Put both somewhere that is not this server,
+on a schedule, and **restore one at least once** -- an untested backup is a
+guess. `PAYMENT_ENC_KEY` belongs in that offsite place too: a database dump
+without it still has every venue's gateway credential, and no way to read it.
+
+### One origin, not two
+
+The single most important thing about this topology, and the thing that breaks
+quietly if it is changed: **the interface and the API are served from the same
+origin**, and Caddy is what arranges it. `/v1` and `/media` reach the Go
+service; everything else reaches SvelteKit.
+
+Three separate things depend on it. The API client's base URL is relative
+(`web/src/lib/api/client.js`), so the browser resolves the API against whatever
+origin served the page. The refresh token is an httpOnly cookie, and
+same-origin means it travels with no CORS grant and no `SameSite` negotiation
+-- which is why `CORS_ALLOWED_ORIGINS` is empty in production rather than
+naming a second host. And `returnURLs` in `cmd/api/main.go` builds gateway
+callbacks as `APP_URL/v1/payments/<provider>/callback`, so a payer coming back
+from eSewa lands on `APP_URL` and `/v1` has to reach the Go service from there
+-- or the booking is paid for and never confirmed.
+
+Split the two onto separate hostnames and all three break at once.
+
+### Deploy order
+
+`cmd/migrate` runs to completion before `cmd/api` starts; compose enforces it
+with `service_completed_successfully`. A failed migration stops the deploy
+there rather than starting code against a schema that cannot support it. Both
+binaries ship in one image so they cannot drift apart across a deploy.
+
+### What the secrets actually do
+
+Step 6 above generates them. Never reuse the development values: a
+`JWT_SECRET` that has been in a repository signs tokens anyone can mint.
+
+**Back `PAYMENT_ENC_KEY` up somewhere other than the host.** It is what
+`arena_payment_accounts.secret_key` is sealed with; lose it and every venue's
+stored gateway credential is permanently unreadable. Rotating it has the same
+effect, so treat it like `JWT_SECRET`.
+
+`APP_ENV=production` is load-bearing beyond the log format. It marks the
+refresh cookie `Secure` (so the deployment needs real TLS, or nobody stays
+signed in), it stops password-reset tokens being written to the log, and it
+makes `config.Load` refuse to start without an SMTP host — a deployment whose
+only route back into a locked-out account logs the link has no recovery path.
+
+### `TRUSTED_PROXY_HOPS`
+
+Set it to the number of proxies actually in front. The compose stack is `1`:
+Caddy, and nothing else. A CDN in front of Caddy makes it `2`.
+
+It has to be exact, because both directions are a real failure. Too low and
+every request carries the proxy's address, so the login limiter has one bucket
+for every client at once and a single attacker locks out every user. Too high
+and a caller can prepend whatever address it likes, minting a fresh bucket per
+attempt — worse than no limit, because it reads as one. See `clientIP` in
+`internal/api/auth.go`.
+
+Every proxy in the chain must *append* to `X-Forwarded-For` rather than replace
+it. Caddy's `reverse_proxy` and nginx's `$proxy_add_x_forwarded_for` both do.
+
+### One instance, deliberately
+
+This stack runs exactly one API replica, and two things in the code say why.
+The login rate limiter is a token bucket in process memory
+(`internal/api/ratelimit.go`), so N replicas give an attacker N times the
+allowance. Uploads are a directory on disk
+(`internal/platform/media`), so a second replica cannot see the first's files.
+
+Both are the right shape at this size and both are written out where they
+live. Scaling out wants a shared counter and object storage first — not more
+replicas.
+
+### Certificates
+
+Caddy's `/data` volume holds the issued certificate and the ACME account key.
+Without it every restart re-requests a certificate and runs into Let's
+Encrypt's rate limits after a handful of deploys -- so if certificates start
+failing after a few redeploys, that volume is the first thing to check.
+
 ## Notes on the schema
 
 A few deliberate departures from what it replaces:

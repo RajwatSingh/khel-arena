@@ -28,6 +28,18 @@ type Config struct {
 	// let whoever sent the request choose the domain in an email.
 	AppURL string
 
+	// TrustedProxyHops is how many reverse proxies sit in front of this
+	// service. It is what makes a client's address knowable behind one: with
+	// it at 0 the address is RemoteAddr and X-Forwarded-For is ignored, and
+	// with it at N the client is the Nth entry from the right of the chain.
+	//
+	// Getting it wrong in either direction has a cost. Too low behind a proxy
+	// and every request looks like it came from the proxy, which collapses
+	// the login rate limiter into one bucket for the whole internet. Too high
+	// and a caller can prepend whatever address it likes, which is worse --
+	// a forgeable limit looks like a limit but is not one.
+	TrustedProxyHops int
+
 	Database Database
 	Auth     Auth
 	Booking  Booking
@@ -125,6 +137,11 @@ func Load() (Config, error) {
 		HTTPAddr:       envOr("HTTP_ADDR", ":8080"),
 		AllowedOrigins: allowedOrigins,
 		AppURL:         strings.TrimRight(envOr("APP_URL", "http://localhost:5173"), "/"),
+	}
+
+	cfg.TrustedProxyHops = intEnvOr("TRUSTED_PROXY_HOPS", 0, fail)
+	if cfg.TrustedProxyHops < 0 {
+		fail("TRUSTED_PROXY_HOPS must be zero or more, got %d", cfg.TrustedProxyHops)
 	}
 
 	cfg.Database.URL = os.Getenv("DATABASE_URL")

@@ -261,6 +261,9 @@
 								</button>
 								<button class="btn btn-secondary" onclick={() => cancel(booking)}>Cancel hold</button>
 							{:else if booking.status === 'confirmed'}
+								{#if !booking.open_to_join && new Date(booking.starts_at).getTime() > ticking.now}
+									<a class="btn btn-secondary" href="/games/new?booking={booking.id}">Find players</a>
+								{/if}
 								<button class="btn btn-secondary" onclick={() => cancel(booking)}>Cancel</button>
 							{/if}
 						</div>

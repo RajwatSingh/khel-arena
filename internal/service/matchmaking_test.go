@@ -108,7 +108,7 @@ func TestCreateCallTakesKickoffFromTheBooking(t *testing.T) {
 	slotStart := now.Add(6 * time.Hour)
 	calls := &stubCalls{}
 	svc := NewMatchmakingService(calls, stubBookings{booking: domain.Booking{
-		ID: bookingID, UserID: captainID,
+		ID: bookingID, UserID: captainID, Status: domain.BookingConfirmed,
 		Slot: domain.Slot{Start: slotStart, End: slotStart.Add(time.Hour)},
 	}}, fixedClock{now})
 
@@ -122,6 +122,50 @@ func TestCreateCallTakesKickoffFromTheBooking(t *testing.T) {
 
 	if !calls.call.StartsAt.Equal(slotStart) {
 		t.Errorf("starts_at = %v, want the booking's %v", calls.call.StartsAt, slotStart)
+	}
+}
+
+// A game is posted to fill a court that is reserved: no booking, no game.
+func TestCreateCallNeedsABooking(t *testing.T) {
+	calls := &stubCalls{}
+	svc := NewMatchmakingService(calls, stubBookings{}, fixedClock{now})
+
+	_, err := svc.Create(context.Background(), captainID, domain.Call{
+		Title: "Anyone about?", NeededPlayers: 2, StartsAt: now.Add(time.Hour),
+	})
+
+	if domain.CodeOf(err) != domain.CodeInvalid {
+		t.Errorf("code = %q, want invalid", domain.CodeOf(err))
+	}
+	if calls.writes != 0 {
+		t.Error("a call was posted with no booking behind it")
+	}
+}
+
+// An unpaid hold may lapse, and a game that has started is too late to fill.
+func TestCreateCallNeedsAConfirmedUpcomingBooking(t *testing.T) {
+	bookingID := uuid.New()
+	upcoming := domain.Slot{Start: now.Add(6 * time.Hour), End: now.Add(7 * time.Hour)}
+	started := domain.Slot{Start: now.Add(-30 * time.Minute), End: now.Add(30 * time.Minute)}
+
+	for name, booking := range map[string]domain.Booking{
+		"unpaid hold": {ID: bookingID, UserID: captainID, Status: domain.BookingPending, Slot: upcoming},
+		"cancelled":   {ID: bookingID, UserID: captainID, Status: domain.BookingCancelled, Slot: upcoming},
+		"started":     {ID: bookingID, UserID: captainID, Status: domain.BookingConfirmed, Slot: started},
+	} {
+		calls := &stubCalls{}
+		svc := NewMatchmakingService(calls, stubBookings{booking: booking}, fixedClock{now})
+
+		_, err := svc.Create(context.Background(), captainID, domain.Call{
+			BookingID: &bookingID, Title: "Need two more", NeededPlayers: 2,
+		})
+
+		if domain.CodeOf(err) != domain.CodeConflict {
+			t.Errorf("%s: code = %q, want conflict", name, domain.CodeOf(err))
+		}
+		if calls.writes != 0 {
+			t.Errorf("%s: a call was posted", name)
+		}
 	}
 }
 

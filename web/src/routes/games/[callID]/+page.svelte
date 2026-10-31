@@ -94,7 +94,7 @@
 				</div>
 				<div>
 					<dt class="label">Court</dt>
-					<dd>{call.booking_id ? 'Booked and paid for' : 'Not booked yet'}</dd>
+					<dd>{call.booking_id ? 'Booked' : 'Not booked yet'}</dd>
 				</div>
 				<div>
 					<dt class="label">Filled</dt>

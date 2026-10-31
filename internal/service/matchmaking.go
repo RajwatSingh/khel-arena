@@ -62,29 +62,39 @@ type CallWithResponses struct {
 
 // Create opens a call.
 //
-// A call attached to a booking has to be attached to the author's own booking:
-// otherwise anyone could advertise somebody else's court, and the players who
-// turned up would find it occupied by people who had never heard of them.
+// Every new call is for one of the author's own bookings: a game is posted to
+// fill a court that is actually reserved, so the players who answer it have
+// somewhere to turn up. The booking has to be the author's -- otherwise anyone
+// could advertise somebody else's court -- confirmed rather than an unpaid
+// hold that may lapse, and not yet started.
 func (s *MatchmakingService) Create(ctx context.Context, authorID uuid.UUID, c domain.Call) (domain.Call, error) {
 	if authorID == uuid.Nil {
 		return domain.Call{}, domain.Unauthenticated("Sign in to post a game.")
 	}
 	c.AuthorID = authorID
 
-	if c.BookingID != nil {
-		booking, err := s.bookings.ByID(ctx, *c.BookingID)
-		if err != nil {
-			return domain.Call{}, err
-		}
-		if !booking.IsHeldBy(authorID) {
-			return domain.Call{}, domain.NotFound("No booking with that reference.")
-		}
-
-		// The court and the kickoff come from the booking, not the request:
-		// a call advertising a different time than the hour actually reserved
-		// is how people end up at an empty pitch.
-		c.StartsAt = booking.Slot.Start
+	if c.BookingID == nil {
+		return domain.Call{}, domain.Invalid("booking_id", "Pick one of your bookings to post a game for.")
 	}
+
+	booking, err := s.bookings.ByID(ctx, *c.BookingID)
+	if err != nil {
+		return domain.Call{}, err
+	}
+	if !booking.IsHeldBy(authorID) {
+		return domain.Call{}, domain.NotFound("No booking with that reference.")
+	}
+	if booking.Status != domain.BookingConfirmed {
+		return domain.Call{}, domain.Conflict("Only a confirmed booking can be opened up for a game.")
+	}
+	if !booking.Slot.Start.After(s.clock.Now()) {
+		return domain.Call{}, domain.Conflict("That booking has already started.")
+	}
+
+	// The court and the kickoff come from the booking, not the request:
+	// a call advertising a different time than the hour actually reserved
+	// is how people end up at an empty pitch.
+	c.StartsAt = booking.Slot.Start
 
 	if err := c.Validate(); err != nil {
 		return domain.Call{}, err

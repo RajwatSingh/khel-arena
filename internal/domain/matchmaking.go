@@ -12,9 +12,9 @@ const MaxNeededPlayers = 15
 
 // Call is a post on the find-a-player board.
 //
-// It comes in two shapes. With a BookingID it opens a court the author has
-// already paid for ("we have Dhuku at 8, need 2 more"). Without one it is an
-// open call for a pickup game nobody has booked yet.
+// It opens a court the author has already booked ("we have Dhuku at 8, need
+// 2 more"). New calls always carry a BookingID; calls without one are older
+// open calls posted before a booking was required.
 type Call struct {
 	ID            uuid.UUID
 	AuthorID      uuid.UUID

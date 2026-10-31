@@ -65,16 +65,26 @@ const MONTH_SHORT = [
 	'Dec'
 ];
 
+/**
+ * Accepts a `YYYY-MM-DD` date, or a full timestamp (an ISO string or a Date),
+ * which is turned into its calendar date in Kathmandu. Many API fields are
+ * timestamps; splitting one on '-' gave "undefined NaN November".
+ */
+function asLocalDate(date) {
+	if (typeof date === 'string' && date.length === 10) return date;
+	return localDate(new Date(date));
+}
+
 /** `Sun 9 Aug` — the form used on date rails and booking rows. */
 export function formatDate(date) {
-	const [y, m, d] = date.split('-').map(Number);
+	const [y, m, d] = asLocalDate(date).split('-').map(Number);
 	const weekday = WEEKDAY_SHORT[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
 	return `${weekday} ${d} ${MONTH_SHORT[m - 1]}`;
 }
 
 /** `Sunday 9 August` — long form for section openers. */
 export function formatDateLong(date) {
-	const [y, m, d] = date.split('-').map(Number);
+	const [y, m, d] = asLocalDate(date).split('-').map(Number);
 	const js = new Date(Date.UTC(y, m - 1, d));
 	const weekday = [
 		'Sunday',

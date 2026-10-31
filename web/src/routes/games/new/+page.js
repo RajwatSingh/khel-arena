@@ -7,25 +7,35 @@ import { api, ApiError } from '$lib/api/index.js';
 export const ssr = false;
 
 /**
- * The form offers the caller's own upcoming bookings to attach the game to,
- * so "we have Dhuku at 8, need two more" is a choice rather than something
- * typed out. Only bookings that are still live and still ahead qualify.
+ * A game is always posted for one of the caller's own bookings, so the page
+ * starts by listing them. Only confirmed bookings that haven't started
+ * qualify: an unpaid hold can lapse and leave the game with no court.
+ *
+ * A booking can carry one game. The caller's games are fetched alongside so
+ * a booking that already has one links to it instead of offering a second.
  */
-export async function load({ fetch }) {
+export async function load({ fetch, url }) {
 	try {
-		const bookings = await api.listBookings(20, { fetch });
+		const [bookings, calls] = await Promise.all([
+			api.listBookings(50, { fetch }),
+			api.myCalls({ fetch })
+		]);
 		const now = Date.now();
 
+		const gameFor = Object.fromEntries(
+			(calls ?? []).filter((c) => c.booking_id).map((c) => [c.booking_id, c.id])
+		);
+
 		return {
-			bookings: bookings.filter(
-				(b) =>
-					new Date(b.starts_at).getTime() > now &&
-					(b.status === 'pending' || b.status === 'confirmed')
-			)
+			bookings: bookings
+				.filter((b) => b.status === 'confirmed' && new Date(b.starts_at).getTime() > now)
+				.sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+				.map((b) => ({ ...b, game_id: gameFor[b.id] ?? null })),
+			// Lets a link elsewhere open the form with a booking already picked.
+			preselect: url.searchParams.get('booking')
 		};
 	} catch (err) {
-		// Signed out: the page itself will send them to sign in, and an empty
-		// list is the right state to render in the meantime.
+		// Signed out: send them to sign in and come back here afterwards.
 		if (err instanceof ApiError && err.code === 'unauthenticated') {
 			redirect(303, '/login?next=/games/new');
 		}

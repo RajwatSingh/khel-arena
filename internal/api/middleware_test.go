@@ -71,6 +71,53 @@ func TestWithAuth(t *testing.T) {
 	}
 }
 
+// A public route that shows more to a signed-in viewer: anonymous without a
+// token, identified with a good one, refused with a bad one so the client
+// refreshes instead of showing a signed-in person the anonymous view.
+func TestWithOptionalAuth(t *testing.T) {
+	cases := []struct {
+		name       string
+		header     string
+		wantStatus int
+		wantUser   bool
+	}{
+		{"no token", "", http.StatusOK, false},
+		{"valid token", "Bearer token", http.StatusOK, true},
+		{"expired token", "Bearer expired", http.StatusUnauthorized, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			auth := &fakeAuth{t: t, authenticate: func(token string) (uuid.UUID, domain.AccountType, error) {
+				if token == "token" {
+					return testUser.ID, testUser.AccountType, nil
+				}
+				return uuid.Nil, "", domain.Unauthenticated("Your session has expired.")
+			}}
+
+			var gotUser bool
+			h := withOptionalAuth(auth)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				id, ok := userIDFromContext(r.Context())
+				gotUser = ok && id == testUser.ID
+			}))
+
+			r := httptest.NewRequest(http.MethodGet, "/v1/calls/x", nil)
+			if tc.header != "" {
+				r.Header.Set("Authorization", tc.header)
+			}
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+
+			if w.Code != tc.wantStatus {
+				t.Errorf("status = %d, want %d", w.Code, tc.wantStatus)
+			}
+			if gotUser != tc.wantUser {
+				t.Errorf("viewer identified = %v, want %v", gotUser, tc.wantUser)
+			}
+		})
+	}
+}
+
 // The identity has to arrive in the context, or every protected handler would
 // have to re-parse the token itself.
 func TestWithAuthPutsCallerInContext(t *testing.T) {

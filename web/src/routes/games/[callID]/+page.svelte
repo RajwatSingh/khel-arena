@@ -1,5 +1,7 @@
 <script>
-	import { goto, invalidateAll } from '$app/navigation';
+	import { fly, scale } from 'svelte/transition';
+	import { untrack } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api/index.js';
 	import { session } from '$lib/session.svelte.js';
 	import CentreMark from '$lib/components/CentreMark.svelte';
@@ -9,13 +11,29 @@
 
 	let { data } = $props();
 
-	// The server rendered this page signed out. Once the visitor's session is
-	// restored, load again in the browser so the parts that are theirs appear.
+	// The page is rendered signed out (the server holds no session). Once the
+	// visitor is known, the game is fetched again as them, which adds the parts
+	// that are theirs: whether they've asked to join, and for the organiser,
+	// who has asked. Fetched here rather than by re-running the page's load,
+	// which did not reliably happen once the session was restored.
+	let personal = $state(null);
+	const call = $derived(personal?.id === data.call.id ? personal : data.call);
+
+	async function refresh() {
+		personal = await api.getCall(data.call.id);
+	}
+
 	$effect(() => {
-		if (session.signedIn && !data.personal) invalidateAll();
+		const id = data.call.id;
+		if (!session.signedIn) {
+			personal = null;
+			return;
+		}
+		untrack(() => {
+			if (personal?.id !== id) refresh().catch(() => {});
+		});
 	});
 
-	const call = $derived(data.call);
 	const mine = $derived(session.signedIn && session.user?.id === call.author_id);
 	const full = $derived(call.spots_remaining === 0);
 	const over = $derived(new Date(call.starts_at).getTime() <= Date.now());
@@ -24,8 +42,16 @@
 	let message = $state('');
 	let busy = $state(false);
 	let error = $state(null);
+	// Set right after a request goes through, so the confirmation can
+	// animate in and show the note that was sent. A later visit shows the
+	// same confirmation, just without the note: the server only tells the
+	// organiser what it said.
+	let justSent = $state(false);
+	let sentMessage = $state('');
 
-	// Every action re-reads the page rather than patching state by hand: the
+	const organiser = $derived(call.author.full_name || call.author.username);
+
+	// Every action re-reads the game rather than patching state by hand: the
 	// server owns the spot count and the status, and guessing at them here is
 	// how a screen ends up disagreeing with the database.
 	async function act(fn) {
@@ -33,7 +59,28 @@
 		error = null;
 		try {
 			await fn();
-			await invalidateAll();
+			await refresh();
+			return true;
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : 'That did not go through.';
+			return false;
+		} finally {
+			busy = false;
+		}
+	}
+
+	// Not through act(): the "just sent" flag has to be set before the page
+	// re-reads, so the confirmation is created already knowing to animate in.
+	async function join() {
+		const note = message.trim();
+		busy = true;
+		error = null;
+		try {
+			await api.respondToCall(call.id, note);
+			sentMessage = note;
+			justSent = true;
+			message = '';
+			await refresh();
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : 'That did not go through.';
 		} finally {
@@ -41,18 +88,26 @@
 		}
 	}
 
-	const join = () => act(async () => {
-		await api.respondToCall(call.id, message);
-		message = '';
-	});
-
-	const withdraw = () => act(() => api.withdrawFromCall(call.id));
+	async function withdraw() {
+		if (await act(() => api.withdrawFromCall(call.id))) {
+			justSent = false;
+			sentMessage = '';
+		}
+	}
 	const accept = (userId) => act(() => api.acceptResponder(call.id, userId));
 	const cancel = () => act(() => api.cancelCall(call.id));
 
+	// Not through act(): there is no game left to re-read afterwards.
 	async function remove() {
-		await act(() => api.deleteCall(call.id));
-		if (!error) goto('/games');
+		busy = true;
+		error = null;
+		try {
+			await api.deleteCall(call.id);
+			goto('/games');
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : 'That did not go through.';
+			busy = false;
+		}
 	}
 </script>
 
@@ -154,9 +209,24 @@
 				{/if}
 				<button class="btn btn-quiet grow" disabled={busy} onclick={remove}>Delete</button>
 			{:else if call.you_responded}
-				<p class="small quiet">You've asked to join. The organiser decides who plays.</p>
-				<button class="btn btn-secondary grow" disabled={busy} onclick={withdraw}>
-					Withdraw
+				<div class="sent" class:fresh={justSent} role="status" in:fly={{ y: 8, duration: justSent ? 280 : 0 }}>
+					<span class="tick" aria-hidden="true" in:scale={{ start: 0.6, duration: justSent ? 320 : 0 }}>
+						<svg viewBox="0 0 24 24" width="22" height="22">
+							<path d="M5 12.5l4.5 4.5L19 7.5" />
+						</svg>
+					</span>
+					<div>
+						<p class="sent-title">Request sent</p>
+						<p class="small">
+							{organiser} has your request and picks who plays. Check back here before kick-off.
+						</p>
+						{#if justSent && sentMessage}
+							<p class="small sent-note">Your note: “{sentMessage}”</p>
+						{/if}
+					</div>
+				</div>
+				<button class="btn btn-quiet grow" disabled={busy} onclick={withdraw}>
+					Withdraw request
 				</button>
 			{:else if closed}
 				<p class="small quiet">
@@ -303,6 +373,78 @@
 
 	.grow {
 		width: 100%;
+	}
+
+	.sent {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		gap: 0.75rem;
+		align-items: start;
+		padding: 0.9rem 1rem;
+		border: 1px solid color-mix(in srgb, var(--pine) 35%, transparent);
+		border-radius: var(--r-md);
+		background: var(--pine-wash);
+		color: var(--pine-deep);
+	}
+
+	.sent p {
+		margin: 0;
+	}
+
+	.sent .small {
+		margin-top: 0.2rem;
+		color: var(--muted);
+		line-height: 1.5;
+	}
+
+	.sent-title {
+		font-weight: 700;
+		font-size: 1.0625rem;
+		color: var(--pine-deep);
+	}
+
+	.sent .sent-note {
+		margin-top: 0.5rem;
+		color: var(--ink);
+		overflow-wrap: anywhere;
+	}
+
+	.tick {
+		display: grid;
+		place-items: center;
+		width: 2.1rem;
+		height: 2.1rem;
+		border-radius: 50%;
+		background: var(--pine);
+		color: #ffffff;
+	}
+
+	.tick path {
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 2.4;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+
+	/* Draw the tick in just after a request goes through. */
+	.fresh .tick path {
+		stroke-dasharray: 22;
+		stroke-dashoffset: 22;
+		animation: draw-tick 0.42s 0.15s var(--ease) forwards;
+	}
+
+	@keyframes draw-tick {
+		to {
+			stroke-dashoffset: 0;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.fresh .tick path {
+			animation: none;
+			stroke-dashoffset: 0;
+		}
 	}
 
 	.quiet {

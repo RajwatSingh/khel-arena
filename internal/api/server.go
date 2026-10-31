@@ -440,7 +440,9 @@ func (s *Server) routes() http.Handler {
 	// the handler simply omits the viewer-specific fields.
 	mux.Handle("GET /v1/calls/mine", protected(s.handleMyCalls))
 	mux.Handle("POST /v1/calls", protected(s.handleCreateCall))
-	mux.HandleFunc("GET /v1/calls/{callID}", s.handleGetCall)
+	// Public, but the organiser sees who has asked and a player sees that
+	// they have asked, so the viewer is identified when they send a token.
+	mux.Handle("GET /v1/calls/{callID}", withOptionalAuth(s.auth)(http.HandlerFunc(s.handleGetCall)))
 	mux.Handle("PUT /v1/calls/{callID}", protected(s.handleUpdateCall))
 	mux.Handle("DELETE /v1/calls/{callID}", protected(s.handleDeleteCall))
 	mux.Handle("POST /v1/calls/{callID}/cancel", protected(s.handleCancelCall))

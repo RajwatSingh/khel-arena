@@ -248,6 +248,26 @@ func withAuth(authenticator Authenticator) Middleware {
 	}
 }
 
+// withOptionalAuth is for public routes that show more to a signed-in viewer.
+//
+// No token: the request goes through anonymously. A token: it is checked
+// exactly as withAuth does, and an invalid or expired one is refused rather
+// than quietly ignored -- the client then refreshes and retries, instead of
+// showing a signed-in person the anonymous page.
+func withOptionalAuth(authenticator Authenticator) Middleware {
+	authed := withAuth(authenticator)
+	return func(next http.Handler) http.Handler {
+		checked := authed(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if bearerToken(r) == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			checked.ServeHTTP(w, r)
+		})
+	}
+}
+
 // bearerToken extracts the credential from an Authorization header, or
 // returns "" when there isn't one in the expected form. The scheme match is
 // case-insensitive because RFC 7235 says it is.

@@ -127,6 +127,7 @@ type userDTO struct {
 	FullName      string             `json:"full_name"`
 	Username      string             `json:"username"`
 	Email         string             `json:"email"`
+	AvatarURL     string             `json:"avatar_url"`
 	AccountType   domain.AccountType `json:"account_type"`
 	Skill         domain.SkillTier   `json:"skill"`
 	Position      *domain.Position   `json:"position"`
@@ -197,6 +198,7 @@ func userDTOFromDomain(user domain.User) userDTO {
 		FullName:      user.FullName,
 		Username:      user.Username,
 		Email:         user.Email,
+		AvatarURL:     user.AvatarURL,
 		AccountType:   user.AccountType,
 		Skill:         user.Skill,
 		Position:      user.Position,

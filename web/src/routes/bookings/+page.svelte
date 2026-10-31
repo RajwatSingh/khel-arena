@@ -5,6 +5,7 @@
 	import { reveal } from '$lib/actions/reveal.js';
 	import { clock, session } from '$lib/session.svelte.js';
 	import { formatCountdown, formatDate, formatNPR, formatTime } from '$lib/time.js';
+	import { ONLINE_PROVIDERS, notSetUpMessage } from '$lib/payments.js';
 
 	const ticking = clock();
 
@@ -33,9 +34,10 @@
 					if (!cancelled) providersByArena = { ...providersByArena, [id]: next };
 				})
 				.catch(() => {
-					// Not worth an error banner: the pay button reports it if
-					// the player actually reaches for it.
-					if (!cancelled) providersByArena = { ...providersByArena, [id]: [] };
+					// Not worth an error banner. Null means "unknown": the pay
+					// buttons then go straight to the server, whose answer is
+					// shown if the venue can't take that gateway.
+					if (!cancelled) providersByArena = { ...providersByArena, [id]: null };
 				});
 		}
 		return () => {
@@ -119,17 +121,29 @@
 		}
 	}
 
+	// A message under one booking — e.g. the venue hasn't set up that gateway —
+	// kept next to the button that caused it rather than at the top of a long list.
+	let rowNotice = $state({ id: null, text: '' });
+	let payingWith = $state({ id: null, provider: null });
+
 	// Leaves the site for the gateway; see the note on the arena page.
-	async function pay(booking, provider = (providersByArena[booking.arena_id] ?? [])[0]) {
+	async function pay(booking, provider) {
 		error = null;
-		if (!provider) {
-			error = 'This venue takes cash only. Choose “Pay cash”.';
+		rowNotice = { id: null, text: '' };
+		const available = providersByArena[booking.arena_id];
+		if (available && !available.includes(provider)) {
+			rowNotice = { id: booking.id, text: notSetUpMessage(provider, booking.arena_name, available) };
 			return;
 		}
+		payingWith = { id: booking.id, provider };
 		try {
 			api.redirectToGateway(await api.startCheckout(booking.id, provider));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'The payment did not go through.';
+			rowNotice = {
+				id: booking.id,
+				text: err instanceof ApiError ? err.message : 'The payment did not go through.'
+			};
+			payingWith = { id: null, provider: null };
 		}
 	}
 </script>
@@ -177,7 +191,7 @@
 							? new Date(booking.hold_expires_at).getTime() - ticking.now
 							: 0}
 					{@const requested = awaitingVenue(booking)}
-					{@const online = (providersByArena[booking.arena_id] ?? []).length > 0}
+					{@const available = providersByArena[booking.arena_id]}
 					{@const done = booking.status === 'cancelled' || booking.status === 'expired'}
 					<li class="row" class:done use:reveal={{ delay: Math.min(i, 6) * 60 }}>
 						<div class="when">
@@ -225,13 +239,21 @@
 							{#if requested && remaining > 0}
 								<button class="btn btn-secondary" onclick={() => cancel(booking)}>Cancel request</button>
 							{:else if booking.status === 'pending' && remaining > 0}
-								{#if online}
-									<button class="btn btn-primary" onclick={() => pay(booking)}>Pay</button>
-								{/if}
+								{#each ONLINE_PROVIDERS as p (p.id)}
+									{@const paying = payingWith.id === booking.id && payingWith.provider === p.id}
+									<button
+										class="btn pay-{p.id}"
+										class:unavailable={available && !available.includes(p.id)}
+										class:loading={paying}
+										disabled={payingWith.id === booking.id}
+										onclick={() => pay(booking, p.id)}
+									>
+										{paying ? `Opening ${p.label}…` : p.label}
+									</button>
+								{/each}
 								<button
-									class="btn"
-									class:btn-primary={!online}
-									class:btn-secondary={online}
+									class="btn btn-secondary"
+									disabled={payingWith.id === booking.id}
 									onclick={() => payCash(booking)}
 								>
 									Pay cash
@@ -241,6 +263,10 @@
 								<button class="btn btn-secondary" onclick={() => cancel(booking)}>Cancel</button>
 							{/if}
 						</div>
+
+						{#if rowNotice.id === booking.id}
+							<p class="row-notice" role="alert">{rowNotice.text}</p>
+						{/if}
 					</li>
 				{/each}
 			</ul>
@@ -360,6 +386,8 @@
 
 	.acts {
 		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
 		gap: 0.5rem;
 		justify-self: end;
 	}
@@ -367,6 +395,17 @@
 	.acts :global(.btn) {
 		padding: 0.55em 1.1em;
 		font-size: 0.875rem;
+	}
+
+	.row-notice {
+		grid-column: 1 / -1;
+		margin: 0;
+		padding: 0.75rem 1rem;
+		border-radius: var(--r-sm);
+		background: var(--brick-wash);
+		color: var(--brick);
+		font-size: 0.9375rem;
+		line-height: 1.5;
 	}
 
 	.error {
@@ -388,6 +427,10 @@
 		.acts {
 			grid-column: 2;
 			justify-self: start;
+		}
+
+		.acts {
+			justify-content: flex-start;
 		}
 	}
 

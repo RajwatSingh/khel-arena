@@ -10,6 +10,7 @@
 	import CentreMark from '$lib/components/CentreMark.svelte';
 	import TextAnimate from '$lib/components/TextAnimate.svelte';
 	import { reveal } from '$lib/actions/reveal.js';
+	import { notSetUpMessage } from '$lib/payments.js';
 	import { dates as dateHelper, formatNPR, formatTime } from '$lib/time.js';
 
 	let { data } = $props();
@@ -39,19 +40,24 @@
 
 	// The gateways *this venue* takes. Each arena holds its own eSewa/Khalti
 	// credentials, so this is per arena, not per deployment. Asked for rather
-	// than hardcoded, so a provider the owner has not set up is never offered.
-	let providers = $state([]);
+	// than hardcoded, so a provider the owner has not set up gets a message
+	// instead of a checkout. Null until known: if the list can't be fetched,
+	// the server's own answer at checkout is the one shown.
+	let providers = $state(null);
+	// Which gateway is being started, so only that button shows it is busy.
+	let payingWith = $state(null);
 
 	$effect(() => {
 		const id = arena.id;
 		let cancelled = false;
+		providers = null;
 		api
 			.arenaPaymentProviders(id)
 			.then((next) => {
-				if (!cancelled) providers = next;
+				if (!cancelled) providers = next ?? [];
 			})
 			.catch(() => {
-				if (!cancelled) providers = [];
+				if (!cancelled) providers = null;
 			});
 		return () => {
 			cancelled = true;
@@ -232,24 +238,26 @@
 	//
 	// A single hold pays inline. Two or more can't share one gateway redirect,
 	// so those go to the bookings page, which pays and cancels each on its own.
-	async function pay(provider = providers[0]) {
+	async function pay(provider) {
+		error = null;
+		if (providers && !providers.includes(provider)) {
+			error = notSetUpMessage(provider, arena.name, providers);
+			return;
+		}
 		if (holds.length !== 1) {
 			goto('/bookings');
 			return;
 		}
-		if (!provider) {
-			error = 'This venue takes cash only. Choose “Pay cash at venue”.';
-			return;
-		}
 
 		busy = true;
-		error = null;
+		payingWith = provider;
 		try {
 			const checkout = await api.startCheckout(holds[0].id, provider);
 			api.redirectToGateway(checkout);
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : 'The payment did not go through.';
 			busy = false;
+			payingWith = null;
 		}
 	}
 
@@ -419,6 +427,7 @@
 				signedIn={session.signedIn}
 				onhold={takeHold}
 				{providers}
+				{payingWith}
 				{cashRequested}
 				{cashBusy}
 				onpay={pay}

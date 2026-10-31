@@ -488,6 +488,33 @@ a.card:focus-visible,
 	border-color: var(--line-strong);
 }
 
+/* Gateway buttons in each wallet's own colour, so a player spots theirs at a
+   glance. eSewa's green is light, so it takes dark text to stay readable. */
+.btn.pay-esewa {
+	background: #60bb46;
+	color: #10290a;
+}
+
+.btn.pay-esewa:hover:not(:disabled) {
+	background: #52a83a;
+}
+
+.btn.pay-khalti {
+	background: #5c2d91;
+	color: #ffffff;
+}
+
+.btn.pay-khalti:hover:not(:disabled) {
+	background: #4a2376;
+}
+
+/* A gateway the venue hasn't set up: still tappable, so the player gets told
+   why, but visibly not the way to go. */
+.btn.unavailable {
+	opacity: 0.5;
+	filter: grayscale(0.6);
+}
+
 .btn:disabled {
 	opacity: 0.45;
 	cursor: not-allowed;

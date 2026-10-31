@@ -2,6 +2,7 @@
 	import { fly } from 'svelte/transition';
 	import { clock } from '$lib/session.svelte.js';
 	import { formatCountdown, formatDateLong, formatNPR, formatTime } from '$lib/time.js';
+	import { ONLINE_PROVIDERS } from '$lib/payments.js';
 
 	/**
 	 * The right-hand column of the booking page: what you picked, what it costs,
@@ -20,8 +21,11 @@
 		busy = false,
 		error = null,
 		signedIn = false,
-		// Online gateways this venue takes. Empty means cash is the only way.
-		providers = [],
+		// Online gateways this venue has set up; null while unknown. eSewa and
+		// Khalti are always offered, the page explains if one isn't set up.
+		providers = null,
+		// The gateway currently being started, if any.
+		payingWith = null,
 		// True once the player has asked to pay at the venue: the holds now
 		// wait on the venue's approval, not on a countdown.
 		cashRequested = false,
@@ -67,7 +71,9 @@
 							: 'empty'
 	);
 
-	const online = $derived(providers.length > 0);
+	// Only says "cash only" once we know for sure; unknown is not none.
+	const cashOnly = $derived(Array.isArray(providers) && providers.length === 0);
+	const setUp = (id) => !providers || providers.includes(id);
 	const totalNPR = $derived(holds.reduce((n, h) => n + h.price_npr, 0));
 </script>
 
@@ -136,46 +142,53 @@
 			</p>
 		{/if}
 		<p class="body dim">
-			{#if online}
-				Pay online before the clock runs out, or pay cash at the venue once they approve. Nobody
-				else can take {single ? 'it' : 'them'} until then.
+			{#if cashOnly}
+				This venue hasn't set up online payment yet. Send a cash request before the clock runs
+				out and pay at the venue after the game, once they approve.
 			{:else}
-				This venue takes cash. Send the request before the clock runs out and pay at the venue
-				after the game, once they approve.
+				Pay with eSewa or Khalti before the clock runs out, or pay cash at the venue once they
+				approve. Nobody else can take {single ? 'it' : 'them'} until then.
 			{/if}
 		</p>
+		{#if single}
+			<p class="due">
+				<span>To pay</span>
+				<span class="num">NPR {formatNPR(single.price_npr)}</span>
+			</p>
+		{:else}
+			<p class="body dim">
+				Online payments go one booking at a time, so eSewa and Khalti take you to My bookings.
+			</p>
+		{/if}
 
 		{#if error}
 			<p class="error" role="alert">{error}</p>
 		{/if}
 
-		<div class="actions">
-			{#if online}
+		<div class="pay-options">
+			{#each ONLINE_PROVIDERS as p (p.id)}
 				<button
-					class="btn btn-primary grow"
-					class:loading={busy}
-					onclick={() => onpay()}
+					class="btn pay-{p.id}"
+					class:unavailable={!setUp(p.id)}
+					class:loading={payingWith === p.id}
+					onclick={() => onpay(p.id)}
 					disabled={busy || cashBusy}
 				>
-					{#if busy && single}Talking to the gateway…{:else if single}Pay NPR {formatNPR(
-							single.price_npr
-						)}{:else}Pay in My bookings{/if}
+					{#if payingWith === p.id}Opening {p.label}…{:else}Pay with {p.label}{/if}
 				</button>
-			{/if}
+			{/each}
 			<button
-				class="btn grow"
-				class:btn-primary={!online}
-				class:btn-secondary={online}
+				class="btn btn-secondary cash"
 				class:loading={cashBusy}
 				onclick={onpaycash}
 				disabled={busy || cashBusy}
 			>
 				{#if cashBusy}Sending request…{:else}Pay cash at venue{/if}
 			</button>
-			<button class="btn btn-secondary" onclick={onrelease} disabled={busy || cashBusy}>
-				{single ? 'Cancel hold' : 'Cancel all'}
-			</button>
 		</div>
+		<button class="btn btn-quiet cancel" onclick={onrelease} disabled={busy || cashBusy}>
+			{single ? 'Cancel hold' : 'Cancel all'}
+		</button>
 	{:else if summary}
 		<p class="label">Selected</p>
 		{#if summary.ends_at}
@@ -318,6 +331,38 @@
 
 	.grow {
 		flex: 1 1 10rem;
+	}
+
+	.due {
+		display: flex;
+		justify-content: space-between;
+		margin-top: 1.1rem;
+		padding-top: 0.85rem;
+		border-top: 1px solid var(--line);
+		font-weight: 600;
+		font-size: 1.0625rem;
+		color: var(--ink);
+	}
+
+	.pay-options {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.6rem;
+		margin-top: 1.35rem;
+	}
+
+	.pay-options .btn {
+		padding-inline: 0.75em;
+		white-space: nowrap;
+	}
+
+	.pay-options .cash {
+		grid-column: 1 / -1;
+	}
+
+	.cancel {
+		width: 100%;
+		margin-top: 0.6rem;
 	}
 
 	.wide {

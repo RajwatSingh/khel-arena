@@ -153,6 +153,12 @@ type BookingDetail struct {
 	// booking. Derived from the posts table rather than stored on the
 	// booking, so the two can never disagree.
 	OpenToJoin bool
+
+	// PaymentProvider and PaymentStatus describe the latest payment attempt,
+	// nil when there has been none. They are what tell a player that a cash
+	// booking is waiting on the venue rather than on them.
+	PaymentProvider *PaymentProvider
+	PaymentStatus   *PaymentStatus
 }
 
 // ---------------------------------------------------------------------------

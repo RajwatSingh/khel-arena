@@ -33,6 +33,9 @@
 	let holds = $state([]);
 	let busy = $state(false);
 	let error = $state(null);
+	// Set once the player has asked to pay at the venue for the current holds.
+	let cashRequested = $state(false);
+	let cashBusy = $state(false);
 
 	// The gateways *this venue* takes. Each arena holds its own eSewa/Khalti
 	// credentials, so this is per arena, not per deployment. Asked for rather
@@ -165,6 +168,7 @@
 		picked = [];
 		holds = [];
 		error = null;
+		cashRequested = false;
 	}
 
 	/** Tap a free hour to pick it; tap a picked hour to drop it. Any hours. */
@@ -234,7 +238,7 @@
 			return;
 		}
 		if (!provider) {
-			error = 'No payment method is available right now. Settle at the arena.';
+			error = 'This venue takes cash only. Choose “Pay cash at venue”.';
 			return;
 		}
 
@@ -247,6 +251,28 @@
 			error = err instanceof ApiError ? err.message : 'The payment did not go through.';
 			busy = false;
 		}
+	}
+
+	// Pay at the venue: every hold becomes a request the venue approves, and
+	// stays held until kickoff while they decide. No redirect, so several
+	// holds can be requested at once.
+	async function payCash() {
+		cashBusy = true;
+		error = null;
+		const results = await Promise.allSettled(holds.map((h) => api.startCheckout(h.id, 'cash')));
+		cashBusy = false;
+
+		const failed = results.filter((r) => r.status === 'rejected');
+		if (!failed.length) {
+			cashRequested = true;
+			return;
+		}
+		const reason = failed[0].reason;
+		const message = reason instanceof ApiError ? reason.message : 'The request did not go through.';
+		error =
+			failed.length < results.length
+				? `${results.length - failed.length} of ${results.length} requests went through. ${message}`
+				: message;
 	}
 
 	async function release() {
@@ -392,8 +418,13 @@
 				error={shownError}
 				signedIn={session.signedIn}
 				onhold={takeHold}
+				{providers}
+				{cashRequested}
+				{cashBusy}
 				onpay={pay}
+				onpaycash={payCash}
 				onrelease={release}
+				ondone={reset}
 			/>
 		</div>
 	</div>

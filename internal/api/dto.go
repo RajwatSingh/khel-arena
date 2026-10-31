@@ -182,6 +182,11 @@ type bookingDetailDTO struct {
 	ArenaSlug  string    `json:"arena_slug"`
 	ArenaArea  string    `json:"arena_area"`
 	OpenToJoin bool      `json:"open_to_join"`
+
+	// The latest payment attempt, absent when there has been none. A pending
+	// booking with a cash intent is waiting on the venue, not on the player.
+	PaymentProvider *domain.PaymentProvider `json:"payment_provider,omitempty"`
+	PaymentStatus   *domain.PaymentStatus   `json:"payment_status,omitempty"`
 }
 
 // ------------------------------------------------------------ constructors -
@@ -267,6 +272,9 @@ func bookingDetailDTOFromDomain(b domain.BookingDetail) bookingDetailDTO {
 		ArenaSlug:  b.ArenaSlug,
 		ArenaArea:  b.ArenaArea,
 		OpenToJoin: b.OpenToJoin,
+
+		PaymentProvider: b.PaymentProvider,
+		PaymentStatus:   b.PaymentStatus,
 	}
 }
 
@@ -713,6 +721,10 @@ type ownerPaymentDTO struct {
 	CourtName      string    `json:"court_name"`
 	PlayerName     string    `json:"player_name"`
 	PlayerUsername string    `json:"player_username"`
+	// BookingStatus separates a cash request still waiting for approval
+	// (pending) from an approved booking whose cash is collected after the
+	// game (confirmed or completed).
+	BookingStatus domain.BookingStatus `json:"booking_status"`
 }
 
 func ownerPaymentDTOsFromDomain(payments []postgres.OwnerPayment) []ownerPaymentDTO {
@@ -725,6 +737,7 @@ func ownerPaymentDTOsFromDomain(payments []postgres.OwnerPayment) []ownerPayment
 			CourtName:      p.CourtLabel,
 			PlayerName:     p.PlayerName,
 			PlayerUsername: p.PlayerUsername,
+			BookingStatus:  p.BookingStatus,
 		})
 	}
 	return out

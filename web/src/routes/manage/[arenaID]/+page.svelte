@@ -6,19 +6,34 @@
 	import TextAnimate from '$lib/components/TextAnimate.svelte';
 	import Field from '$lib/components/Field.svelte';
 	import CourtPanel from '$lib/components/CourtPanel.svelte';
-	import { formatDate, formatNPR, formatTime } from '$lib/time.js';
+	import { formatDate, formatNPR, formatTime, localDate } from '$lib/time.js';
 
 	let { data } = $props();
 
 	const arena = $derived(data.arena);
 	const courts = $derived(arena.courts ?? []);
 
-	// The till: cash intents nobody has confirmed yet are the whole reason
-	// this page exists, so they come first and everything else follows.
-	const outstanding = $derived(
-		data.payments.filter((p) => p.provider === 'cash' && p.status === 'initiated')
+	// The till. Cash bookings come in two steps and both wait on the venue:
+	// a request to approve before the game (booking still pending), then the
+	// cash to collect after it (booking confirmed or played). They come first;
+	// everything else follows.
+	const openCash = (p) => p.provider === 'cash' && p.status === 'initiated';
+	const requests = $derived(
+		data.payments
+			.filter((p) => openCash(p) && p.booking_status === 'pending')
+			.sort((a, b) => a.starts_at.localeCompare(b.starts_at))
 	);
-	const settled = $derived(data.payments.filter((p) => !outstanding.includes(p)));
+	const toCollect = $derived(
+		data.payments
+			.filter(
+				(p) =>
+					openCash(p) && (p.booking_status === 'confirmed' || p.booking_status === 'completed')
+			)
+			.sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+	);
+	const settled = $derived(
+		data.payments.filter((p) => !requests.includes(p) && !toCollect.includes(p))
+	);
 
 	let newCourt = $state({ name: '', format: '', side_count: 5, base_price_npr: 1200 });
 	let newPhoto = $state({ url: '', caption: '', sort_order: 0 });
@@ -85,6 +100,8 @@
 	}
 
 	const received = (payment) => act(() => api.markCashReceived(payment.id));
+	const approve = (payment) => act(() => api.approveCashBooking(payment.id));
+	const decline = (payment) => act(() => api.declineCashBooking(payment.id));
 	const removePhoto = (id) => act(() => api.deletePhoto(id));
 
 	// Per-venue gateway credentials. The money for a booking settles into the
@@ -224,20 +241,53 @@
 			<p class="error small" role="alert">{error}</p>
 		{/if}
 
-		<h2 class="display display-m">The till</h2>
-		{#if outstanding.length}
+		<h2 class="display display-m">Booking requests</h2>
+		{#if requests.length}
 			<p class="small quiet">
-				Cash bookings waiting on you. Confirming one is what turns a hold into a confirmed
-				booking — until then it lapses like any unpaid hold.
+				Players who want to pay cash at the venue. Approving confirms the hour for them; they pay
+				after the game. A request nobody answers lapses when the game was due to start.
 			</p>
 			<ul class="till">
-				{#each outstanding as payment (payment.id)}
+				{#each requests as payment (payment.id)}
 					<li>
 						<div class="what">
 							<strong>{payment.player_name || payment.player_username}</strong>
 							<span class="small">
-								{payment.court_name} · {formatDate(payment.starts_at)}
-								{formatTime(payment.starts_at)}
+								{payment.court_name} · {formatDate(localDate(new Date(payment.starts_at)))}
+								{formatTime(payment.starts_at)}–{formatTime(payment.ends_at)}
+							</span>
+						</div>
+						<span class="amount num">{formatNPR(payment.amount_npr)}</span>
+						<div class="decide">
+							<button class="btn btn-primary" disabled={busy} onclick={() => approve(payment)}>
+								Approve
+							</button>
+							<button class="btn btn-secondary" disabled={busy} onclick={() => decline(payment)}>
+								Decline
+							</button>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<p class="small quiet">No requests waiting.</p>
+		{/if}
+
+		<h2 class="display display-m">Cash to collect</h2>
+		{#if toCollect.length}
+			<p class="small quiet">
+				Approved bookings paying at the venue. Mark each one once the player has paid.
+			</p>
+			<ul class="till">
+				{#each toCollect as payment (payment.id)}
+					<li>
+						<div class="what">
+							<strong>{payment.player_name || payment.player_username}</strong>
+							<span class="small">
+								{payment.court_name} · {formatDate(localDate(new Date(payment.starts_at)))}
+								{formatTime(payment.starts_at)}{payment.booking_status === 'completed'
+									? ' · played'
+									: ''}
 							</span>
 						</div>
 						<span class="amount num">{formatNPR(payment.amount_npr)}</span>
@@ -248,7 +298,7 @@
 				{/each}
 			</ul>
 		{:else}
-			<p class="small quiet">Nothing waiting to be settled.</p>
+			<p class="small quiet">Nothing to collect.</p>
 		{/if}
 
 		{#if settled.length}
@@ -260,7 +310,7 @@
 							<div class="what">
 								<strong>{payment.player_name || payment.player_username}</strong>
 								<span class="small">
-									{payment.court_name} · {formatDate(payment.starts_at)} · {payment.provider}
+									{payment.court_name} · {formatDate(localDate(new Date(payment.starts_at)))} · {payment.provider}
 								</span>
 							</div>
 							<span class="amount num">{formatNPR(payment.amount_npr)}</span>
@@ -501,6 +551,7 @@
 	}
 
 	.what { flex: 1 1 14rem; min-width: 0; }
+	.decide { display: flex; gap: 0.5rem; }
 	.what span { display: block; color: var(--faint); }
 
 	.amount {

@@ -35,6 +35,8 @@ type OwnerStore interface {
 // OwnerPayments is the reconciliation half.
 type OwnerPayments interface {
 	MarkCashReceivedOwnerScoped(ctx context.Context, paymentID, ownerID uuid.UUID, now time.Time) (domain.Payment, error)
+	ApproveCashOwnerScoped(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
+	DeclineCashOwnerScoped(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
 	ListForArenaOwner(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]postgres.OwnerPayment, error)
 }
 
@@ -274,4 +276,22 @@ func (s *OwnerService) MarkCashReceived(ctx context.Context, paymentID, ownerID 
 		return domain.Payment{}, domain.Unauthenticated("Sign in to manage an arena.")
 	}
 	return s.payments.MarkCashReceivedOwnerScoped(ctx, paymentID, ownerID, s.clock.Now())
+}
+
+// ApproveCashBooking accepts a player's request to pay at the venue. The
+// booking is confirmed; the cash is collected after the game with
+// MarkCashReceived.
+func (s *OwnerService) ApproveCashBooking(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error) {
+	if ownerID == uuid.Nil {
+		return domain.Payment{}, domain.Unauthenticated("Sign in to manage an arena.")
+	}
+	return s.payments.ApproveCashOwnerScoped(ctx, paymentID, ownerID)
+}
+
+// DeclineCashBooking turns a pay-at-the-venue request down and frees the hour.
+func (s *OwnerService) DeclineCashBooking(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error) {
+	if ownerID == uuid.Nil {
+		return domain.Payment{}, domain.Unauthenticated("Sign in to manage an arena.")
+	}
+	return s.payments.DeclineCashOwnerScoped(ctx, paymentID, ownerID)
 }

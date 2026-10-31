@@ -41,7 +41,7 @@
 				<li use:reveal={{ delay: 120 }}>
 					<span class="num big">{data.totals.awaiting_cash_count}</span>
 					<span class="label">
-						Cash to confirm{#if data.totals.awaiting_cash_npr}
+						Cash waiting on you{#if data.totals.awaiting_cash_npr}
 							· {formatNPR(data.totals.awaiting_cash_npr)}{/if}
 					</span>
 				</li>

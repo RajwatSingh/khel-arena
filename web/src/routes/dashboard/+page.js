@@ -42,8 +42,13 @@ export async function load({ fetch }) {
 			.filter((p) => p.status === 'verified')
 			.reduce((sum, p) => sum + p.amount_npr, 0);
 		const paidBookings = payments.filter((p) => p.status === 'verified').length;
+		// Cash still waiting on the venue: a request to approve, or money to
+		// collect after an approved game.
 		const awaitingCash = payments.filter(
-			(p) => p.provider === 'cash' && p.status === 'initiated'
+			(p) =>
+				p.provider === 'cash' &&
+				p.status === 'initiated' &&
+				['pending', 'confirmed', 'completed'].includes(p.booking_status)
 		);
 
 		return {

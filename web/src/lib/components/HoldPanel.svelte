@@ -20,9 +20,17 @@
 		busy = false,
 		error = null,
 		signedIn = false,
+		// Online gateways this venue takes. Empty means cash is the only way.
+		providers = [],
+		// True once the player has asked to pay at the venue: the holds now
+		// wait on the venue's approval, not on a countdown.
+		cashRequested = false,
+		cashBusy = false,
 		onhold,
 		onpay,
-		onrelease
+		onpaycash,
+		onrelease,
+		ondone
 	} = $props();
 
 	const ticking = clock();
@@ -46,8 +54,21 @@
 	// Keys the slide transition to the panel's current shape, not how it got
 	// there.
 	const stateKey = $derived(
-		allConfirmed ? 'confirmed' : lapsed ? 'lapsed' : holds.length ? 'held' : summary ? 'selected' : 'empty'
+		allConfirmed
+			? 'confirmed'
+			: cashRequested
+				? 'requested'
+				: lapsed
+					? 'lapsed'
+					: holds.length
+						? 'held'
+						: summary
+							? 'selected'
+							: 'empty'
 	);
+
+	const online = $derived(providers.length > 0);
+	const totalNPR = $derived(holds.reduce((n, h) => n + h.price_npr, 0));
 </script>
 
 <aside class="card panel" aria-live="polite">
@@ -70,6 +91,22 @@
 			</p>
 		{/if}
 		<a class="btn btn-secondary wide" href="/bookings">See my bookings</a>
+	{:else if cashRequested}
+		<p class="label">Request sent</p>
+		<p class="headline display">Waiting for the venue</p>
+		<p class="body">
+			{arena.name} will approve your {holds.length === 1 ? 'booking' : `${holds.length} bookings`}.
+			You pay <strong class="num">NPR {formatNPR(totalNPR)}</strong> in cash at the venue, after the
+			game.
+		</p>
+		<p class="body dim">
+			Nobody else can take {holds.length === 1 ? 'this hour' : 'these hours'} while the venue decides.
+			You can follow it, or cancel, on your bookings page.
+		</p>
+		<div class="actions">
+			<a class="btn btn-primary grow" href="/bookings">See my bookings</a>
+			<button class="btn btn-secondary" onclick={ondone}>Book another</button>
+		</div>
 	{:else if lapsed}
 		<p class="label">Hold lapsed</p>
 		<p class="headline display">Time up</p>
@@ -99,8 +136,13 @@
 			</p>
 		{/if}
 		<p class="body dim">
-			Pay before the clock runs out or {single ? 'the hour is' : 'the hours are'} released. Nobody
-			else can take {single ? 'it' : 'them'} until then.
+			{#if online}
+				Pay online before the clock runs out, or pay cash at the venue once they approve. Nobody
+				else can take {single ? 'it' : 'them'} until then.
+			{:else}
+				This venue takes cash. Send the request before the clock runs out and pay at the venue
+				after the game, once they approve.
+			{/if}
 		</p>
 
 		{#if error}
@@ -108,17 +150,29 @@
 		{/if}
 
 		<div class="actions">
+			{#if online}
+				<button
+					class="btn btn-primary grow"
+					class:loading={busy}
+					onclick={() => onpay()}
+					disabled={busy || cashBusy}
+				>
+					{#if busy && single}Talking to the gateway…{:else if single}Pay NPR {formatNPR(
+							single.price_npr
+						)}{:else}Pay in My bookings{/if}
+				</button>
+			{/if}
 			<button
-				class="btn btn-primary grow"
-				class:loading={busy}
-				onclick={() => onpay()}
-				disabled={busy}
+				class="btn grow"
+				class:btn-primary={!online}
+				class:btn-secondary={online}
+				class:loading={cashBusy}
+				onclick={onpaycash}
+				disabled={busy || cashBusy}
 			>
-				{#if busy && single}Talking to the gateway…{:else if single}Pay NPR {formatNPR(
-						single.price_npr
-					)}{:else}Pay in My bookings{/if}
+				{#if cashBusy}Sending request…{:else}Pay cash at venue{/if}
 			</button>
-			<button class="btn btn-secondary" onclick={onrelease} disabled={busy}>
+			<button class="btn btn-secondary" onclick={onrelease} disabled={busy || cashBusy}>
 				{single ? 'Cancel hold' : 'Cancel all'}
 			</button>
 		</div>
@@ -164,8 +218,8 @@
 					this hour{:else}Hold {summary.hours} hours{/if}
 			</button>
 			<p class="body dim">
-				Nothing is charged yet. You get fifteen minutes to pay before
-				{summary.hours === 1 ? 'it goes' : 'they go'} back on the board.
+				Nothing is charged yet. You get fifteen minutes to pay online or ask to pay cash at the
+				venue before {summary.hours === 1 ? 'it goes' : 'they go'} back on the board.
 			</p>
 		{:else}
 			<a class="btn btn-primary wide" href="/login">Sign in to hold {summary.hours === 1 ? 'it' : 'them'}</a>

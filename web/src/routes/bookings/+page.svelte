@@ -89,9 +89,10 @@
 		no_show: 'No show'
 	};
 
-	// Cash bookings are told apart by their latest payment: a cash intent on a
-	// pending booking is a request waiting on the venue; on a confirmed or
-	// played one it is money still to hand over at the venue.
+	// Cash bookings are told apart by their latest payment: on a confirmed or
+	// played booking a cash intent is money still to hand over at the venue.
+	// On a pending one it is an older request still waiting on the venue, from
+	// before cash bookings were confirmed straight away.
 	const isCash = (b) => b.payment_provider === 'cash' && b.payment_status === 'initiated';
 	const awaitingVenue = (b) => b.status === 'pending' && isCash(b);
 	const cashDue = (b) => (b.status === 'confirmed' || b.status === 'completed') && isCash(b);
@@ -107,7 +108,7 @@
 			await api.startCheckout(booking.id, 'cash');
 			version++;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'The request did not go through.';
+			error = err instanceof ApiError ? err.message : 'The booking did not go through.';
 		}
 	}
 

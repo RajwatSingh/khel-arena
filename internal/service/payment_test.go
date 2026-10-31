@@ -44,8 +44,7 @@ type stubPayments struct {
 	loadErr   error
 	createErr error
 
-	cashRequests  int
-	cashHoldUntil time.Time
+	cashBookings int
 }
 
 func (s *stubPayments) Create(_ context.Context, p domain.Payment) (domain.Payment, error) {
@@ -68,14 +67,13 @@ func (s *stubPayments) LatestForBooking(context.Context, uuid.UUID) (domain.Paym
 	return s.payment, s.loadErr
 }
 
-func (s *stubPayments) RequestCash(_ context.Context, p domain.Payment, holdUntil time.Time) (domain.Payment, error) {
+func (s *stubPayments) BookCash(_ context.Context, p domain.Payment) (domain.Payment, error) {
 	if s.createErr != nil {
 		return domain.Payment{}, s.createErr
 	}
 	p.ID = uuid.New()
 	s.payment = p
-	s.cashHoldUntil = holdUntil
-	s.cashRequests++
+	s.cashBookings++
 	return p, nil
 }
 
@@ -425,9 +423,9 @@ func TestCheckoutRefusesABookingThatCannotBePaid(t *testing.T) {
 	}
 }
 
-// Choosing cash sends the player nowhere and holds the court until kickoff,
-// because the request now waits on the venue rather than on the player.
-func TestCashCheckoutHoldsUntilKickoff(t *testing.T) {
+// Choosing cash sends the player nowhere and books the hour on the spot; the
+// payment stays open until the venue collects.
+func TestCashCheckoutBooksStraightAway(t *testing.T) {
 	booking := heldBooking()
 	booking.Slot = domain.Slot{Start: time.Now().Add(48 * time.Hour), End: time.Now().Add(49 * time.Hour)}
 
@@ -445,11 +443,8 @@ func TestCashCheckoutHoldsUntilKickoff(t *testing.T) {
 	if checkout.URL != "" || checkout.Method != "" {
 		t.Errorf("checkout = %+v, want no gateway to visit", checkout)
 	}
-	if payments.cashRequests != 1 {
-		t.Fatalf("cash requests = %d, want 1", payments.cashRequests)
-	}
-	if !payments.cashHoldUntil.Equal(booking.Slot.Start) {
-		t.Errorf("hold until %v, want the slot start %v", payments.cashHoldUntil, booking.Slot.Start)
+	if payments.cashBookings != 1 {
+		t.Fatalf("cash bookings = %d, want 1", payments.cashBookings)
 	}
 	if created.AmountNPR != booking.PriceNPR || created.Provider != domain.ProviderCash {
 		t.Errorf("payment = %+v, want cash for the booking's price", created)
@@ -471,8 +466,8 @@ func TestCashCheckoutRefusesSomebodyElsesBooking(t *testing.T) {
 	if domain.CodeOf(err) != domain.CodeNotFound {
 		t.Errorf("code = %q, want not_found", domain.CodeOf(err))
 	}
-	if payments.cashRequests != 0 {
-		t.Error("a cash request was recorded for a booking the caller does not own")
+	if payments.cashBookings != 0 {
+		t.Error("a cash booking was recorded for a booking the caller does not own")
 	}
 }
 

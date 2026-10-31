@@ -261,9 +261,9 @@
 		}
 	}
 
-	// Pay at the venue: every hold becomes a request the venue approves, and
-	// stays held until kickoff while they decide. No redirect, so several
-	// holds can be requested at once.
+	// Pay at the venue: every hold is booked on the spot and the cash is paid
+	// at the venue. No redirect, so several holds can be booked at once.
+	// Retrying is safe: holds already booked come back as they are.
 	async function payCash() {
 		cashBusy = true;
 		error = null;
@@ -276,10 +276,10 @@
 			return;
 		}
 		const reason = failed[0].reason;
-		const message = reason instanceof ApiError ? reason.message : 'The request did not go through.';
+		const message = reason instanceof ApiError ? reason.message : 'The booking did not go through.';
 		error =
 			failed.length < results.length
-				? `${results.length - failed.length} of ${results.length} requests went through. ${message}`
+				? `${results.length - failed.length} of ${results.length} bookings went through. ${message}`
 				: message;
 	}
 

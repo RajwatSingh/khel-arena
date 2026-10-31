@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -17,9 +16,9 @@ type PaymentStore interface {
 	LatestForBooking(ctx context.Context, bookingID uuid.UUID) (domain.Payment, error)
 	// Settle writes the outcome and confirms the booking in one transaction.
 	Settle(ctx context.Context, p domain.Payment, confirmBooking bool) error
-	// RequestCash records a pay-at-the-venue request and holds the slot until
-	// holdUntil while the venue decides.
-	RequestCash(ctx context.Context, p domain.Payment, holdUntil time.Time) (domain.Payment, error)
+	// BookCash records a pay-at-the-venue payment and confirms the booking in
+	// one transaction. The payment stays initiated until the venue collects.
+	BookCash(ctx context.Context, p domain.Payment) (domain.Payment, error)
 }
 
 // PaymentBookings is the slice of booking storage this service reads.
@@ -103,14 +102,13 @@ func (s *PaymentService) Checkout(ctx context.Context, bookingID, userID uuid.UU
 	}
 
 	if provider == domain.ProviderCash {
-		// Nothing to redirect to. The request waits on the venue, so the hold
-		// is stretched to kickoff instead of the usual fifteen minutes; an
-		// empty Checkout tells the client there is no gateway to visit.
-		requested, err := s.payments.RequestCash(ctx, intent, booking.Slot.Start)
+		// Nothing to redirect to. The hour is booked now and paid for at the
+		// venue; an empty Checkout tells the client there is no gateway to visit.
+		booked, err := s.payments.BookCash(ctx, intent)
 		if err != nil {
 			return payment.Checkout{}, domain.Payment{}, err
 		}
-		return payment.Checkout{}, requested, nil
+		return payment.Checkout{}, booked, nil
 	}
 
 	created, err := s.payments.Create(ctx, intent)

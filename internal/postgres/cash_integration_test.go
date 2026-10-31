@@ -10,8 +10,10 @@ import (
 	"github.com/RajwatSingh/khel-arena/internal/domain"
 )
 
-// The pay-at-the-venue flow: a player asks, the venue approves or declines,
-// and the cash is marked received after the game.
+// The pay-at-the-venue flow: the player books and the hour is confirmed at
+// once, then the venue marks the cash received after the game. Approve and
+// decline remain for requests made before cash bookings stopped needing
+// approval.
 
 func cashIntent(b domain.Booking) domain.Payment {
 	return domain.Payment{
@@ -23,7 +25,7 @@ func cashIntent(b domain.Booking) domain.Payment {
 	}
 }
 
-func (f *fixture) requestCash(t *testing.T, player uuid.UUID, hour int) (domain.Booking, domain.Payment, *PaymentRepo) {
+func (f *fixture) bookCash(t *testing.T, player uuid.UUID, hour int) (domain.Booking, domain.Payment, *PaymentRepo) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -32,9 +34,28 @@ func (f *fixture) requestCash(t *testing.T, player uuid.UUID, hour int) (domain.
 		t.Fatalf("taking the hold: %v", err)
 	}
 	payments := NewPaymentRepo(f.pool, f.repo)
-	p, err := payments.RequestCash(ctx, cashIntent(booking), booking.Slot.Start)
+	p, err := payments.BookCash(ctx, cashIntent(booking))
 	if err != nil {
-		t.Fatalf("requesting cash: %v", err)
+		t.Fatalf("booking with cash: %v", err)
+	}
+	return booking, p, payments
+}
+
+// legacyCashRequest is a cash request from before cash bookings were
+// confirmed on the spot: a pending hold with an open cash payment, waiting
+// on the venue.
+func (f *fixture) legacyCashRequest(t *testing.T, player uuid.UUID, hour int) (domain.Booking, domain.Payment, *PaymentRepo) {
+	t.Helper()
+	ctx := context.Background()
+
+	booking, err := f.repo.CreateHold(ctx, f.hold(t, player, f.slotAt(t, hour, time.Hour)))
+	if err != nil {
+		t.Fatalf("taking the hold: %v", err)
+	}
+	payments := NewPaymentRepo(f.pool, f.repo)
+	p, err := payments.Create(ctx, cashIntent(booking))
+	if err != nil {
+		t.Fatalf("recording the request: %v", err)
 	}
 	return booking, p, payments
 }
@@ -60,24 +81,24 @@ func (f *fixture) paymentStatus(t *testing.T, id uuid.UUID) domain.PaymentStatus
 	return status
 }
 
-func TestCashRequestHoldsUntilKickoffAndIsIdempotent(t *testing.T) {
+func TestCashBookingConfirmsAtOnceAndIsIdempotent(t *testing.T) {
 	f := newFixture(t, 1)
-	booking, first, payments := f.requestCash(t, f.players[0], 18)
+	booking, first, payments := f.bookCash(t, f.players[0], 18)
 
 	status, expires := f.bookingState(t, booking.ID)
-	if status != domain.BookingPending {
-		t.Errorf("status = %q, want pending until the venue approves", status)
+	if status != domain.BookingConfirmed || expires != nil {
+		t.Errorf("status %q, expiry %v; want confirmed with no expiry", status, expires)
 	}
-	if expires == nil || !expires.Equal(booking.Slot.Start) {
-		t.Errorf("hold expires %v, want the slot start %v", expires, booking.Slot.Start)
+	if got := f.paymentStatus(t, first.ID); got != domain.PaymentInitiated {
+		t.Errorf("payment = %q, want initiated: the cash is still owed", got)
 	}
 
-	second, err := payments.RequestCash(context.Background(), cashIntent(booking), booking.Slot.Start)
+	second, err := payments.BookCash(context.Background(), cashIntent(booking))
 	if err != nil {
 		t.Fatalf("asking again: %v", err)
 	}
 	if second.ID != first.ID {
-		t.Error("a second request stacked another payment for the venue to approve")
+		t.Error("a second tap recorded another cash payment for the same hour")
 	}
 
 	list, err := f.repo.ListForUser(context.Background(), f.players[0], 10)
@@ -86,11 +107,11 @@ func TestCashRequestHoldsUntilKickoffAndIsIdempotent(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].PaymentProvider == nil || *list[0].PaymentProvider != domain.ProviderCash ||
 		list[0].PaymentStatus == nil || *list[0].PaymentStatus != domain.PaymentInitiated {
-		t.Errorf("the player's list does not show a waiting cash request: %+v", list)
+		t.Errorf("the player's list does not show cash still owed: %+v", list)
 	}
 }
 
-func TestCashRequestRefusesALapsedHold(t *testing.T) {
+func TestCashBookingRefusesALapsedHold(t *testing.T) {
 	f := newFixture(t, 1)
 	ctx := context.Background()
 
@@ -102,27 +123,35 @@ func TestCashRequestRefusesALapsedHold(t *testing.T) {
 		t.Fatalf("seeding: %v", err)
 	}
 
-	_, err = NewPaymentRepo(f.pool, f.repo).RequestCash(ctx, cashIntent(booking), booking.Slot.Start)
+	_, err = NewPaymentRepo(f.pool, f.repo).BookCash(ctx, cashIntent(booking))
 	if domain.CodeOf(err) != domain.CodeConflict {
 		t.Errorf("code = %q, want conflict: a lapsed hold must not be revived", domain.CodeOf(err))
 	}
+	if status, _ := f.bookingState(t, booking.ID); status != domain.BookingPending {
+		t.Errorf("booking = %q, want it left as it was", status)
+	}
 }
 
-func TestApproveThenCollectAfterTheGame(t *testing.T) {
+func TestCashBookingConfirmsALegacyRequest(t *testing.T) {
+	f := newFixture(t, 1)
+	booking, legacy, payments := f.legacyCashRequest(t, f.players[0], 18)
+
+	got, err := payments.BookCash(context.Background(), cashIntent(booking))
+	if err != nil {
+		t.Fatalf("booking: %v", err)
+	}
+	if got.ID != legacy.ID {
+		t.Error("a second cash payment was recorded instead of reusing the waiting request")
+	}
+	if status, _ := f.bookingState(t, booking.ID); status != domain.BookingConfirmed {
+		t.Errorf("booking = %q, want confirmed", status)
+	}
+}
+
+func TestCollectCashAfterTheGame(t *testing.T) {
 	f := newFixture(t, 1)
 	ctx := context.Background()
-	booking, p, payments := f.requestCash(t, f.players[0], 18)
-
-	if _, err := payments.ApproveCashOwnerScoped(ctx, p.ID, f.owner); err != nil {
-		t.Fatalf("approving: %v", err)
-	}
-	status, expires := f.bookingState(t, booking.ID)
-	if status != domain.BookingConfirmed || expires != nil {
-		t.Errorf("after approval: status %q, expiry %v; want confirmed with no expiry", status, expires)
-	}
-	if got := f.paymentStatus(t, p.ID); got != domain.PaymentInitiated {
-		t.Errorf("payment = %q, want initiated: approval is not payment", got)
-	}
+	booking, p, payments := f.bookCash(t, f.players[0], 18)
 
 	// The game is played and the janitor marks it so before the venue gets
 	// round to the till. Collecting the cash must still work.
@@ -142,15 +171,18 @@ func TestApproveThenCollectAfterTheGame(t *testing.T) {
 	}
 }
 
-func TestOnlyTheVenueOwnerCanApprove(t *testing.T) {
+func TestOnlyTheVenueOwnerCanTouchACashPayment(t *testing.T) {
 	f := newFixture(t, 1)
 	ctx := context.Background()
-	booking, p, payments := f.requestCash(t, f.players[0], 18)
+	booking, p, payments := f.legacyCashRequest(t, f.players[0], 18)
 
 	stranger := seedUser(t, f, "otherowner")
 	for name, act := range map[string]func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error){
 		"approve": payments.ApproveCashOwnerScoped,
 		"decline": payments.DeclineCashOwnerScoped,
+		"receive": func(ctx context.Context, id, owner uuid.UUID) (domain.Payment, error) {
+			return payments.MarkCashReceivedOwnerScoped(ctx, id, owner, time.Now())
+		},
 	} {
 		if _, err := act(ctx, p.ID, stranger); domain.CodeOf(err) != domain.CodeNotFound {
 			t.Errorf("%s by a stranger: code = %q, want not_found", name, domain.CodeOf(err))
@@ -164,7 +196,7 @@ func TestOnlyTheVenueOwnerCanApprove(t *testing.T) {
 func TestDeclineFreesTheHour(t *testing.T) {
 	f := newFixture(t, 2)
 	ctx := context.Background()
-	booking, p, payments := f.requestCash(t, f.players[0], 18)
+	booking, p, payments := f.legacyCashRequest(t, f.players[0], 18)
 
 	if _, err := payments.DeclineCashOwnerScoped(ctx, p.ID, f.owner); err != nil {
 		t.Fatalf("declining: %v", err)
@@ -179,27 +211,24 @@ func TestDeclineFreesTheHour(t *testing.T) {
 		t.Errorf("the declined hour is still blocked: %v", err)
 	}
 
-	// An approved booking is a promise; it cannot be declined afterwards.
-	other, q, _ := f.requestCash(t, f.players[0], 20)
-	if _, err := payments.ApproveCashOwnerScoped(ctx, q.ID, f.owner); err != nil {
-		t.Fatalf("approving: %v", err)
-	}
+	// A booked cash hour is a promise; the venue cannot decline it afterwards.
+	other, q, _ := f.bookCash(t, f.players[0], 20)
 	if _, err := payments.DeclineCashOwnerScoped(ctx, q.ID, f.owner); domain.CodeOf(err) != domain.CodeConflict {
-		t.Errorf("declining an approved booking: code = %q, want conflict", domain.CodeOf(err))
+		t.Errorf("declining a booked hour: code = %q, want conflict", domain.CodeOf(err))
 	}
 	if status, _ := f.bookingState(t, other.ID); status != domain.BookingConfirmed {
-		t.Errorf("approved booking = %q, want still confirmed", status)
+		t.Errorf("booked hour = %q, want still confirmed", status)
 	}
 }
 
-func TestPlayerCancellingClosesTheCashRequest(t *testing.T) {
+func TestPlayerCancellingClosesTheCashPayment(t *testing.T) {
 	f := newFixture(t, 1)
-	booking, p, _ := f.requestCash(t, f.players[0], 18)
+	booking, p, _ := f.bookCash(t, f.players[0], 18)
 
 	if err := f.repo.Cancel(context.Background(), booking.ID, f.players[0]); err != nil {
 		t.Fatalf("cancelling: %v", err)
 	}
 	if got := f.paymentStatus(t, p.ID); got != domain.PaymentFailed {
-		t.Errorf("payment = %q, want failed so it stops waiting on the venue", got)
+		t.Errorf("payment = %q, want failed so the venue stops expecting cash", got)
 	}
 }

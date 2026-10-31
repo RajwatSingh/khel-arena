@@ -153,23 +153,23 @@ func (r *PaymentRepo) Settle(ctx context.Context, p domain.Payment, confirmBooki
 	})
 }
 
-// RequestCash records that a player will pay at the venue, and stretches
-// their hold until kickoff so the court waits for the venue to answer.
+// BookCash books the hour for a player paying cash at the venue.
 //
-// A gateway checkout lives inside the fifteen-minute hold: the player is paying
-// right now. A cash request is different -- it waits on a person at the venue,
-// who may not look at their phone for hours -- so the hold is extended to the
-// start of the slot. If the venue never answers, the hold lapses at kickoff and
-// the janitor releases it like any other.
+// The booking is confirmed straight away -- the venue does not approve it --
+// and the payment is recorded as `initiated`: the hour is theirs, the money
+// is still owed. The venue settles it later through
+// MarkCashReceivedOwnerScoped. Both writes happen in one transaction, so there
+// is never a confirmed cash booking with no payment on file for the venue to
+// collect, nor a cash payment on a hold that lapsed.
 //
-// Idempotent: asking twice returns the request already on file rather than
-// stacking a second one for the venue to approve.
-func (r *PaymentRepo) RequestCash(ctx context.Context, p domain.Payment, holdUntil time.Time) (domain.Payment, error) {
+// Idempotent: asking twice returns the payment already on file rather than
+// recording a second debt for the same hour.
+func (r *PaymentRepo) BookCash(ctx context.Context, p domain.Payment) (domain.Payment, error) {
 	var out domain.Payment
 
 	err := InTx(ctx, r.pool, func(tx pgx.Tx) error {
 		// Lock the booking first: the janitor releasing this hold is the one
-		// thing that can race a request, and it updates the same row.
+		// thing that can race this, and it updates the same row.
 		const lockSQL = `
 			select status, hold_expires_at > now()
 			  from bookings where id = $1 for update`
@@ -181,9 +181,6 @@ func (r *PaymentRepo) RequestCash(ctx context.Context, p domain.Payment, holdUnt
 			}
 			return domain.Internal(err, "locking booking %s", p.BookingID)
 		}
-		if status != domain.BookingPending || live == nil || !*live {
-			return domain.Conflict("This hold has lapsed. Pick the hour again.")
-		}
 
 		const existingSQL = `
 			select ` + paymentColumns + `
@@ -192,33 +189,34 @@ func (r *PaymentRepo) RequestCash(ctx context.Context, p domain.Payment, holdUnt
 			 order by created_at desc limit 1`
 		existing, err := scanPayment(tx.QueryRow(ctx, existingSQL, p.BookingID))
 		switch {
-		case err == nil:
-			out = existing
+		case err == nil && status == domain.BookingConfirmed:
+			out = existing // already booked; a double tap
 			return nil
-		case !noRows(err):
-			return domain.Internal(err, "looking up cash request for booking %s", p.BookingID)
+		case err != nil && !noRows(err):
+			return domain.Internal(err, "looking up cash payment for booking %s", p.BookingID)
 		}
 
-		const insertSQL = `
-			insert into payments (booking_id, provider, amount_npr, status, transaction_uuid)
-			values ($1, $2, $3, $4, $5)
-			returning ` + paymentColumns
-		out, err = scanPayment(tx.QueryRow(ctx, insertSQL,
-			p.BookingID, p.Provider, p.AmountNPR, p.Status, p.TransactionUUID))
-		if err != nil {
-			return domain.Internal(err, "recording cash request for booking %s", p.BookingID)
+		if status != domain.BookingPending || live == nil || !*live {
+			return domain.Conflict("This hold has lapsed. Pick the hour again.")
 		}
 
-		// Never shorten a hold: a slot that starts sooner than the current
-		// expiry keeps the expiry it has.
-		const extendSQL = `
-			update bookings
-			   set hold_expires_at = greatest(hold_expires_at, $2)
-			 where id = $1`
-		if _, err := tx.Exec(ctx, extendSQL, p.BookingID, holdUntil); err != nil {
-			return domain.Internal(err, "extending hold on booking %s", p.BookingID)
+		if err == nil {
+			// A request left over from when venues approved cash bookings:
+			// confirm it now rather than recording a second payment.
+			out = existing
+		} else {
+			const insertSQL = `
+				insert into payments (booking_id, provider, amount_npr, status, transaction_uuid)
+				values ($1, $2, $3, $4, $5)
+				returning ` + paymentColumns
+			out, err = scanPayment(tx.QueryRow(ctx, insertSQL,
+				p.BookingID, p.Provider, p.AmountNPR, p.Status, p.TransactionUUID))
+			if err != nil {
+				return domain.Internal(err, "recording cash payment for booking %s", p.BookingID)
+			}
 		}
-		return nil
+
+		return confirmCashBooking(ctx, tx, p.BookingID)
 	})
 
 	return out, err
@@ -296,6 +294,10 @@ func confirmCashBooking(ctx context.Context, tx pgx.Tx, bookingID uuid.UUID) err
 }
 
 // ApproveCashOwnerScoped is the venue accepting a pay-at-the-venue booking.
+//
+// Cash bookings are now confirmed the moment the player books (see BookCash),
+// so this only matters for requests made before that change that are still
+// waiting.
 //
 // The booking is confirmed -- the hour is now theirs and stops lapsing -- but
 // the payment stays `initiated`: no money has changed hands yet. That happens

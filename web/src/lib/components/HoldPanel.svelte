@@ -26,8 +26,8 @@
 		providers = null,
 		// The gateway currently being started, if any.
 		payingWith = null,
-		// True once the player has asked to pay at the venue: the holds now
-		// wait on the venue's approval, not on a countdown.
+		// True once the player has booked to pay at the venue: the hours are
+		// theirs, and the cash is paid at the venue.
 		cashRequested = false,
 		cashBusy = false,
 		onhold,
@@ -98,17 +98,25 @@
 		{/if}
 		<a class="btn btn-secondary wide" href="/bookings">See my bookings</a>
 	{:else if cashRequested}
-		<p class="label">Request sent</p>
-		<p class="headline display">Waiting for the venue</p>
+		<p class="label">Booked</p>
+		{#if single}
+			<p class="headline display num">{single.reference}</p>
+			<p class="body">
+				{court.name} at {arena.name}, {formatDateLong(date)}, {formatTime(single.starts_at)}–{formatTime(
+					single.ends_at
+				)}. Read the reference out at the gate.
+			</p>
+		{:else}
+			<p class="headline display">{holds.length} bookings</p>
+			<p class="body">
+				All {holds.length} are booked for {formatDateLong(date)}. The references are on your bookings
+				page.
+			</p>
+		{/if}
 		<p class="body">
-			{arena.name} will approve your {holds.length === 1 ? 'booking' : `${holds.length} bookings`}.
-			You pay <strong class="num">NPR {formatNPR(totalNPR)}</strong> in cash at the venue, after the
-			game.
+			Pay <strong class="num">NPR {formatNPR(totalNPR)}</strong> in cash at the venue.
 		</p>
-		<p class="body dim">
-			Nobody else can take {holds.length === 1 ? 'this hour' : 'these hours'} while the venue decides.
-			You can follow it, or cancel, on your bookings page.
-		</p>
+		<p class="body dim">Plans changed? You can cancel from your bookings page.</p>
 		<div class="actions">
 			<a class="btn btn-primary grow" href="/bookings">See my bookings</a>
 			<button class="btn btn-secondary" onclick={ondone}>Book another</button>
@@ -143,11 +151,11 @@
 		{/if}
 		<p class="body dim">
 			{#if cashOnly}
-				This venue hasn't set up online payment yet. Send a cash request before the clock runs
-				out and pay at the venue after the game, once they approve.
+				This venue hasn't set up online payment yet. Choose cash before the clock runs out to
+				book it now and pay at the venue.
 			{:else}
-				Pay with eSewa or Khalti before the clock runs out, or pay cash at the venue once they
-				approve. Nobody else can take {single ? 'it' : 'them'} until then.
+				Pay with eSewa or Khalti, or choose cash to book now and pay at the venue. Nobody else
+				can take {single ? 'it' : 'them'} until the clock runs out.
 			{/if}
 		</p>
 		{#if single}
@@ -183,7 +191,7 @@
 				onclick={onpaycash}
 				disabled={busy || cashBusy}
 			>
-				{#if cashBusy}Sending request…{:else}Pay cash at venue{/if}
+				{#if cashBusy}Booking…{:else}Pay cash at venue{/if}
 			</button>
 		</div>
 		<button class="btn btn-quiet cancel" onclick={onrelease} disabled={busy || cashBusy}>
@@ -231,7 +239,7 @@
 					this hour{:else}Hold {summary.hours} hours{/if}
 			</button>
 			<p class="body dim">
-				Nothing is charged yet. You get fifteen minutes to pay online or ask to pay cash at the
+				Nothing is charged yet. You get fifteen minutes to pay online or choose cash at the
 				venue before {summary.hours === 1 ? 'it goes' : 'they go'} back on the board.
 			</p>
 		{:else}

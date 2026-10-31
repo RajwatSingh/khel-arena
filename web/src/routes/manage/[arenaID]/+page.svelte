@@ -13,10 +13,10 @@
 	const arena = $derived(data.arena);
 	const courts = $derived(arena.courts ?? []);
 
-	// The till. Cash bookings come in two steps and both wait on the venue:
-	// a request to approve before the game (booking still pending), then the
-	// cash to collect after it (booking confirmed or played). They come first;
-	// everything else follows.
+	// The till. Cash bookings are confirmed the moment the player books, so
+	// the venue's only job is collecting the cash (booking confirmed or
+	// played). Requests still pending date from when venues approved cash
+	// bookings by hand; they are shown only while any are left.
 	const openCash = (p) => p.provider === 'cash' && p.status === 'initiated';
 	const requests = $derived(
 		data.payments
@@ -241,11 +241,11 @@
 			<p class="error small" role="alert">{error}</p>
 		{/if}
 
-		<h2 class="display display-m">Booking requests</h2>
 		{#if requests.length}
+			<h2 class="display display-m">Older booking requests</h2>
 			<p class="small quiet">
-				Players who want to pay cash at the venue. Approving confirms the hour for them; they pay
-				after the game. A request nobody answers lapses when the game was due to start.
+				Cash requests made before cash bookings were confirmed automatically. Approve to confirm
+				the hour; one nobody answers lapses when the game was due to start.
 			</p>
 			<ul class="till">
 				{#each requests as payment (payment.id)}
@@ -269,14 +269,12 @@
 					</li>
 				{/each}
 			</ul>
-		{:else}
-			<p class="small quiet">No requests waiting.</p>
 		{/if}
 
 		<h2 class="display display-m">Cash to collect</h2>
 		{#if toCollect.length}
 			<p class="small quiet">
-				Approved bookings paying at the venue. Mark each one once the player has paid.
+				Players who booked to pay cash at the venue. Mark each one once the player has paid.
 			</p>
 			<ul class="till">
 				{#each toCollect as payment (payment.id)}

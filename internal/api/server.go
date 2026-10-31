@@ -106,6 +106,8 @@ type OwnerAPI interface {
 
 	Payments(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]postgres.OwnerPayment, error)
 	MarkCashReceived(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
+	ApproveCashBooking(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
+	DeclineCashBooking(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
 
 	PaymentAccounts(ctx context.Context, arenaID, ownerID uuid.UUID) ([]domain.ArenaPaymentAccountInfo, error)
 	SetPaymentAccount(ctx context.Context, arenaID, ownerID uuid.UUID, acct domain.ArenaPaymentAccount) error
@@ -417,6 +419,8 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("POST /v1/owner/courts/{courtID}/pricing/copy", protected(s.handleCopyPricingRules))
 	mux.Handle("DELETE /v1/owner/pricing/{ruleID}", protected(s.handleDeletePricingRule))
 	mux.Handle("POST /v1/owner/payments/{paymentID}/received", protected(s.handleMarkCashReceived))
+	mux.Handle("POST /v1/owner/payments/{paymentID}/approve", protected(s.handleApproveCashBooking))
+	mux.Handle("POST /v1/owner/payments/{paymentID}/decline", protected(s.handleDeclineCashBooking))
 
 	// Teams. All authenticated: a squad is a group of people, and there is
 	// nothing useful to show somebody who is not one of them.

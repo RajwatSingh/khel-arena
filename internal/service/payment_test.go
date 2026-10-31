@@ -43,6 +43,9 @@ type stubPayments struct {
 	settles   int
 	loadErr   error
 	createErr error
+
+	cashRequests  int
+	cashHoldUntil time.Time
 }
 
 func (s *stubPayments) Create(_ context.Context, p domain.Payment) (domain.Payment, error) {
@@ -63,6 +66,17 @@ func (s *stubPayments) ByTransactionUUID(context.Context, string) (domain.Paymen
 
 func (s *stubPayments) LatestForBooking(context.Context, uuid.UUID) (domain.Payment, error) {
 	return s.payment, s.loadErr
+}
+
+func (s *stubPayments) RequestCash(_ context.Context, p domain.Payment, holdUntil time.Time) (domain.Payment, error) {
+	if s.createErr != nil {
+		return domain.Payment{}, s.createErr
+	}
+	p.ID = uuid.New()
+	s.payment = p
+	s.cashHoldUntil = holdUntil
+	s.cashRequests++
+	return p, nil
 }
 
 func (s *stubPayments) Settle(_ context.Context, p domain.Payment, confirmBooking bool) error {
@@ -409,4 +423,70 @@ func TestCheckoutRefusesABookingThatCannotBePaid(t *testing.T) {
 	if !errors.Is(err, domain.ErrConflict) && domain.CodeOf(err) != domain.CodeConflict {
 		t.Error("expected a conflict")
 	}
+}
+
+// Choosing cash sends the player nowhere and holds the court until kickoff,
+// because the request now waits on the venue rather than on the player.
+func TestCashCheckoutHoldsUntilKickoff(t *testing.T) {
+	booking := heldBooking()
+	booking.Slot = domain.Slot{Start: time.Now().Add(48 * time.Hour), End: time.Now().Add(49 * time.Hour)}
+
+	payments := &stubPayments{}
+	// No online gateway configured: cash must still work.
+	svc := NewPaymentService(payments, stubBookings{booking: booking},
+		cashOnlyResolver{},
+		func(domain.PaymentProvider) payment.ReturnURLs { return payment.ReturnURLs{} },
+		SystemClock{})
+
+	checkout, created, err := svc.Checkout(context.Background(), booking.ID, booking.UserID, domain.ProviderCash)
+	if err != nil {
+		t.Fatalf("cash checkout: %v", err)
+	}
+	if checkout.URL != "" || checkout.Method != "" {
+		t.Errorf("checkout = %+v, want no gateway to visit", checkout)
+	}
+	if payments.cashRequests != 1 {
+		t.Fatalf("cash requests = %d, want 1", payments.cashRequests)
+	}
+	if !payments.cashHoldUntil.Equal(booking.Slot.Start) {
+		t.Errorf("hold until %v, want the slot start %v", payments.cashHoldUntil, booking.Slot.Start)
+	}
+	if created.AmountNPR != booking.PriceNPR || created.Provider != domain.ProviderCash {
+		t.Errorf("payment = %+v, want cash for the booking's price", created)
+	}
+	if created.Status != domain.PaymentInitiated {
+		t.Errorf("status = %q, want initiated: nothing has been paid yet", created.Status)
+	}
+}
+
+func TestCashCheckoutRefusesSomebodyElsesBooking(t *testing.T) {
+	payments := &stubPayments{}
+	svc := NewPaymentService(payments, stubBookings{booking: heldBooking()},
+		cashOnlyResolver{},
+		func(domain.PaymentProvider) payment.ReturnURLs { return payment.ReturnURLs{} },
+		SystemClock{})
+
+	_, _, err := svc.Checkout(context.Background(), uuid.New(), testStranger, domain.ProviderCash)
+
+	if domain.CodeOf(err) != domain.CodeNotFound {
+		t.Errorf("code = %q, want not_found", domain.CodeOf(err))
+	}
+	if payments.cashRequests != 0 {
+		t.Error("a cash request was recorded for a booking the caller does not own")
+	}
+}
+
+// cashOnlyResolver is a deployment with no online gateways: cash resolves,
+// everything else is refused.
+type cashOnlyResolver struct{}
+
+func (cashOnlyResolver) ForCheckout(_ context.Context, _ uuid.UUID, provider domain.PaymentProvider) (payment.Gateway, error) {
+	if provider == domain.ProviderCash {
+		return payment.NewCash(), nil
+	}
+	return nil, domain.Invalid("provider", "This deployment only takes cash right now.")
+}
+
+func (cashOnlyResolver) ForSettlement(_ context.Context, p domain.Payment) (payment.Gateway, error) {
+	return cashOnlyResolver{}.ForCheckout(context.Background(), uuid.Nil, p.Provider)
 }

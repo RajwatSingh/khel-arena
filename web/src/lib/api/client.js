@@ -445,6 +445,14 @@ export const removeArenaPaymentAccount = (arenaId, provider, opts) =>
 export const markCashReceived = (paymentId, opts) =>
 	request(`/owner/payments/${paymentId}/received`, { method: 'POST', auth: true, ...opts });
 
+/** Accept a pay-at-the-venue request: the hour is confirmed, cash comes later. */
+export const approveCashBooking = (paymentId, opts) =>
+	request(`/owner/payments/${paymentId}/approve`, { method: 'POST', auth: true, ...opts });
+
+/** Turn a pay-at-the-venue request down; the hour goes back on the board. */
+export const declineCashBooking = (paymentId, opts) =>
+	request(`/owner/payments/${paymentId}/decline`, { method: 'POST', auth: true, ...opts });
+
 // ------------------------------------------------------------------ teams --
 
 export const myTeams = (opts) => request('/teams', { auth: true, ...opts });

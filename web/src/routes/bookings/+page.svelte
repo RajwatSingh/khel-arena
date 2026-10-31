@@ -87,6 +87,28 @@
 		no_show: 'No show'
 	};
 
+	// Cash bookings are told apart by their latest payment: a cash intent on a
+	// pending booking is a request waiting on the venue; on a confirmed or
+	// played one it is money still to hand over at the venue.
+	const isCash = (b) => b.payment_provider === 'cash' && b.payment_status === 'initiated';
+	const awaitingVenue = (b) => b.status === 'pending' && isCash(b);
+	const cashDue = (b) => (b.status === 'confirmed' || b.status === 'completed') && isCash(b);
+
+	function statusLabel(b) {
+		if (awaitingVenue(b)) return 'Waiting for venue';
+		return STATUS[b.status] ?? b.status;
+	}
+
+	async function payCash(booking) {
+		error = null;
+		try {
+			await api.startCheckout(booking.id, 'cash');
+			version++;
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : 'The request did not go through.';
+		}
+	}
+
 	async function cancel(booking) {
 		error = null;
 		try {
@@ -101,7 +123,7 @@
 	async function pay(booking, provider = (providersByArena[booking.arena_id] ?? [])[0]) {
 		error = null;
 		if (!provider) {
-			error = 'This venue has no online payment set up. Settle at the arena.';
+			error = 'This venue takes cash only. Choose “Pay cash”.';
 			return;
 		}
 		try {
@@ -154,6 +176,8 @@
 						booking.status === 'pending'
 							? new Date(booking.hold_expires_at).getTime() - ticking.now
 							: 0}
+					{@const requested = awaitingVenue(booking)}
+					{@const online = (providersByArena[booking.arena_id] ?? []).length > 0}
 					{@const done = booking.status === 'cancelled' || booking.status === 'expired'}
 					<li class="row" class:done use:reveal={{ delay: Math.min(i, 6) * 60 }}>
 						<div class="when">
@@ -176,9 +200,13 @@
 								class:live={booking.status === 'confirmed'}
 								class:waiting={booking.status === 'pending' && remaining > 0}
 							>
-								{STATUS[booking.status] ?? booking.status}
+								{statusLabel(booking)}
 							</span>
-							{#if booking.status === 'pending' && remaining > 0}
+							{#if requested && remaining > 0}
+								<span class="note">The venue will approve it · pay cash after the game</span>
+							{:else if cashDue(booking)}
+								<span class="note num">{booking.reference} · pay cash at the venue</span>
+							{:else if booking.status === 'pending' && remaining > 0}
 								<span
 									class="note num"
 									class:urgent={remaining < 120_000}
@@ -194,8 +222,20 @@
 						<p class="cost num">NPR {formatNPR(booking.price_npr)}</p>
 
 						<div class="acts">
-							{#if booking.status === 'pending' && remaining > 0}
-								<button class="btn btn-primary" onclick={() => pay(booking)}>Pay</button>
+							{#if requested && remaining > 0}
+								<button class="btn btn-secondary" onclick={() => cancel(booking)}>Cancel request</button>
+							{:else if booking.status === 'pending' && remaining > 0}
+								{#if online}
+									<button class="btn btn-primary" onclick={() => pay(booking)}>Pay</button>
+								{/if}
+								<button
+									class="btn"
+									class:btn-primary={!online}
+									class:btn-secondary={online}
+									onclick={() => payCash(booking)}
+								>
+									Pay cash
+								</button>
 								<button class="btn btn-secondary" onclick={() => cancel(booking)}>Cancel hold</button>
 							{:else if booking.status === 'confirmed'}
 								<button class="btn btn-secondary" onclick={() => cancel(booking)}>Cancel</button>

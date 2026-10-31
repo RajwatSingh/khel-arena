@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/RajwatSingh/khel-arena/internal/domain"
@@ -445,4 +446,43 @@ func (s *Server) handleMarkCashReceived(w http.ResponseWriter, r *http.Request) 
 	}
 
 	encode(w, http.StatusOK, paymentDTOFromDomain(settled))
+}
+
+// handleApproveCashBooking — POST /v1/owner/payments/{paymentID}/approve
+//
+// The venue accepts a pay-at-the-venue request. The booking is confirmed; the
+// cash is still owed, and is collected after the game.
+func (s *Server) handleApproveCashBooking(w http.ResponseWriter, r *http.Request) {
+	s.ownerCashAction(w, r, s.owner.ApproveCashBooking)
+}
+
+// handleDeclineCashBooking — POST /v1/owner/payments/{paymentID}/decline
+//
+// The venue turns a request down and the hour goes straight back on the board.
+func (s *Server) handleDeclineCashBooking(w http.ResponseWriter, r *http.Request) {
+	s.ownerCashAction(w, r, s.owner.DeclineCashBooking)
+}
+
+func (s *Server) ownerCashAction(
+	w http.ResponseWriter, r *http.Request,
+	act func(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error),
+) {
+	ownerID, ok := s.currentUser(w, r)
+	if !ok {
+		return
+	}
+
+	paymentID, err := uuid.Parse(r.PathValue("paymentID"))
+	if err != nil {
+		writeError(w, r, domain.Invalid("payment_id", "That isn't a payment."))
+		return
+	}
+
+	p, err := act(r.Context(), paymentID, ownerID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	encode(w, http.StatusOK, paymentDTOFromDomain(p))
 }

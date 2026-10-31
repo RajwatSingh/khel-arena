@@ -230,6 +230,15 @@ func (r *BookingRepo) Cancel(ctx context.Context, bookingID, userID uuid.UUID) e
 		if _, err := tx.Exec(ctx, closePostSQL, bookingID); err != nil {
 			return domain.Internal(err, "closing community post for booking %s", bookingID)
 		}
+
+		// Close an unfinished payment intent, so a cash request the player
+		// withdrew stops waiting on the venue.
+		const failPaymentSQL = `
+			update payments set status = 'failed'
+			 where booking_id = $1 and status = 'initiated'`
+		if _, err := tx.Exec(ctx, failPaymentSQL, bookingID); err != nil {
+			return domain.Internal(err, "closing payment intent for booking %s", bookingID)
+		}
 		return nil
 	})
 }
@@ -303,11 +312,17 @@ func (r *BookingRepo) ListForUser(ctx context.Context, userID uuid.UUID, limit i
 			b.id, b.court_id, b.user_id, b.team_id, b.slot, b.price_npr, b.is_peak,
 			b.status, coalesce(b.note, ''), b.hold_expires_at, b.created_at, b.updated_at,
 			c.label, a.id, a.name, a.area, a.slug,
-			(mp.id is not null and mp.status = 'open') as open_to_join
+			(mp.id is not null and mp.status = 'open') as open_to_join,
+			lp.provider, lp.status
 		from bookings b
 		join courts c on c.id = b.court_id
 		join arenas a on a.id = c.arena_id
 		left join matchmaking_posts mp on mp.booking_id = b.id
+		left join lateral (
+			select provider, status from payments
+			 where booking_id = b.id
+			 order by created_at desc limit 1
+		) lp on true
 		where b.user_id = $1
 		order by b.created_at desc
 		limit $2`
@@ -329,7 +344,7 @@ func (r *BookingRepo) ListForUser(ctx context.Context, userID uuid.UUID, limit i
 			&d.ID, &d.CourtID, &d.UserID, &teamID, &slot, &d.PriceNPR, &d.IsPeak,
 			&d.Status, &d.Note, &holdExpires, &d.CreatedAt, &d.UpdatedAt,
 			&d.CourtLabel, &d.ArenaID, &d.ArenaName, &d.ArenaArea, &d.ArenaSlug,
-			&d.OpenToJoin,
+			&d.OpenToJoin, &d.PaymentProvider, &d.PaymentStatus,
 		)
 		if err != nil {
 			return nil, domain.Internal(err, "scanning booking row")

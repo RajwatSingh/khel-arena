@@ -438,6 +438,8 @@ type fakeOwner struct {
 	deletePricingRule func(context.Context, uuid.UUID, uuid.UUID) error
 	payments          func(context.Context, uuid.UUID, uuid.UUID, int) ([]postgres.OwnerPayment, error)
 	markCashReceived  func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
+	approveCash       func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
+	declineCash       func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
 
 	paymentAccounts      func(context.Context, uuid.UUID, uuid.UUID) ([]domain.ArenaPaymentAccountInfo, error)
 	setPaymentAccount    func(context.Context, uuid.UUID, uuid.UUID, domain.ArenaPaymentAccount) error
@@ -531,6 +533,20 @@ func (f *fakeOwner) MarkCashReceived(ctx context.Context, paymentID, ownerID uui
 		f.unexpected("MarkCashReceived")
 	}
 	return f.markCashReceived(ctx, paymentID, ownerID)
+}
+
+func (f *fakeOwner) ApproveCashBooking(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error) {
+	if f.approveCash == nil {
+		f.unexpected("ApproveCashBooking")
+	}
+	return f.approveCash(ctx, paymentID, ownerID)
+}
+
+func (f *fakeOwner) DeclineCashBooking(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error) {
+	if f.declineCash == nil {
+		f.unexpected("DeclineCashBooking")
+	}
+	return f.declineCash(ctx, paymentID, ownerID)
 }
 
 func (f *fakeOwner) PaymentAccounts(ctx context.Context, arenaID, ownerID uuid.UUID) ([]domain.ArenaPaymentAccountInfo, error) {

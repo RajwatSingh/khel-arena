@@ -42,6 +42,8 @@ func TestOwnerRoutesAllRequireASession(t *testing.T) {
 		deletePricingRule: func(context.Context, uuid.UUID, uuid.UUID) error { return nil },
 		payments:          func(context.Context, uuid.UUID, uuid.UUID, int) ([]postgres.OwnerPayment, error) { return nil, nil },
 		markCashReceived:  func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error) { return domain.Payment{}, nil },
+		approveCash:       func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error) { return domain.Payment{}, nil },
+		declineCash:       func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error) { return domain.Payment{}, nil },
 		paymentAccounts: func(context.Context, uuid.UUID, uuid.UUID) ([]domain.ArenaPaymentAccountInfo, error) {
 			return nil, nil
 		},
@@ -68,6 +70,8 @@ func TestOwnerRoutesAllRequireASession(t *testing.T) {
 		{http.MethodPost, court + "/pricing/copy", `{"from_court_id":"` + uuid.New().String() + `"}`},
 		{http.MethodDelete, "/v1/owner/pricing/" + uuid.New().String(), ""},
 		{http.MethodPost, "/v1/owner/payments/" + testPaymentID.String() + "/received", ""},
+		{http.MethodPost, "/v1/owner/payments/" + testPaymentID.String() + "/approve", ""},
+		{http.MethodPost, "/v1/owner/payments/" + testPaymentID.String() + "/decline", ""},
 		{http.MethodGet, arena + "/payment-accounts", ""},
 		{http.MethodPut, arena + "/payment-accounts/esewa", `{"secret_key":"k","merchant_code":"EPAYTEST","live":false,"enabled":true}`},
 		{http.MethodDelete, arena + "/payment-accounts/esewa", ""},
@@ -387,4 +391,38 @@ func TestMarkCashReceived(t *testing.T) {
 			t.Errorf("status = %d, want 409", w.Code)
 		}
 	})
+}
+
+// Approving and declining act on the payment named in the path, as the
+// signed-in owner. The ownership check itself is in the repository's SQL;
+// what the handler must get right is passing the caller's id, never one from
+// the request.
+func TestCashApprovalPassesTheCaller(t *testing.T) {
+	for _, action := range []string{"approve", "decline"} {
+		t.Run(action, func(t *testing.T) {
+			called := false
+			check := func(_ context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error) {
+				called = true
+				if paymentID != testPaymentID {
+					t.Errorf("payment = %v, want the one in the path", paymentID)
+				}
+				if ownerID != testUser.ID {
+					t.Errorf("owner = %v, want the caller", ownerID)
+				}
+				return domain.Payment{ID: testPaymentID, Provider: domain.ProviderCash, Status: domain.PaymentInitiated}, nil
+			}
+			owner := &fakeOwner{approveCash: check, declineCash: check}
+			auth := &fakeAuth{authenticate: signedIn(testAccessToken)}
+
+			w := do(newTestServer(t, auth, nil, nil, withOwner(owner)), http.MethodPost,
+				"/v1/owner/payments/"+testPaymentID.String()+"/"+action, "", bearer(testAccessToken))
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d (%s)", w.Code, w.Body.String())
+			}
+			if !called {
+				t.Fatal("the service was never asked")
+			}
+		})
+	}
 }

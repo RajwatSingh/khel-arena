@@ -173,8 +173,8 @@ func run() error {
 		// be stored there. Everywhere else it must be set, or the refresh
 		// token can travel in clear text.
 		SecureCookies: cfg.IsProduction(),
-		// Password reset has no mail sender yet, so outside production the
-		// token is logged to make the flow testable. The gate is what makes
+		// Outside production the reset token is also logged, so the flow can
+		// be finished locally without a mail server. The gate is what makes
 		// that impossible to reach in production rather than merely unlikely.
 		LogResetTokens: !cfg.IsProduction(),
 	}

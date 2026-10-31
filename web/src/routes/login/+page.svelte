@@ -81,6 +81,7 @@
 				autocomplete="current-password"
 				required
 			/>
+			<a class="forgot link small" href="/forgot-password">Forgot password?</a>
 
 			{#if error}
 				<p class="error" role="alert">{error}</p>
@@ -137,6 +138,11 @@
 
 	.alt {
 		color: var(--muted);
+	}
+
+	.forgot {
+		justify-self: end;
+		margin-top: -0.85rem;
 	}
 
 	@media (max-width: 820px) {

@@ -37,6 +37,10 @@ smoke: ## Smoke-test a running API (BASE_URL, COURT_ID override)
 seed: ## Seed a running API with demo accounts + a venue (BASE_URL override)
 	@./scripts/seed-dev.sh
 
+.PHONY: seed-futsals
+seed-futsals: ## Seed five real Nepali futsal venues with owners and photos (BASE_URL override)
+	@python3 scripts/seed-futsals.py
+
 # ── Test ────────────────────────────────────────────────────────────────────
 
 .PHONY: test

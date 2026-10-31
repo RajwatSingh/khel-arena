@@ -50,8 +50,16 @@ function noContent() {
 
 const SESSION = { user: { id: 'u1', email: 'r@k.np' }, access_token: 'fresh.token' };
 
+/** Runs the client as it runs in a browser tab: one person, one token. */
+function asBrowser() {
+	vi.stubGlobal('window', {});
+}
+
 beforeEach(() => {
+	// setAccessToken only takes effect in a browser, so reset it as one.
+	asBrowser();
 	api.setAccessToken(null);
+	vi.unstubAllGlobals();
 });
 
 afterEach(() => {
@@ -87,6 +95,8 @@ describe('in the browser', () => {
 });
 
 describe('requests', () => {
+	beforeEach(asBrowser);
+
 	it('send the access token only when the call is authenticated', async () => {
 		const { impl, calls } = server({
 			'/v1/me': () => json({ id: 'u1' }),
@@ -172,6 +182,8 @@ describe('errors', () => {
 });
 
 describe('an expired access token', () => {
+	beforeEach(asBrowser);
+
 	/** A server where the token in SESSION is the only one /v1/me accepts. */
 	function withRefresh({ refreshWorks = true } = {}) {
 		let accepted = 'stale.token';
@@ -261,6 +273,7 @@ describe('an expired access token', () => {
 
 describe('the access token', () => {
 	it('is held in memory only, never handed to storage', async () => {
+		asBrowser();
 		api.setAccessToken('abc');
 		expect(api.getAccessToken()).toBe('abc');
 
@@ -273,5 +286,60 @@ describe('the access token', () => {
 			fs.readFileSync(new URL('./client.js', import.meta.url), 'utf8')
 		);
 		expect(source).not.toMatch(/localStorage|sessionStorage|document\.cookie/);
+	});
+});
+
+// The server renders pages for every visitor from one process. A token kept in
+// the module there was one visitor's credential sent for the next: a stranger
+// loading /manage after an owner got the owner's back office.
+describe('on the server', () => {
+	it('never keeps a token, so one visitor cannot borrow another\'s', async () => {
+		api.setAccessToken('someone.elses.token');
+		expect(api.getAccessToken()).toBeNull();
+
+		const { impl, calls } = server({ '/v1/me': () => json({ id: 'u1' }) });
+		await api.me({ fetch: impl });
+
+		expect(calls[0].init.headers.Authorization).toBeUndefined();
+	});
+
+	it('does not refresh on a 401, which would rotate a visitor\'s cookie', async () => {
+		const { impl, calls } = server({
+			'/v1/me': () => json({ error: { code: 'unauthenticated', message: 'Sign in.' } }, 401),
+			'/v1/auth/refresh': () => json(SESSION)
+		});
+
+		const err = await api.me({ fetch: impl }).catch((e) => e);
+
+		expect(err.code).toBe('unauthenticated');
+		expect(calls.map((c) => c.path)).toEqual(['/v1/me']);
+		expect(api.getAccessToken()).toBeNull();
+	});
+});
+
+describe('restoring a session', () => {
+	beforeEach(asBrowser);
+
+	// The header restores the session while a private page loads its data.
+	// Two refreshes with the same cookie read to the server as a stolen token,
+	// so the restore and the page's 401 recovery must share one.
+	it('shares its refresh with a call that hit a 401', async () => {
+		let refreshed = 0;
+		const { impl } = server({
+			'/v1/me': (init) =>
+				init.headers.Authorization === `Bearer ${SESSION.access_token}`
+					? json({ id: 'u1', email: 'r@k.np' })
+					: json({ error: { code: 'unauthenticated', message: 'Sign in.' } }, 401),
+			'/v1/auth/refresh': () => {
+				refreshed++;
+				return json(SESSION);
+			}
+		});
+
+		const [session, me] = await Promise.all([api.refresh({ fetch: impl }), api.me({ fetch: impl })]);
+
+		expect(session.access_token).toBe(SESSION.access_token);
+		expect(me.email).toBe('r@k.np');
+		expect(refreshed).toBe(1);
 	});
 });

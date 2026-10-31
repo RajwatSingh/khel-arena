@@ -10,6 +10,12 @@
 
 	let { data } = $props();
 
+	// The server rendered this page signed out. Once the visitor's session is
+	// restored, load again in the browser so the parts that are theirs appear.
+	$effect(() => {
+		if (session.signedIn && !data.personal) invalidateAll();
+	});
+
 	const t = $derived(data.tournament);
 	const organiser = $derived(session.user?.id === t.organizer_id);
 

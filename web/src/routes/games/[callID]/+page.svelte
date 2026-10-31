@@ -9,6 +9,12 @@
 
 	let { data } = $props();
 
+	// The server rendered this page signed out. Once the visitor's session is
+	// restored, load again in the browser so the parts that are theirs appear.
+	$effect(() => {
+		if (session.signedIn && !data.personal) invalidateAll();
+	});
+
 	const call = $derived(data.call);
 	const mine = $derived(session.signedIn && session.user?.id === call.author_id);
 	const full = $derived(call.spots_remaining === 0);

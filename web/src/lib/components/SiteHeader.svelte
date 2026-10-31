@@ -1,4 +1,5 @@
 <script>
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { session, clock } from '$lib/session.svelte.js';
 	import CentreMark from './CentreMark.svelte';
@@ -37,6 +38,20 @@
 	function current(href) {
 		return page.url.pathname === href || page.url.pathname.startsWith(href + '/');
 	}
+
+	// Signing out always ends on the sign-in page. replaceState swaps out the
+	// page being left, so Back does not land on it; and every private page
+	// checks the session when it loads, so going further back lands on sign
+	// in too rather than on anything that was private.
+	async function signOut() {
+		try {
+			await session.signOut();
+		} catch {
+			// The local session is cleared whatever the server said; a failed
+			// network call must not leave the person on the page they left.
+		}
+		await goto('/login', { replaceState: true, invalidateAll: true });
+	}
 </script>
 
 <header>
@@ -57,7 +72,7 @@
 		<div class="right">
 			<span class="clock num">Kathmandu {kathmandu}</span>
 			{#if session.signedIn}
-				<button class="btn btn-quiet" onclick={() => session.signOut()}>Sign out</button>
+				<button class="btn btn-quiet" onclick={signOut}>Sign out</button>
 				<a class="btn btn-primary username" href="/players/{session.user.username}">
 					{session.user.username}
 				</a>

@@ -1,6 +1,11 @@
 import { redirect } from '@sveltejs/kit';
 import { api, ApiError } from '$lib/api/index.js';
 
+// Private page: rendered in the browser only. A session lives in the visitor's
+// own tab; the server renders for everyone at once and keeps none, so it
+// cannot load this page's data on anyone's behalf.
+export const ssr = false;
+
 /**
  * The venue operator's home: every arena they run, with the bookings, the
  * money taken and the cash still owed rolled up across all of them.

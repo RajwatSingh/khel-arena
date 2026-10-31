@@ -40,12 +40,31 @@ let accessToken = null;
  */
 let refreshInFlight = null;
 
+/**
+ * Whether this code is running in a browser rather than on the server.
+ *
+ * Checked per call, like resolveFetch below. The distinction matters for the
+ * token: a browser tab belongs to one person, but the server renders pages for
+ * every visitor from one long-lived process, where a module-level variable is
+ * shared by all of them.
+ */
+const inBrowser = () => typeof window !== 'undefined';
+
+/**
+ * Stores the access token -- in the browser only.
+ *
+ * On the server this is deliberately a no-op. A token kept here would be one
+ * visitor's credential, still sitting in the variable when the next visitor's
+ * page renders, and sent on their behalf: whoever loaded a private page after
+ * a signed-in owner would see, and could act on, that owner's account.
+ */
 export function setAccessToken(token) {
+	if (!inBrowser()) return;
 	accessToken = token ?? null;
 }
 
 export function getAccessToken() {
-	return accessToken;
+	return inBrowser() ? accessToken : null;
 }
 
 /**
@@ -115,7 +134,8 @@ async function request(
 	// boundary the browser generates, and setting Content-Type here would
 	// replace it with one that has none.
 	if (body !== undefined) headers['Content-Type'] = 'application/json';
-	if (auth && accessToken) headers.Authorization = `Bearer ${accessToken}`;
+	const token = getAccessToken();
+	if (auth && token) headers.Authorization = `Bearer ${token}`;
 
 	let response;
 	try {
@@ -134,7 +154,10 @@ async function request(
 		throw new ApiError('unavailable', "We couldn't reach the server. Check your connection.", []);
 	}
 
-	if (response.status === 401 && auth && retry && path !== '/auth/refresh') {
+	// Browser only: on the server there is no per-visitor place to keep the
+	// renewed token, so a server-rendered call stays signed out and the page
+	// that needs a session loads in the browser instead.
+	if (response.status === 401 && auth && retry && path !== '/auth/refresh' && inBrowser()) {
 		const refreshed = await refreshQuietly(doFetch);
 		if (refreshed) {
 			// rawBody is not replayed: a FormData stream has already been
@@ -163,23 +186,41 @@ async function request(
  * original 401, not a confusing error about refreshing.
  */
 async function refreshQuietly(doFetch) {
-	refreshInFlight ??= (async () => {
-		try {
-			const session = await request('/auth/refresh', { method: 'POST', fetch: doFetch });
+	try {
+		const session = await refreshShared(doFetch);
+		return Boolean(session?.access_token);
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * The one refresh the browser may have in flight.
+ *
+ * Both the silent restore on page load and the 401 recovery above come
+ * through here. Refreshing rotates the cookie, and the server treats a second
+ * refresh with the same cookie as a stolen token and ends every session the
+ * user has -- so two refreshes overlapping, say a page's data load racing the
+ * header's restore, would sign the person out everywhere.
+ */
+function refreshShared(doFetch) {
+	refreshInFlight ??= request('/auth/refresh', { method: 'POST', fetch: doFetch })
+		.then((session) => {
 			setAccessToken(session?.access_token ?? null);
-			return Boolean(session?.access_token);
-		} catch {
+			return session;
+		})
+		.catch((err) => {
 			setAccessToken(null);
-			return false;
-		} finally {
+			throw err;
+		})
+		.finally(() => {
 			// Cleared in a microtask rather than here, so every caller that
 			// awaited this same refresh observes the settled result before the
 			// slot reopens.
 			queueMicrotask(() => {
 				refreshInFlight = null;
 			});
-		}
-	})();
+		});
 
 	return refreshInFlight;
 }
@@ -196,7 +237,10 @@ export const register = (input, opts) =>
 export const login = (credentials, opts) =>
 	request('/auth/login', { method: 'POST', body: credentials, ...opts });
 
-export const refresh = (opts) => request('/auth/refresh', { method: 'POST', ...opts });
+export const refresh = (opts) =>
+	inBrowser()
+		? refreshShared(resolveFetch(opts?.fetch))
+		: request('/auth/refresh', { method: 'POST', ...opts });
 
 export const logout = (opts) => request('/auth/logout', { method: 'POST', ...opts });
 

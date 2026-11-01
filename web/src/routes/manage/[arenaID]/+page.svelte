@@ -6,6 +6,7 @@
 	import TextAnimate from '$lib/components/TextAnimate.svelte';
 	import Field from '$lib/components/Field.svelte';
 	import CourtPanel from '$lib/components/CourtPanel.svelte';
+	import ExpandCard from '$lib/components/ExpandCard.svelte';
 	import PaymentKeyForm from '$lib/components/PaymentKeyForm.svelte';
 	import PaymentKeyStatus from '$lib/components/PaymentKeyStatus.svelte';
 	import { formatDate, formatNPR, formatTime, localDate } from '$lib/time.js';
@@ -38,7 +39,12 @@
 	);
 
 	let newCourt = $state({ name: '', format: '', side_count: 5, base_price_npr: 1200 });
-	let newPhoto = $state({ url: '', caption: '', sort_order: 0 });
+	let newPhoto = $state({ caption: '' });
+	let linkPhoto = $state({ url: '', caption: '', sort_order: 0 });
+	// Each "add" form is a card that opens on click, and closes after a save.
+	let addCourtOpen = $state(false);
+	let uploadOpen = $state(false);
+	let linkOpen = $state(false);
 	let file = $state(null);
 
 	function pickFile(event) {
@@ -133,7 +139,8 @@
 			api.uploadPhoto(arena.id, file, { caption: newPhoto.caption })
 		);
 		if (ok) {
-			newPhoto = { url: '', caption: '', sort_order: 0 };
+			newPhoto = { caption: '' };
+			uploadOpen = false;
 			file = null;
 			// The input keeps its selection otherwise, which reads as though
 			// the upload had not happened.
@@ -145,9 +152,12 @@
 	async function addPhoto(event) {
 		event.preventDefault();
 		const ok = await act(() =>
-			api.addPhoto(arena.id, { ...newPhoto, sort_order: Number(newPhoto.sort_order) })
+			api.addPhoto(arena.id, { ...linkPhoto, sort_order: Number(linkPhoto.sort_order) })
 		);
-		if (ok) newPhoto = { url: '', caption: '', sort_order: 0 };
+		if (ok) {
+			linkPhoto = { url: '', caption: '', sort_order: 0 };
+			linkOpen = false;
+		}
 	}
 	const setActive = (active) => act(() => api.setArenaActive(arena.id, active));
 
@@ -188,7 +198,10 @@
 				base_price_npr: Number(newCourt.base_price_npr)
 			})
 		);
-		if (ok) newCourt = { name: '', format: '', side_count: 5, base_price_npr: 1200 };
+		if (ok) {
+			newCourt = { name: '', format: '', side_count: 5, base_price_npr: 1200 };
+			addCourtOpen = false;
+		}
 	}
 </script>
 
@@ -345,26 +358,34 @@
 			{/each}
 		</ul>
 
-		<form class="card" onsubmit={addCourt}>
-			<h3 class="display display-m">Add a court</h3>
-			<Field name="name" label="Name" bind:value={newCourt.name} error={fieldErrors.label}
-				required maxlength="40" placeholder="Court A" />
-			<Field name="format" label="Format" bind:value={newCourt.format}
-				hint="What you call it — “5-a-side”, “Full court”. Left blank, it's derived from the side count."
-				maxlength="40" placeholder="5-a-side" />
-			<div class="pair">
-				<Field name="side_count" label="A side" type="number" bind:value={newCourt.side_count}
-					error={fieldErrors.side_count} min="3" max="11" required />
-				<Field name="base_price_npr" label="Base rate (NPR/hr)" type="number"
-					bind:value={newCourt.base_price_npr} error={fieldErrors.base_price} min="1" required />
-			</div>
-			<button class="btn btn-primary" class:loading={busy} disabled={busy}>Add</button>
-		</form>
+		<div class="add-card">
+			<ExpandCard bind:open={addCourtOpen} openLabel="Add">
+				{#snippet lead()}<span class="plus" aria-hidden="true"></span>{/snippet}
+				{#snippet summary()}
+					<strong class="card-title">Add a court</strong>
+					<span class="small card-meta">Name it, say how many a side, and set its base rate.</span>
+				{/snippet}
+				<form class="in-card" onsubmit={addCourt}>
+					<Field name="name" label="Name" bind:value={newCourt.name} error={fieldErrors.label}
+						required maxlength="40" placeholder="Court A" />
+					<Field name="format" label="Format" bind:value={newCourt.format}
+						hint="What you call it — “5-a-side”, “Full court”. Left blank, it's derived from the side count."
+						maxlength="40" placeholder="5-a-side" />
+					<div class="pair">
+						<Field name="side_count" label="A side" type="number" bind:value={newCourt.side_count}
+							error={fieldErrors.side_count} min="3" max="11" required />
+						<Field name="base_price_npr" label="Base rate (NPR/hr)" type="number"
+							bind:value={newCourt.base_price_npr} error={fieldErrors.base_price} min="1" required />
+					</div>
+					<button class="btn btn-primary" class:loading={busy} disabled={busy}>Add court</button>
+				</form>
+			</ExpandCard>
+		</div>
 
 		<h2 class="display display-m">Gallery</h2>
 		<p class="small quiet">
-			Photographs of the place, shown on the venue's page. Images are linked, not uploaded —
-			point at one you already host.
+			Photographs of the place, shown on the venue's page. Upload one, or link one you already
+			host.
 		</p>
 
 		{#if data.photos.length}
@@ -383,42 +404,58 @@
 			<p class="small quiet none-inline">No photographs yet.</p>
 		{/if}
 
-		<form class="card" onsubmit={upload}>
-			<h3 class="display display-m">Upload a photograph</h3>
-			<label class="pick" for="photo-file">
-				<span class="label">Image file</span>
-				<input id="photo-file" type="file" accept="image/*" onchange={pickFile} />
-				<span class="small quiet">JPEG, PNG, WebP or GIF, up to 5 MB.</span>
-			</label>
-			<Field name="upload-caption" label="Caption" bind:value={newPhoto.caption}
-				maxlength="120" placeholder="The covered court, looking east" />
-			<button class="btn btn-primary" class:loading={busy} disabled={busy || !file}>Upload</button>
-		</form>
+		<div class="add-cards">
+			<ExpandCard bind:open={uploadOpen} openLabel="Upload">
+				{#snippet lead()}<span class="plus" aria-hidden="true"></span>{/snippet}
+				{#snippet summary()}
+					<strong class="card-title">Upload a photograph</strong>
+					<span class="small card-meta">JPEG, PNG, WebP or GIF, up to 5 MB.</span>
+				{/snippet}
+				<form class="in-card" onsubmit={upload}>
+					<label class="pick" for="photo-file">
+						<span class="label">Image file</span>
+						<input id="photo-file" type="file" accept="image/*" onchange={pickFile} />
+						<span class="small quiet">JPEG, PNG, WebP or GIF, up to 5 MB.</span>
+					</label>
+					<Field name="upload-caption" label="Caption" bind:value={newPhoto.caption}
+						maxlength="120" placeholder="The covered court, looking east" />
+					<button class="btn btn-primary" class:loading={busy} disabled={busy || !file}>Upload</button>
+				</form>
+			</ExpandCard>
 
-		<form class="card" onsubmit={addPhoto}>
-			<h3 class="display display-m">…or link one you host</h3>
-			<Field name="photo-url" label="Image address" bind:value={newPhoto.url}
-				error={fieldErrors.url} required placeholder="https://…/dhuku-court-a.jpg" />
-			<Field name="photo-caption" label="Caption" bind:value={newPhoto.caption}
-				maxlength="120" placeholder="The covered court, looking east" />
-			<Field name="photo-order" label="Position" type="number" bind:value={newPhoto.sort_order}
-				hint="Lower numbers come first." min="0" />
-			<button class="btn btn-secondary" class:loading={busy} disabled={busy}>Add</button>
-		</form>
+			<ExpandCard bind:open={linkOpen} openLabel="Add">
+				{#snippet lead()}<span class="plus" aria-hidden="true"></span>{/snippet}
+				{#snippet summary()}
+					<strong class="card-title">Link a photo you host</strong>
+					<span class="small card-meta">Paste the address of an image that's already online.</span>
+				{/snippet}
+				<form class="in-card" onsubmit={addPhoto}>
+					<Field name="photo-url" label="Image address" bind:value={linkPhoto.url}
+						error={fieldErrors.url} required placeholder="https://…/dhuku-court-a.jpg" />
+					<Field name="photo-caption" label="Caption" bind:value={linkPhoto.caption}
+						maxlength="120" placeholder="The covered court, looking east" />
+					<Field name="photo-order" label="Position" type="number" bind:value={linkPhoto.sort_order}
+						hint="Lower numbers come first." min="0" />
+					<button class="btn btn-primary" class:loading={busy} disabled={busy}>Add photo</button>
+				</form>
+			</ExpandCard>
+		</div>
 
 		<h2 class="display display-m">Venue details</h2>
-		<details class="venue-card" bind:open={venueOpen}>
-			<summary>
-				<span class="cover" class:empty={!arena.cover_url}>
-					{#if arena.cover_url}
-						<img src={arena.cover_url} alt="" loading="lazy" />
-					{:else}
-						<span class="initial" aria-hidden="true">{arena.name.slice(0, 1)}</span>
-					{/if}
-				</span>
-				<span class="venue-what">
-					<strong class="venue-name">{arena.name}</strong>
-					<span class="small venue-meta">
+		<div class="add-card">
+			<ExpandCard bind:open={venueOpen}>
+				{#snippet lead()}
+					<span class="cover" class:empty={!arena.cover_url}>
+						{#if arena.cover_url}
+							<img src={arena.cover_url} alt="" loading="lazy" />
+						{:else}
+							<span class="initial" aria-hidden="true">{arena.name.slice(0, 1)}</span>
+						{/if}
+					</span>
+				{/snippet}
+				{#snippet summary()}
+					<strong class="card-title">{arena.name}</strong>
+					<span class="small card-meta">
 						{arena.area}{arena.city ? `, ${arena.city}` : ''} · open {arena.opens_at}–{arena.closes_at}
 						{#if arena.phone}· {arena.phone}{/if}
 					</span>
@@ -429,58 +466,56 @@
 							{/each}
 						</span>
 					{/if}
-				</span>
-				<span class="venue-toggle small">{venueOpen ? 'Close' : 'Edit'}</span>
-				<span class="chev" aria-hidden="true"></span>
-			</summary>
+				{/snippet}
 
-			<form class="venue-form" onsubmit={saveVenue}>
-				<div class="venue-col">
-					<Field name="v-name" label="Name" bind:value={venue.name} error={fieldErrors.name}
-						required maxlength="80" />
-					<div class="pair">
-						<Field name="v-area" label="Area" bind:value={venue.area} error={fieldErrors.area} required />
-						<Field name="v-city" label="City" bind:value={venue.city} error={fieldErrors.city} />
+				<form class="venue-form in-card" onsubmit={saveVenue}>
+					<div class="venue-col">
+						<Field name="v-name" label="Name" bind:value={venue.name} error={fieldErrors.name}
+							required maxlength="80" />
+						<div class="pair">
+							<Field name="v-area" label="Area" bind:value={venue.area} error={fieldErrors.area} required />
+							<Field name="v-city" label="City" bind:value={venue.city} error={fieldErrors.city} />
+						</div>
+						<div class="pair">
+							<Field name="v-opens" label="Opens" type="time" bind:value={venue.opens_at}
+								error={fieldErrors.opens_at} required />
+							<Field name="v-closes" label="Closes" type="time" bind:value={venue.closes_at}
+								error={fieldErrors.closes_at} required />
+						</div>
+						<Field name="v-phone" label="Phone" bind:value={venue.phone} error={fieldErrors.phone}
+							hint="Ten digits starting 98 or 97, or a landline." placeholder="9851000000" />
+						<div class="pair">
+							<Field name="v-lat" label="Latitude" type="number" step="any" bind:value={venue.lat}
+								error={fieldErrors.lat} />
+							<Field name="v-lng" label="Longitude" type="number" step="any" bind:value={venue.lng}
+								error={fieldErrors.lng} />
+						</div>
 					</div>
-					<div class="pair">
-						<Field name="v-opens" label="Opens" type="time" bind:value={venue.opens_at}
-							error={fieldErrors.opens_at} required />
-						<Field name="v-closes" label="Closes" type="time" bind:value={venue.closes_at}
-							error={fieldErrors.closes_at} required />
-					</div>
-					<Field name="v-phone" label="Phone" bind:value={venue.phone} error={fieldErrors.phone}
-						hint="Ten digits starting 98 or 97, or a landline." placeholder="9851000000" />
-					<div class="pair">
-						<Field name="v-lat" label="Latitude" type="number" step="any" bind:value={venue.lat}
-							error={fieldErrors.lat} />
-						<Field name="v-lng" label="Longitude" type="number" step="any" bind:value={venue.lng}
-							error={fieldErrors.lng} />
-					</div>
-				</div>
 
-				<div class="venue-col">
-					<Field name="v-amenities" label="Amenities" bind:value={venue.amenities}
-						error={fieldErrors.amenities} hint="Separated by commas."
-						placeholder="Covered, Floodlit, Parking" />
-					<Field name="v-cover" label="Cover image URL" bind:value={venue.cover_url} />
-					<label class="pick" for="v-description">
-						<span class="field-label">Description</span>
-						<textarea id="v-description" bind:value={venue.description} maxlength="2000" rows="6"
-							placeholder="Two covered courts behind the Jhamsikhel bus stop, laid with 40mm turf."
-						></textarea>
-					</label>
-				</div>
+					<div class="venue-col">
+						<Field name="v-amenities" label="Amenities" bind:value={venue.amenities}
+							error={fieldErrors.amenities} hint="Separated by commas."
+							placeholder="Covered, Floodlit, Parking" />
+						<Field name="v-cover" label="Cover image URL" bind:value={venue.cover_url} />
+						<label class="pick" for="v-description">
+							<span class="field-label">Description</span>
+							<textarea id="v-description" bind:value={venue.description} maxlength="2000" rows="6"
+								placeholder="Two covered courts behind the Jhamsikhel bus stop, laid with 40mm turf."
+							></textarea>
+						</label>
+					</div>
 
-				<div class="venue-actions">
-					<button class="btn btn-primary" class:loading={busy} disabled={busy}>
-						{savedVenue ? 'Saved' : 'Save details'}
-					</button>
-					<p class="small quiet">
-						The web address stays <code>{arena.slug}</code> — it's in every link anyone has shared.
-					</p>
-				</div>
-			</form>
-		</details>
+					<div class="venue-actions">
+						<button class="btn btn-primary" class:loading={busy} disabled={busy}>
+							{savedVenue ? 'Saved' : 'Save details'}
+						</button>
+						<p class="small quiet">
+							The web address stays <code>{arena.slug}</code> — it's in every link anyone has shared.
+						</p>
+					</div>
+				</form>
+			</ExpandCard>
+		</div>
 
 		<hr />
 		{#if !data.listing.is_active}
@@ -578,50 +613,46 @@
 		padding: clamp(1.5rem, 3vw, 2rem);
 	}
 
-	/* Venue details: a horizontal summary that opens into its form. */
-	.venue-card {
+	/* The expandable cards (ExpandCard) and what goes inside them. */
+	.add-card { margin-top: 1rem; }
+
+	.add-cards {
+		display: grid;
+		gap: 0.75rem;
 		margin-top: 1rem;
-		border: 1px solid var(--line);
-		border-radius: var(--r-md);
-		background: var(--surface);
-		transition: border-color var(--dur-hover) var(--ease);
-		/* Lets the open/close below animate to and from `auto` where the
-		   browser supports it; elsewhere it simply snaps open. */
-		interpolate-size: allow-keywords;
 	}
 
-	.venue-card:hover,
-	.venue-card[open] { border-color: var(--line-strong); }
+	.card-title { font-size: 1.0625rem; }
+	.card-meta { color: var(--faint); }
 
-	.venue-card::details-content {
-		block-size: 0;
-		overflow: hidden;
-		transition:
-			block-size 280ms var(--ease),
-			content-visibility 280ms allow-discrete;
+	/* A drawn plus in a soft square, the "add" counterpart to a cover photo. */
+	.plus {
+		position: relative;
+		width: 2.75rem;
+		height: 2.75rem;
+		border-radius: var(--r-sm);
+		background: var(--pine-wash);
 	}
 
-	.venue-card[open]::details-content { block-size: auto; }
-
-	@media (prefers-reduced-motion: reduce) {
-		.venue-card::details-content { transition: none; }
+	.plus::before,
+	.plus::after {
+		content: '';
+		position: absolute;
+		inset: 50% auto auto 50%;
+		width: 1rem;
+		height: 2px;
+		border-radius: 1px;
+		background: var(--pine);
+		transform: translate(-50%, -50%);
 	}
 
-	.venue-card summary {
-		display: flex;
-		align-items: center;
-		gap: 1rem 1.25rem;
-		padding: 0.9rem 1.1rem;
-		cursor: pointer;
-		list-style: none;
-	}
+	.plus::after { transform: translate(-50%, -50%) rotate(90deg); }
 
-	.venue-card summary::-webkit-details-marker { display: none; }
-
-	.venue-card summary:focus-visible {
-		outline: 2px solid var(--pine);
-		outline-offset: 2px;
-		border-radius: var(--r-md);
+	/* Forms inside a card drop the page's standalone-card padding and width. */
+	form.in-card {
+		max-width: 34rem;
+		margin: 0;
+		padding: 0;
 	}
 
 	.cover {
@@ -659,16 +690,6 @@
 		object-fit: cover;
 	}
 
-	.venue-what {
-		display: grid;
-		flex: 1;
-		gap: 0.3rem;
-		min-width: 0;
-	}
-
-	.venue-name { font-size: 1.0625rem; }
-	.venue-meta { color: var(--faint); }
-
 	.amenities {
 		display: flex;
 		flex-wrap: wrap;
@@ -676,31 +697,9 @@
 		margin-top: 0.15rem;
 	}
 
-	.venue-toggle {
-		flex: none;
-		color: var(--pine);
-		font-weight: 600;
-	}
-
-	/* Same drawn chevron as the court panels, turning with the disclosure. */
-	.chev {
-		flex: none;
-		width: 0.5rem;
-		height: 0.5rem;
-		border-right: 2px solid var(--faint);
-		border-bottom: 2px solid var(--faint);
-		transform: rotate(45deg) translate(-2px, -2px);
-		transition: transform var(--dur-hover) var(--ease);
-	}
-
-	.venue-card[open] .chev { transform: rotate(-135deg) translate(-2px, -2px); }
-
-	/* Overrides the page's card-form defaults: this form lives inside the card. */
-	.venue-form {
+	/* The venue form uses the card's full width, in two columns when it can. */
+	form.venue-form {
 		max-width: none;
-		margin: 0;
-		padding: 1.25rem 1.1rem 1.4rem;
-		border-top: 1px solid var(--line);
 		gap: 1rem 2rem;
 	}
 
@@ -721,13 +720,12 @@
 	.venue-actions p { margin: 0; }
 
 	@media (min-width: 52rem) {
-		.venue-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+		form.venue-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 		.venue-actions { grid-column: 1 / -1; }
 	}
 
 	@media (max-width: 34rem) {
 		.cover { width: 4.5rem; }
-		.venue-toggle { display: none; }
 	}
 
 	.gallery {

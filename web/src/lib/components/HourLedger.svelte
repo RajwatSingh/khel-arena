@@ -41,6 +41,9 @@
 		})
 	);
 
+	// "5-a-side" → "5v5", so a court and its format fit one line on phones.
+	const shortFormat = (format) => format?.replace(/^(\d+)-a-side$/i, '$1v$1') ?? '';
+
 	function href(row, slot) {
 		return `/arenas/${row.arena_slug}?court=${row.court_id}&date=${ledger.date}&at=${encodeURIComponent(slot.starts_at)}`;
 	}
@@ -145,6 +148,13 @@
 									class="court"
 									text="{row.court_name} · {row.format} · {row.arena_area}"
 								/>
+								<!-- Phones: a narrow column where the name wraps onto more
+								     lines, which leaves the width for hours. -->
+								<span class="stacked">
+									<span class="s-venue">{row.arena_name}</span>
+									<span class="s-court nw">{row.court_name} · {shortFormat(row.format)}</span>
+									<span class="s-court nw">{row.arena_area}</span>
+								</span>
 							</a>
 						</th>
 						{#each hours as hour (hour)}
@@ -556,16 +566,95 @@
 		);
 	}
 
+	.stacked {
+		display: none;
+	}
+
+	/* Phones: hours over names. The court column narrows and its text wraps,
+	   so rows get taller instead; the hour columns slim down and the board
+	   runs to the screen edges. About five hours fit across, up from two. */
 	@media (max-width: 720px) {
-		.corner,
-		.side {
-			width: 11rem;
-			min-width: 11rem;
-			padding-inline: 0.9rem;
+		.board {
+			margin-inline: calc(-1 * var(--gutter));
 		}
 
-		.side :global(.venue) {
-			font-size: 0.9375rem;
+		.scroll {
+			border-radius: 0;
+			border-inline: 0;
+		}
+
+		.fade {
+			left: 0;
+			right: 0;
+			border-radius: 0;
+		}
+
+		.corner,
+		.side {
+			width: 7.4rem;
+			min-width: 7.4rem;
+			padding: 0.55rem 0.6rem 0.55rem 0.85rem;
+		}
+
+		.corner {
+			padding-block: 0.85rem 0.5rem;
+		}
+
+		.side :global(.venue),
+		.side :global(.court) {
+			display: none;
+		}
+
+		.stacked {
+			display: grid;
+			gap: 0.1rem;
+		}
+
+		/* Two lines at most, so a long name can't stretch its row. */
+		.s-venue {
+			display: -webkit-box;
+			-webkit-box-orient: vertical;
+			-webkit-line-clamp: 2;
+			line-clamp: 2;
+			overflow: hidden;
+			font-size: 0.8125rem;
+			font-weight: 600;
+			line-height: 1.25;
+			letter-spacing: -0.01em;
+			overflow-wrap: break-word;
+		}
+
+		.s-court {
+			display: block;
+			font-size: 0.6875rem;
+			line-height: 1.3;
+			color: var(--faint);
+		}
+
+		.nw {
+			overflow: hidden;
+			white-space: nowrap;
+			text-overflow: ellipsis;
+		}
+
+		.side a:hover .s-venue {
+			color: var(--pine);
+		}
+
+		.hour {
+			width: 3.4rem;
+			min-width: 3.4rem;
+			padding-block: 0.85rem 0.5rem;
+			font-size: 0.75rem;
+		}
+
+		.cell {
+			height: 3.1rem;
+			margin: 2px;
+		}
+
+		.open .price {
+			font-size: 0.8125rem;
 		}
 	}
 </style>

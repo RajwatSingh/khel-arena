@@ -34,13 +34,13 @@ func (s *Server) handleListReviews(w http.ResponseWriter, r *http.Request) {
 	encode(w, http.StatusOK, reviewDTOsFromDomain(reviews))
 }
 
-// handleMyReview — GET /v1/arenas/{arenaID}/reviews/mine (authenticated)
+// handleMyReviews — GET /v1/arenas/{arenaID}/reviews/mine (authenticated)
 //
 // What the caller has said, and whether they may say anything: a review has
 // to be earned by having played there, and a page that offered the form to
 // somebody who cannot use it would be a worse experience than one that
 // explains.
-func (s *Server) handleMyReview(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMyReviews(w http.ResponseWriter, r *http.Request) {
 	userID, ok := s.currentUser(w, r)
 	if !ok {
 		return
@@ -52,26 +52,20 @@ func (s *Server) handleMyReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	review, canReview, err := s.reviews.MyReview(r.Context(), arenaID, userID)
+	reviews, canReview, err := s.reviews.MyReviews(r.Context(), arenaID, userID)
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
 
-	out := myReviewDTO{CanReview: canReview}
-	if review.ID != uuid.Nil {
-		dto := reviewDTOFromDomain(review)
-		out.Review = &dto
-	}
-	encode(w, http.StatusOK, out)
+	encode(w, http.StatusOK, myReviewsDTO{CanReview: canReview, Reviews: reviewDTOsFromDomain(reviews)})
 }
 
-// handleReviewArena — PUT /v1/arenas/{arenaID}/reviews/mine (authenticated)
+// handlePostReview — POST /v1/arenas/{arenaID}/reviews (authenticated)
 //
-// PUT because there is at most one review per player per arena: posting again
-// replaces what you said rather than adding a second opinion. The address says
-// so — "mine" is a place, and writing to it twice is the same act twice.
-func (s *Server) handleReviewArena(w http.ResponseWriter, r *http.Request) {
+// POST because every call adds a review: a player may review an arena more
+// than once. Reviews are final once posted, so there is no PUT -- only delete.
+func (s *Server) handlePostReview(w http.ResponseWriter, r *http.Request) {
 	userID, ok := s.currentUser(w, r)
 	if !ok {
 		return
@@ -89,29 +83,31 @@ func (s *Server) handleReviewArena(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	review, err := s.reviews.Review(r.Context(), arenaID, userID, req.Rating, req.Comment)
+	review, err := s.reviews.PostReview(r.Context(), arenaID, userID, req.Rating, req.Comment)
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
 
-	encode(w, http.StatusOK, reviewDTOFromDomain(review))
+	encode(w, http.StatusCreated, reviewDTOFromDomain(review))
 }
 
-// handleDeleteReview — DELETE /v1/arenas/{arenaID}/reviews/mine (authenticated)
+// handleDeleteReview — DELETE /v1/me/reviews/{reviewID} (authenticated)
+//
+// Under "me" like highlights: it only ever touches the caller's own reviews.
 func (s *Server) handleDeleteReview(w http.ResponseWriter, r *http.Request) {
 	userID, ok := s.currentUser(w, r)
 	if !ok {
 		return
 	}
 
-	arenaID, err := uuid.Parse(r.PathValue("arenaID"))
+	reviewID, err := uuid.Parse(r.PathValue("reviewID"))
 	if err != nil {
-		writeError(w, r, domain.Invalid("arena_id", "That isn't an arena."))
+		writeError(w, r, domain.Invalid("review_id", "That isn't a review."))
 		return
 	}
 
-	if err := s.reviews.DeleteReview(r.Context(), arenaID, userID); err != nil {
+	if err := s.reviews.DeleteReview(r.Context(), reviewID, userID); err != nil {
 		writeError(w, r, err)
 		return
 	}

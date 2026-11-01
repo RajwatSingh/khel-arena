@@ -52,24 +52,20 @@ func (r *ReviewRepo) HasPlayedAt(ctx context.Context, arenaID, userID uuid.UUID)
 	return played, nil
 }
 
-// Upsert writes a player's review of an arena.
+// CreateReview adds a player's review of an arena.
 //
-// One per player per arena, enforced by a unique constraint: posting again
-// edits what you said rather than stacking a second opinion. That is what
-// makes `on conflict` the right shape here -- the client does not have to know
-// whether it is creating or editing, because from the player's side it is the
-// same act.
-func (r *ReviewRepo) Upsert(ctx context.Context, review domain.Review) (domain.Review, error) {
+// Always a new row: a player can review the same arena as many times as they
+// like, and a review is final once posted. There is no update path, only
+// DeleteReview.
+func (r *ReviewRepo) CreateReview(ctx context.Context, review domain.Review) (domain.Review, error) {
 	const q = `
 		insert into arena_reviews (arena_id, user_id, rating, comment)
 		values ($1, $2, $3, nullif($4, ''))
-		on conflict (arena_id, user_id) do update
-			set rating = excluded.rating, comment = excluded.comment
-		returning id, arena_id, user_id, rating, coalesce(comment, ''), created_at, updated_at`
+		returning id, arena_id, user_id, rating, coalesce(comment, ''), created_at`
 
 	var out domain.Review
 	err := r.pool.QueryRow(ctx, q, review.ArenaID, review.UserID, review.Rating, review.Comment).
-		Scan(&out.ID, &out.ArenaID, &out.UserID, &out.Rating, &out.Comment, &out.CreatedAt, &out.UpdatedAt)
+		Scan(&out.ID, &out.ArenaID, &out.UserID, &out.Rating, &out.Comment, &out.CreatedAt)
 	if err != nil {
 		if isForeignKeyViolation(err) {
 			return domain.Review{}, domain.NotFound("No arena at that address.")
@@ -79,36 +75,44 @@ func (r *ReviewRepo) Upsert(ctx context.Context, review domain.Review) (domain.R
 	return out, nil
 }
 
-// DeleteReview removes a player's own review.
-func (r *ReviewRepo) DeleteReview(ctx context.Context, arenaID, userID uuid.UUID) error {
-	const q = `delete from arena_reviews where arena_id = $1 and user_id = $2`
+// DeleteReview removes one of the caller's own reviews. Scoped by author in
+// the SQL, so somebody else's review is a not-found rather than a delete.
+func (r *ReviewRepo) DeleteReview(ctx context.Context, reviewID, userID uuid.UUID) error {
+	const q = `delete from arena_reviews where id = $1 and user_id = $2`
 
-	tag, err := r.pool.Exec(ctx, q, arenaID, userID)
+	tag, err := r.pool.Exec(ctx, q, reviewID, userID)
 	if err != nil {
-		return domain.Internal(err, "deleting review of arena %s", arenaID)
+		return domain.Internal(err, "deleting review %s", reviewID)
 	}
 	if tag.RowsAffected() == 0 {
-		return domain.NotFound("You haven't reviewed that arena.")
+		return domain.NotFound("No review of yours with that id.")
 	}
 	return nil
 }
 
-// ReviewByUser returns one player's review of an arena, if they left one.
-func (r *ReviewRepo) ReviewByUser(ctx context.Context, arenaID, userID uuid.UUID) (domain.Review, error) {
+// ReviewsByUser returns one player's reviews of an arena, newest first.
+func (r *ReviewRepo) ReviewsByUser(ctx context.Context, arenaID, userID uuid.UUID) ([]domain.Review, error) {
 	const q = `
-		select id, arena_id, user_id, rating, coalesce(comment, ''), created_at, updated_at
-		from arena_reviews where arena_id = $1 and user_id = $2`
+		select id, arena_id, user_id, rating, coalesce(comment, ''), created_at
+		from arena_reviews
+		where arena_id = $1 and user_id = $2
+		order by created_at desc`
 
-	var v domain.Review
-	err := r.pool.QueryRow(ctx, q, arenaID, userID).
-		Scan(&v.ID, &v.ArenaID, &v.UserID, &v.Rating, &v.Comment, &v.CreatedAt, &v.UpdatedAt)
-	if noRows(err) {
-		return domain.Review{}, domain.NotFound("You haven't reviewed that arena.")
-	}
+	rows, err := r.pool.Query(ctx, q, arenaID, userID)
 	if err != nil {
-		return domain.Review{}, domain.Internal(err, "loading review of arena %s", arenaID)
+		return nil, domain.Internal(err, "loading reviews of arena %s", arenaID)
 	}
-	return v, nil
+	defer rows.Close()
+
+	var out []domain.Review
+	for rows.Next() {
+		var v domain.Review
+		if err := rows.Scan(&v.ID, &v.ArenaID, &v.UserID, &v.Rating, &v.Comment, &v.CreatedAt); err != nil {
+			return nil, domain.Internal(err, "scanning review")
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
 }
 
 // ListReviews returns an arena's reviews, newest first.
@@ -119,7 +123,7 @@ func (r *ReviewRepo) ListReviews(ctx context.Context, arenaID uuid.UUID, limit i
 
 	const q = `
 		select v.id, v.arena_id, v.user_id, v.rating, coalesce(v.comment, ''),
-			v.created_at, v.updated_at,
+			v.created_at,
 			u.username, u.full_name, coalesce(u.avatar_url, ''), u.community_score
 		from arena_reviews v
 		join users u on u.id = v.user_id
@@ -140,7 +144,7 @@ func (r *ReviewRepo) ListReviews(ctx context.Context, arenaID uuid.UUID, limit i
 			author domain.UserSummary
 		)
 		err := rows.Scan(&v.ID, &v.ArenaID, &v.UserID, &v.Rating, &v.Comment,
-			&v.CreatedAt, &v.UpdatedAt,
+			&v.CreatedAt,
 			&author.Username, &author.FullName, &author.AvatarURL, &author.CommunityScore)
 		if err != nil {
 			return nil, domain.Internal(err, "scanning review")

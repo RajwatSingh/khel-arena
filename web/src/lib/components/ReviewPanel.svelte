@@ -4,7 +4,10 @@
 	 *
 	 * A review has to be earned by having played at the venue, so this asks
 	 * the server whether it may offer the form at all rather than showing one
-	 * that would be refused. Three states: write, edit, or explain.
+	 * that would be refused.
+	 *
+	 * A player can post as many reviews as they like. Each one is final:
+	 * there is no edit, only delete, offered on the caller's own reviews.
 	 */
 	import { api, ApiError } from '$lib/api/index.js';
 	import { session } from '$lib/session.svelte.js';
@@ -13,7 +16,7 @@
 	let { arenaId } = $props();
 
 	let reviews = $state([]);
-	let mine = $state(null);
+	let mine = $state(new Set());
 	let canReview = $state(false);
 	let form = $state({ rating: 5, comment: '' });
 	let busy = $state(false);
@@ -35,24 +38,21 @@
 			});
 
 		if (!session.signedIn) {
-			mine = null;
+			mine = new Set();
 			canReview = false;
 			return;
 		}
 
 		api
-			.myReview(id)
+			.myReviews(id)
 			.then((next) => {
 				if (cancelled) return;
-				mine = next.review;
+				mine = new Set(next.reviews.map((r) => r.id));
 				canReview = next.can_review;
-				if (next.review) {
-					form = { rating: next.review.rating, comment: next.review.comment };
-				}
 			})
 			.catch(() => {
 				if (!cancelled) {
-					mine = null;
+					mine = new Set();
 					canReview = false;
 				}
 			});
@@ -77,12 +77,13 @@
 
 	async function save(event) {
 		event.preventDefault();
-		await act(() =>
-			api.reviewArena(arenaId, { rating: Number(form.rating), comment: form.comment })
-		);
+		await act(async () => {
+			await api.postReview(arenaId, { rating: Number(form.rating), comment: form.comment });
+			form = { rating: 5, comment: '' };
+		});
 	}
 
-	const remove = () => act(() => api.deleteReview(arenaId));
+	const remove = (reviewId) => act(() => api.deleteReview(reviewId));
 
 	const stars = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
 </script>
@@ -97,7 +98,7 @@
 	{#if session.signedIn}
 		{#if canReview}
 			<form class="card mine" onsubmit={save}>
-				<h3 class="label">{mine ? 'Your review' : 'Leave a review'}</h3>
+				<h3 class="label">Leave a review</h3>
 
 				<fieldset class="rating">
 					<legend class="sr-only">Rating</legend>
@@ -127,14 +128,8 @@
 				</label>
 
 				<div class="actions">
-					<button class="btn btn-primary" class:loading={busy} disabled={busy}>
-						{mine ? 'Update' : 'Post'}
-					</button>
-					{#if mine}
-						<button type="button" class="btn btn-quiet" disabled={busy} onclick={remove}>
-							Delete
-						</button>
-					{/if}
+					<button class="btn btn-primary" class:loading={busy} disabled={busy}>Post</button>
+					<span class="small quiet">You can't edit a review after posting, only delete it.</span>
 				</div>
 			</form>
 		{:else}
@@ -160,7 +155,19 @@
 						<span class="score" aria-label="{review.rating} out of 5">{stars(review.rating)}</span>
 					</div>
 					{#if review.comment}<p class="comment">{review.comment}</p>{/if}
-					<p class="when small">{formatDate(review.created_at)}</p>
+					<div class="foot">
+						<p class="when small">{formatDate(review.created_at)}</p>
+						{#if mine.has(review.id)}
+							<button
+								type="button"
+								class="btn btn-quiet small"
+								disabled={busy}
+								onclick={() => remove(review.id)}
+							>
+								Delete
+							</button>
+						{/if}
+					</div>
 				</li>
 			{/each}
 		</ul>
@@ -214,7 +221,7 @@
 
 	textarea:focus-visible { outline: 2px solid var(--pine); outline-offset: 1px; }
 
-	.actions { display: flex; gap: 0.5rem; }
+	.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.85rem; }
 
 	.gate {
 		max-width: 44ch;
@@ -245,7 +252,15 @@
 	.byline:hover { color: var(--pine-deep); }
 	.score { color: var(--pine); letter-spacing: 0.1em; }
 	.comment { margin: 0.5rem 0 0; }
-	.when { margin: 0.4rem 0 0; color: var(--faint); }
+	.foot {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-top: 0.4rem;
+	}
+
+	.when { margin: 0; color: var(--faint); }
 	.quiet { color: var(--muted); }
 
 	.error {

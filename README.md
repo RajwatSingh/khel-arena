@@ -512,6 +512,10 @@ rating is a number the listing shows and a booking decision turns on, and the
 booking history is right there to check it against. The cost is deliberate: a
 venue's first review can only come from its first paying customer, afterwards.
 
+**Reviews are final.** A player can review an arena as many times as they
+like, but a posted review can only be deleted, never edited. Every review
+counts toward the arena's rating.
+
 **A dispute is a counter-report, not a rejection.** A captain who thinks the
 score is wrong files their version; `reported_by` moves to them, so the next
 confirmation has to come from the other side. Two people who keep disagreeing

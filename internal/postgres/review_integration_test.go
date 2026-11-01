@@ -9,15 +9,15 @@ import (
 )
 
 // The trigger that keeps an arena's rating in step with its reviews is SQL,
-// and so is the one-review-per-player rule. Neither can be checked without a
-// database.
+// and so is the rule that you can only delete your own. Neither can be checked
+// without a database.
 
-func TestReviewUpsertsAndSyncsTheRating(t *testing.T) {
+func TestReviewsStackAndSyncTheRating(t *testing.T) {
 	f := newFixture(t, 2)
 	repo := NewReviewRepo(f.pool)
 	ctx := context.Background()
 
-	first, err := repo.Upsert(ctx, domain.Review{
+	first, err := repo.CreateReview(ctx, domain.Review{
 		ArenaID: f.arenaID, UserID: f.players[0], Rating: 5, Comment: "Excellent turf.",
 	})
 	if err != nil {
@@ -28,37 +28,46 @@ func TestReviewUpsertsAndSyncsTheRating(t *testing.T) {
 		t.Errorf("after one 5: rating = %v, count = %d", rating, count)
 	}
 
-	// Posting again edits rather than stacks: one review per player per arena.
-	second, err := repo.Upsert(ctx, domain.Review{
-		ArenaID: f.arenaID, UserID: f.players[0], Rating: 3, Comment: "Changed my mind.",
+	// Posting again adds a second review rather than replacing the first.
+	second, err := repo.CreateReview(ctx, domain.Review{
+		ArenaID: f.arenaID, UserID: f.players[0], Rating: 3, Comment: "Lights were out this time.",
 	})
 	if err != nil {
 		t.Fatalf("second review: %v", err)
 	}
-	if second.ID != first.ID {
-		t.Error("posting again created a second review instead of editing the first")
+	if second.ID == first.ID {
+		t.Error("posting again replaced the first review instead of adding one")
 	}
 
-	if rating, count := arenaRating(t, f); rating != 3.0 || count != 1 {
-		t.Errorf("after editing to 3: rating = %v, count = %d", rating, count)
+	if rating, count := arenaRating(t, f); rating != 4.0 || count != 2 {
+		t.Errorf("after a 5 and a 3: rating = %v, count = %d, want 4.0 and 2", rating, count)
 	}
 
-	// A different player adds a second opinion, and the average moves.
-	if _, err := repo.Upsert(ctx, domain.Review{
-		ArenaID: f.arenaID, UserID: f.players[1], Rating: 5,
-	}); err != nil {
+	mine, err := repo.ReviewsByUser(ctx, f.arenaID, f.players[0])
+	if err != nil {
+		t.Fatalf("listing own reviews: %v", err)
+	}
+	if len(mine) != 2 || mine[0].ID != second.ID {
+		t.Errorf("own reviews = %d (newest %v), want 2 with the second first", len(mine), mine)
+	}
+
+	// A different player adds their opinion, and the average moves.
+	other, err := repo.CreateReview(ctx, domain.Review{
+		ArenaID: f.arenaID, UserID: f.players[1], Rating: 1,
+	})
+	if err != nil {
 		t.Fatalf("second player's review: %v", err)
 	}
-	if rating, count := arenaRating(t, f); rating != 4.0 || count != 2 {
-		t.Errorf("after a 3 and a 5: rating = %v, count = %d, want 4.0 and 2", rating, count)
+	if rating, count := arenaRating(t, f); rating != 3.0 || count != 3 {
+		t.Errorf("after 5, 3 and 1: rating = %v, count = %d, want 3.0 and 3", rating, count)
 	}
 
 	reviews, err := repo.ListReviews(ctx, f.arenaID, 10)
 	if err != nil {
 		t.Fatalf("listing reviews: %v", err)
 	}
-	if len(reviews) != 2 {
-		t.Fatalf("reviews = %d, want 2", len(reviews))
+	if len(reviews) != 3 {
+		t.Fatalf("reviews = %d, want 3", len(reviews))
 	}
 	// The author comes back as a public summary, for rendering next to the
 	// comment.
@@ -66,16 +75,21 @@ func TestReviewUpsertsAndSyncsTheRating(t *testing.T) {
 		t.Error("the review's author did not come back")
 	}
 
-	// Deleting takes the rating back down with it.
-	if err := repo.DeleteReview(ctx, f.arenaID, f.players[1]); err != nil {
-		t.Fatalf("deleting review: %v", err)
-	}
-	if rating, count := arenaRating(t, f); rating != 3.0 || count != 1 {
-		t.Errorf("after deleting the 5: rating = %v, count = %d", rating, count)
+	// Nobody can delete somebody else's review.
+	if err := repo.DeleteReview(ctx, other.ID, f.players[0]); domain.CodeOf(err) != domain.CodeNotFound {
+		t.Errorf("stranger delete: code = %q, want not_found", domain.CodeOf(err))
 	}
 
-	// And deleting one you never wrote is a not-found, not a silent success.
-	if err := repo.DeleteReview(ctx, f.arenaID, f.players[1]); domain.CodeOf(err) != domain.CodeNotFound {
+	// Deleting one review takes only that one, and the rating follows.
+	if err := repo.DeleteReview(ctx, first.ID, f.players[0]); err != nil {
+		t.Fatalf("deleting review: %v", err)
+	}
+	if rating, count := arenaRating(t, f); rating != 2.0 || count != 2 {
+		t.Errorf("after deleting the 5: rating = %v, count = %d, want 2.0 and 2", rating, count)
+	}
+
+	// And deleting it twice is a not-found, not a silent success.
+	if err := repo.DeleteReview(ctx, first.ID, f.players[0]); domain.CodeOf(err) != domain.CodeNotFound {
 		t.Errorf("code = %q, want not_found", domain.CodeOf(err))
 	}
 }

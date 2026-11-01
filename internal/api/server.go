@@ -165,9 +165,9 @@ type MatchAPI interface {
 
 // ReviewAPI is the part of service.ReviewService the handlers reach for.
 type ReviewAPI interface {
-	Review(ctx context.Context, arenaID, userID uuid.UUID, rating int, comment string) (domain.Review, error)
-	MyReview(ctx context.Context, arenaID, userID uuid.UUID) (domain.Review, bool, error)
-	DeleteReview(ctx context.Context, arenaID, userID uuid.UUID) error
+	PostReview(ctx context.Context, arenaID, userID uuid.UUID, rating int, comment string) (domain.Review, error)
+	MyReviews(ctx context.Context, arenaID, userID uuid.UUID) ([]domain.Review, bool, error)
+	DeleteReview(ctx context.Context, reviewID, userID uuid.UUID) error
 	ListReviews(ctx context.Context, arenaID uuid.UUID, limit int) ([]domain.Review, error)
 
 	ListPhotos(ctx context.Context, arenaID uuid.UUID) ([]postgres.Photo, error)
@@ -465,9 +465,9 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("DELETE /v1/matches/{matchID}", protected(s.handleWithdrawMatch))
 
 	// Reviews, galleries and player highlights.
-	mux.Handle("GET /v1/arenas/{arenaID}/reviews/mine", protected(s.handleMyReview))
-	mux.Handle("PUT /v1/arenas/{arenaID}/reviews/mine", protected(s.handleReviewArena))
-	mux.Handle("DELETE /v1/arenas/{arenaID}/reviews/mine", protected(s.handleDeleteReview))
+	mux.Handle("GET /v1/arenas/{arenaID}/reviews/mine", protected(s.handleMyReviews))
+	mux.Handle("POST /v1/arenas/{arenaID}/reviews", protected(s.handlePostReview))
+	mux.Handle("DELETE /v1/me/reviews/{reviewID}", protected(s.handleDeleteReview))
 	mux.Handle("POST /v1/owner/arenas/{arenaID}/photos", protected(s.handleAddPhoto))
 	mux.Handle("POST /v1/owner/arenas/{arenaID}/photos/upload", protected(s.handleUploadPhoto))
 	mux.Handle("DELETE /v1/owner/photos/{photoID}", protected(s.handleDeletePhoto))

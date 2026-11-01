@@ -12,9 +12,9 @@ import (
 // ReviewStore is the storage for reviews, photos and highlights.
 type ReviewStore interface {
 	HasPlayedAt(ctx context.Context, arenaID, userID uuid.UUID) (bool, error)
-	ReviewByUser(ctx context.Context, arenaID, userID uuid.UUID) (domain.Review, error)
-	Upsert(ctx context.Context, review domain.Review) (domain.Review, error)
-	DeleteReview(ctx context.Context, arenaID, userID uuid.UUID) error
+	ReviewsByUser(ctx context.Context, arenaID, userID uuid.UUID) ([]domain.Review, error)
+	CreateReview(ctx context.Context, review domain.Review) (domain.Review, error)
+	DeleteReview(ctx context.Context, reviewID, userID uuid.UUID) error
 	ListReviews(ctx context.Context, arenaID uuid.UUID, limit int) ([]domain.Review, error)
 
 	AddPhotoOwnerScoped(ctx context.Context, ownerID uuid.UUID, p postgres.Photo) (postgres.Photo, error)
@@ -35,7 +35,7 @@ func NewReviewService(reviews ReviewStore) *ReviewService {
 	return &ReviewService{reviews: reviews}
 }
 
-// Review records a player's opinion of an arena.
+// PostReview records a player's opinion of an arena.
 //
 // **You have to have played there.** A rating from somebody who has never set
 // foot on the pitch is worth nothing to the next person reading it, and an
@@ -46,10 +46,10 @@ func NewReviewService(reviews ReviewStore) *ReviewService {
 // its first paying customer, after they have played. That is the right way
 // round.
 //
-// The author is the caller, never a field in the request, and posting again
-// edits rather than stacks: one review per player per arena is the schema's
-// rule and the repository upserts on it.
-func (s *ReviewService) Review(ctx context.Context, arenaID, userID uuid.UUID, rating int, comment string) (domain.Review, error) {
+// The author is the caller, never a field in the request. Every post is a new
+// review -- a player may leave several -- and a posted review is final: it can
+// be deleted, never edited.
+func (s *ReviewService) PostReview(ctx context.Context, arenaID, userID uuid.UUID, rating int, comment string) (domain.Review, error) {
 	if userID == uuid.Nil {
 		return domain.Review{}, domain.Unauthenticated("Sign in to review an arena.")
 	}
@@ -68,43 +68,39 @@ func (s *ReviewService) Review(ctx context.Context, arenaID, userID uuid.UUID, r
 			"You can review an arena once you've played there.")
 	}
 
-	return s.reviews.Upsert(ctx, review)
+	return s.reviews.CreateReview(ctx, review)
 }
 
-// MyReview reports what the caller has said about a venue and whether they
+// MyReviews reports what the caller has said about a venue and whether they
 // are allowed to say anything at all.
 //
 // Both in one call because the page needs both to decide what to render: a
-// form, an edit, or an explanation. Asking twice would be two round trips to
-// answer one question.
-func (s *ReviewService) MyReview(ctx context.Context, arenaID, userID uuid.UUID) (domain.Review, bool, error) {
+// form or an explanation, and which reviews get a delete button. Asking twice
+// would be two round trips to answer one question.
+func (s *ReviewService) MyReviews(ctx context.Context, arenaID, userID uuid.UUID) ([]domain.Review, bool, error) {
 	if userID == uuid.Nil {
-		return domain.Review{}, false, domain.Unauthenticated("Sign in to review an arena.")
+		return nil, false, domain.Unauthenticated("Sign in to review an arena.")
 	}
 
 	canReview, err := s.reviews.HasPlayedAt(ctx, arenaID, userID)
 	if err != nil {
-		return domain.Review{}, false, err
+		return nil, false, err
 	}
 
-	review, err := s.reviews.ReviewByUser(ctx, arenaID, userID)
-	if domain.CodeOf(err) == domain.CodeNotFound {
-		// Nothing said yet, which is not an error -- it is the answer.
-		return domain.Review{}, canReview, nil
-	}
+	reviews, err := s.reviews.ReviewsByUser(ctx, arenaID, userID)
 	if err != nil {
-		return domain.Review{}, false, err
+		return nil, false, err
 	}
-	return review, canReview, nil
+	return reviews, canReview, nil
 }
 
-// DeleteReview removes the caller's own review. Scoped by user id in the SQL,
-// so there is no way to delete somebody else's.
-func (s *ReviewService) DeleteReview(ctx context.Context, arenaID, userID uuid.UUID) error {
+// DeleteReview removes one of the caller's own reviews. Scoped by user id in
+// the SQL, so there is no way to delete somebody else's.
+func (s *ReviewService) DeleteReview(ctx context.Context, reviewID, userID uuid.UUID) error {
 	if userID == uuid.Nil {
 		return domain.Unauthenticated("Sign in to manage your reviews.")
 	}
-	return s.reviews.DeleteReview(ctx, arenaID, userID)
+	return s.reviews.DeleteReview(ctx, reviewID, userID)
 }
 
 func (s *ReviewService) ListReviews(ctx context.Context, arenaID uuid.UUID, limit int) ([]domain.Review, error) {

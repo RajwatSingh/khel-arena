@@ -1259,14 +1259,13 @@ type reviewDTO struct {
 	ArenaID uuid.UUID `json:"arena_id"`
 	UserID  uuid.UUID `json:"user_id"`
 	// Author is present when a review is read as part of a feed, and absent
-	// on the response to writing one -- the upsert does not join the user, and
+	// on the response to writing one -- the insert does not join the user, and
 	// a hollow author object would be worse than no key at all. The client
 	// that just wrote it knows who they are.
 	Author    *userSummaryDTO `json:"author,omitempty"`
 	Rating    int             `json:"rating"`
 	Comment   string          `json:"comment"`
 	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
 }
 
 func reviewDTOFromDomain(v domain.Review) reviewDTO {
@@ -1284,7 +1283,6 @@ func reviewDTOFromDomain(v domain.Review) reviewDTO {
 		Rating:    v.Rating,
 		Comment:   v.Comment,
 		CreatedAt: v.CreatedAt,
-		UpdatedAt: v.UpdatedAt,
 	}
 }
 
@@ -1356,12 +1354,12 @@ type copyPricingDTO struct {
 	Copied int `json:"copied"`
 }
 
-// myReviewDTO answers two questions at once: what you said, and whether you
-// are allowed to say anything. A page needs both to decide between a form, an
-// edit and an explanation.
-type myReviewDTO struct {
-	CanReview bool       `json:"can_review"`
-	Review    *reviewDTO `json:"review"`
+// myReviewsDTO answers two questions at once: what you said, and whether you
+// are allowed to say anything. A page needs both to decide between a form and
+// an explanation, and which reviews to offer a delete button on.
+type myReviewsDTO struct {
+	CanReview bool        `json:"can_review"`
+	Reviews   []reviewDTO `json:"reviews"`
 }
 
 // playerDTO is somebody's public card.

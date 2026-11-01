@@ -319,16 +319,17 @@ export const withdrawMatch = (id, opts) =>
 
 export const arenaReviews = (arenaId, opts) => request(`/arenas/${arenaId}/reviews`, opts);
 
-/** What you said and whether you may say anything — a review is earned by
- *  having played there. */
-export const myReview = (arenaId, opts) =>
+/** Your reviews of an arena, and whether you may post one — a review is
+ *  earned by having played there. */
+export const myReviews = (arenaId, opts) =>
 	request(`/arenas/${arenaId}/reviews/mine`, { auth: true, ...opts });
 
-export const reviewArena = (arenaId, input, opts) =>
-	request(`/arenas/${arenaId}/reviews/mine`, { method: 'PUT', body: input, auth: true, ...opts });
+/** Always adds a new review. Reviews can't be edited once posted. */
+export const postReview = (arenaId, input, opts) =>
+	request(`/arenas/${arenaId}/reviews`, { method: 'POST', body: input, auth: true, ...opts });
 
-export const deleteReview = (arenaId, opts) =>
-	request(`/arenas/${arenaId}/reviews/mine`, { method: 'DELETE', auth: true, ...opts });
+export const deleteReview = (reviewId, opts) =>
+	request(`/me/reviews/${reviewId}`, { method: 'DELETE', auth: true, ...opts });
 
 export const arenaPhotos = (arenaId, opts) => request(`/arenas/${arenaId}/photos`, opts);
 

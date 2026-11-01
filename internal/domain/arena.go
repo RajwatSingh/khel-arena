@@ -129,8 +129,8 @@ func (c *Court) Validate() error {
 
 // ---------------------------------------------------------------------------
 
-// Review is a player's rating of an arena. One per player per arena; posting
-// again edits the existing review rather than stacking a second one.
+// Review is a player's rating of an arena. A player may leave several, and
+// each is final once posted: it can be deleted but never edited.
 type Review struct {
 	ID        uuid.UUID
 	ArenaID   uuid.UUID
@@ -138,7 +138,6 @@ type Review struct {
 	Rating    int
 	Comment   string
 	CreatedAt time.Time
-	UpdatedAt time.Time
 
 	// Author is populated when a review is read as part of a feed.
 	Author *UserSummary

@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { session, clock } from '$lib/session.svelte.js';
 	import CentreMark from './CentreMark.svelte';
+	import SiteSearch from './SiteSearch.svelte';
 
 	const ticking = clock();
 
@@ -124,6 +125,7 @@
 		</nav>
 
 		<div class="right">
+			<SiteSearch />
 			<span class="clock num">Kathmandu {kathmandu}</span>
 
 			{#if session.signedIn && user}

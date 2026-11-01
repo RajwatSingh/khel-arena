@@ -17,8 +17,7 @@
 					Khel Arena
 				</span>
 				<p class="small">
-					Court hours in Kathmandu and Lalitpur, bookable by the hour. Built on a database that
-					will not let two games start on the same turf.
+					Court hours in Kathmandu and Lalitpur, bookable by the hour.
 				</p>
 			</div>
 

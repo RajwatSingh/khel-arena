@@ -4,9 +4,9 @@
 	import { formatNPR, formatTime } from '$lib/time.js';
 
 	/**
-	 * The board turned around for phones: pick when you want to play, then
-	 * see every court free at that hour, cheapest first. Same data as the
-	 * grid (HourLedger), just asked in the order people decide.
+	 * The court board, asked in the order people decide: pick a time, see
+	 * the arenas with a court free then, pick an arena. Picking one opens
+	 * the arena with its cheapest free court at that hour already chosen.
 	 */
 	let { ledger } = $props();
 
@@ -17,11 +17,16 @@
 	];
 
 	const hourOf = (slot) => Number(formatTime(slot.starts_at).slice(0, 2));
-	const clock = (h) => `${String(h).padStart(2, '0')}:00`;
+	const pad = (h) => String(h).padStart(2, '0');
+	const clock = (h) => `${pad(h)}:00`;
 	const inPart = (h, p) => h >= p.from && h < p.to;
+	const shortFormat = (format) => format?.replace(/^(\d+)-a-side$/i, '$1v$1') ?? '';
 
-	// Each court's slots by hour. Hours that have started are left out, as
-	// on the grid: they can't be booked.
+	const calm =
+		typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+	// Each court's slots by hour. Hours that have started are left out:
+	// they can't be booked.
 	const courts = $derived(
 		ledger.rows.map((row) => {
 			const byHour = new Map();
@@ -34,8 +39,14 @@
 		[...new Set(courts.flatMap((c) => [...c.byHour.keys()]))].sort((a, b) => a - b)
 	);
 
-	const freeCount = $derived(
-		new Map(hours.map((h) => [h, courts.filter((c) => c.byHour.get(h)?.available).length]))
+	// How many arenas have at least one court free at each hour.
+	const freeArenas = $derived(
+		new Map(
+			hours.map((h) => [
+				h,
+				new Set(courts.filter((c) => c.byHour.get(h)?.available).map((c) => c.row.arena_slug)).size
+			])
+		)
 	);
 
 	const parts = $derived(PARTS.filter((p) => hours.some((h) => inPart(h, p))));
@@ -43,7 +54,7 @@
 	// Opens on the evening, when most games are played, or failing that
 	// the first hour with anything free.
 	function bestHour(candidates) {
-		const open = candidates.filter((h) => freeCount.get(h) > 0);
+		const open = candidates.filter((h) => freeArenas.get(h) > 0);
 		return open.find((h) => h >= 17) ?? open[0] ?? candidates[0] ?? null;
 	}
 
@@ -56,48 +67,57 @@
 
 	function pickPart(p) {
 		const within = hours.filter((h) => inPart(h, p));
-		chosen = within.find((h) => freeCount.get(h) > 0) ?? within[0];
+		chosen = within.find((h) => freeArenas.get(h) > 0) ?? within[0];
 	}
 
-	const results = $derived(
-		courts
-			.filter((c) => c.byHour.get(hour)?.available)
-			.map((c) => {
-				// How long the court stays free from this hour, so someone
-				// after two hours can see it without opening the court.
-				let to = hour + 1;
-				while (c.byHour.get(to)?.available) to++;
-				return { ...c, slot: c.byHour.get(hour), to };
-			})
-			.sort(
-				(a, b) =>
-					a.slot.price_npr - b.slot.price_npr || a.row.arena_name.localeCompare(b.row.arena_name)
-			)
-	);
+	// The arenas with a court free at the chosen hour, each with those
+	// courts, cheapest arena first.
+	const arenas = $derived.by(() => {
+		const groups = new Map();
+		for (const c of courts) {
+			const slot = c.byHour.get(hour);
+			if (!slot?.available) continue;
+			// How long the court stays free from this hour, so someone after
+			// two hours can see it without opening the arena.
+			let to = hour + 1;
+			while (c.byHour.get(to)?.available) to++;
 
-	const booked = $derived(
-		courts.filter((c) => c.byHour.has(hour) && !c.byHour.get(hour).available).length
+			const slug = c.row.arena_slug;
+			if (!groups.has(slug)) {
+				groups.set(slug, { slug, name: c.row.arena_name, area: c.row.arena_area, courts: [] });
+			}
+			groups.get(slug).courts.push({ row: c.row, slot, to });
+		}
+		const list = [...groups.values()];
+		for (const a of list) a.courts.sort((x, y) => x.slot.price_npr - y.slot.price_npr);
+		return list.sort(
+			(a, b) =>
+				a.courts[0].slot.price_npr - b.courts[0].slot.price_npr || a.name.localeCompare(b.name)
+		);
+	});
+
+	// Arenas that are open at this hour but have every court taken.
+	const fullArenas = $derived(
+		new Set(courts.filter((c) => c.byHour.has(hour)).map((c) => c.row.arena_slug)).size -
+			arenas.length
 	);
 
 	// When nothing is free at the chosen hour, the nearest hours that do
 	// have something, so the next tap is obvious.
 	const nearby = $derived(
-		results.length
+		arenas.length
 			? []
 			: hours
-					.filter((h) => freeCount.get(h) > 0)
+					.filter((h) => freeArenas.get(h) > 0)
 					.sort((a, b) => Math.abs(a - hour) - Math.abs(b - hour) || a - b)
 					.slice(0, 3)
 					.sort((a, b) => a - b)
 	);
 
-	const calm =
-		typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-	const shortFormat = (format) => format?.replace(/^(\d+)-a-side$/i, '$1v$1') ?? '';
-
-	function href(row, slot) {
-		return `/arenas/${row.arena_slug}?court=${row.court_id}&date=${ledger.date}&at=${encodeURIComponent(slot.starts_at)}`;
+	// Opens the arena with its cheapest free court at this hour picked.
+	function href(arena) {
+		const { row, slot } = arena.courts[0];
+		return `/arenas/${arena.slug}?court=${row.court_id}&date=${ledger.date}&at=${encodeURIComponent(slot.starts_at)}`;
 	}
 </script>
 
@@ -105,92 +125,136 @@
 	<p class="small quiet">Every hour on this day has already been played. Pick another day above.</p>
 {:else}
 	<div class="finder">
-		<div class="parts" role="group" aria-label="Part of the day">
-			{#each parts as p (p.id)}
-				<button
-					type="button"
-					class="part"
-					aria-pressed={part?.id === p.id}
-					onclick={() => pickPart(p)}
-				>
-					{p.label}
-				</button>
-			{/each}
-		</div>
+		<div class="pick-time">
+			<p class="label">Pick a time</p>
 
-		<div class="hours" role="group" aria-label="Hour">
+			<div class="parts" role="group" aria-label="Part of the day">
+				{#each parts as p (p.id)}
+					<button
+						type="button"
+						class="part"
+						aria-pressed={part?.id === p.id}
+						onclick={() => pickPart(p)}
+					>
+						{p.label}
+					</button>
+				{/each}
+			</div>
+
 			<!-- Every hour is drawn; phones show only the chosen part of the
 			     day, wide screens show the whole day in one row. -->
-			{#each hours as h (h)}
-				{@const free = freeCount.get(h)}
-				<button
-					type="button"
-					class="hour"
-					class:none={free === 0}
-					class:other-part={!partHours.includes(h)}
-					aria-pressed={h === hour}
-					aria-label="{clock(h)}, {free === 0 ? 'nothing free' : `${free} free`}"
-					onclick={() => (chosen = h)}
-				>
-					<span class="h num">{String(h).padStart(2, '0')}</span>
-					<span class="n">{free === 0 ? 'Full' : `${free} free`}</span>
-				</button>
-			{/each}
+			<div class="hours" role="group" aria-label="Start time">
+				{#each hours as h (h)}
+					{@const free = freeArenas.get(h)}
+					<button
+						type="button"
+						class="hour"
+						class:none={free === 0}
+						class:other-part={!partHours.includes(h)}
+						aria-pressed={h === hour}
+						aria-label="{clock(h)}, {free === 0
+							? 'nothing free'
+							: `${free} ${free === 1 ? 'arena' : 'arenas'} free`}"
+						onclick={() => (chosen = h)}
+					>
+						<span class="h num">{pad(h)}<span class="mins">:00</span></span>
+						<span class="n">{free === 0 ? 'Full' : `${free} free`}</span>
+					</button>
+				{/each}
+			</div>
 		</div>
 
 		<h2 class="count" aria-live="polite">
-			{#if results.length}
-				<span class="num">{results.length}</span>
-				{results.length === 1 ? 'court' : 'courts'} free at {clock(hour)}
+			{#if arenas.length}
+				<span class="num">{arenas.length}</span>
+				{arenas.length === 1 ? 'arena' : 'arenas'} free at {clock(hour)}
 			{:else}
 				Nothing free at {clock(hour)}
 			{/if}
 		</h2>
 
 		{#key `${ledger.date}:${hour}`}
-			{#if results.length}
+			{#if arenas.length}
 				<ul class="list" role="list">
-					{#each results as { row, slot, to }, i (row.court_id)}
-						<li in:fly={{ y: 12, duration: calm ? 0 : 340, delay: calm ? 0 : Math.min(i, 8) * 45, easing: cubicOut }}>
-							<a class="court" class:peak={slot.is_peak} href={href(row, slot)}>
-								<span class="info">
-									<strong class="venue">{row.arena_name}</strong>
-									<span class="meta">
-										{row.court_name} · {shortFormat(row.format)} · {row.arena_area}
+					{#each arenas as arena, i (arena.slug)}
+						{@const cheapest = arena.courts[0].slot.price_npr}
+						<li
+							in:fly={{
+								y: 12,
+								duration: calm ? 0 : 340,
+								delay: calm ? 0 : Math.min(i, 8) * 45,
+								easing: cubicOut
+							}}
+						>
+							<a
+								class="arena"
+								href={href(arena)}
+								aria-label="{arena.name}, {arena.area}: {arena.courts.length} {arena.courts
+									.length === 1
+									? 'court'
+									: 'courts'} free at {clock(hour)}, from {formatNPR(cheapest)} rupees"
+							>
+								<span class="top">
+									<span class="info">
+										<strong class="venue">{arena.name}</strong>
+										<span class="meta">{arena.area}</span>
 									</span>
-									{#if to - hour > 1}
-										<span class="run">Free till {clock(to)}</span>
-									{/if}
+									<span class="price">
+										{#if arena.courts.length > 1}<span class="from">from</span>{/if}
+										<span class="amount num"><small>NPR</small> {formatNPR(cheapest)}</span>
+										<span class="unit">per hour</span>
+									</span>
 								</span>
-								<span class="price">
-									<span class="amount num">{formatNPR(slot.price_npr)}</span>
-									<span class="unit">{slot.is_peak ? 'Peak rate' : 'NPR / hour'}</span>
+
+								<span class="courts">
+									{#each arena.courts as { row, slot, to } (row.court_id)}
+										<span class="court">
+											<span class="cname">{row.court_name} · {shortFormat(row.format)}</span>
+											<span class="tags">
+												{#if slot.is_peak}<span class="tag peak">Peak</span>{/if}
+												{#if to - hour > 1}<span class="tag run">Free till {clock(to)}</span>{/if}
+											</span>
+											<span class="cprice num">{formatNPR(slot.price_npr)}</span>
+										</span>
+									{/each}
 								</span>
-								<span class="go" aria-hidden="true">
-									<svg viewBox="0 0 16 16" width="14" height="14"><path d="M6 3.5l4.5 4.5L6 12.5" /></svg>
+
+								<span class="bottom">
+									<span class="small quiet">
+										{arena.courts.length}
+										{arena.courts.length === 1 ? 'court' : 'courts'} free at {clock(hour)}
+									</span>
+									<span class="go">
+										Select arena
+										<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+											<path d="M3 8h9.5M8.5 4l4 4-4 4" />
+										</svg>
+									</span>
 								</span>
 							</a>
 						</li>
 					{/each}
 				</ul>
-				{#if booked}
+				{#if fullArenas > 0}
 					<p class="small quiet foot">
-						{booked} more {booked === 1 ? 'court is' : 'courts are'} already booked at {clock(hour)}.
+						{fullArenas} more {fullArenas === 1 ? 'arena is' : 'arenas are'} fully booked at {clock(
+							hour
+						)}.
 					</p>
 				{/if}
 			{:else}
 				<div class="empty" in:fly={{ y: 8, duration: calm ? 0 : 300, easing: cubicOut }}>
 					{#if nearby.length}
-						<p class="small quiet">Closest hours with a court free:</p>
+						<p class="small quiet">Closest times with an arena free:</p>
 						<div class="nearby">
 							{#each nearby as h (h)}
 								<button type="button" class="btn btn-secondary" onclick={() => (chosen = h)}>
-									{clock(h)} · {freeCount.get(h)} free
+									{clock(h)} · {freeArenas.get(h)} free
 								</button>
 							{/each}
 						</div>
 					{:else}
-						<p class="small quiet">Every court is booked for the rest of the day. Try another day.</p>
+						<p class="small quiet">Every arena is booked for the rest of the day. Try another day.</p>
 					{/if}
 				</div>
 			{/if}
@@ -201,7 +265,16 @@
 <style>
 	.finder {
 		display: grid;
-		gap: 0.9rem;
+		gap: 1rem;
+	}
+
+	.pick-time {
+		display: grid;
+		gap: 0.6rem;
+	}
+
+	.pick-time .label {
+		margin: 0;
 	}
 
 	/* --- part of the day: one segmented control --- */
@@ -232,12 +305,12 @@
 	}
 
 	.part[aria-pressed='true'] {
-		background: var(--surface);
+		background: #ffffff;
 		color: var(--ink);
 		box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 14%, transparent);
 	}
 
-	/* --- hours --- */
+	/* --- times --- */
 
 	/* One row per part of the day: at most seven hours, which still fit. */
 	.hours {
@@ -250,11 +323,11 @@
 	.hour {
 		display: grid;
 		justify-items: center;
-		gap: 0.05rem;
-		padding: 0.5rem 0.25rem 0.45rem;
-		border: 1px solid var(--line);
+		gap: 0.1rem;
+		padding: 0.55rem 0.2rem 0.5rem;
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-sm);
-		background: var(--surface);
+		background: #ffffff;
 		font: inherit;
 		color: var(--ink);
 		cursor: pointer;
@@ -265,6 +338,12 @@
 			transform 0.15s var(--ease);
 	}
 
+	@media (hover: hover) {
+		.hour:hover:not([aria-pressed='true']) {
+			border-color: var(--pine);
+		}
+	}
+
 	.hour:active {
 		transform: scale(0.95);
 	}
@@ -272,6 +351,15 @@
 	.h {
 		font-size: 1.0625rem;
 		font-weight: 700;
+		white-space: nowrap;
+	}
+
+	/* The minutes are always :00, so they sit smaller: the hour is what
+	   you scan for, the :00 is what makes it read as a time. */
+	.mins {
+		font-size: 0.72em;
+		font-weight: 600;
+		opacity: 0.7;
 	}
 
 	.n {
@@ -282,6 +370,7 @@
 
 	.hour.none {
 		background: var(--surface-sunk);
+		border-color: var(--line);
 		color: var(--faint);
 	}
 
@@ -301,10 +390,10 @@
 		outline-offset: 2px;
 	}
 
-	/* --- results --- */
+	/* --- arenas --- */
 
 	.count {
-		margin: 0.4rem 0 0;
+		margin: 0.5rem 0 0;
 		font-family: var(--display);
 		font-size: 1.25rem;
 		font-weight: 800;
@@ -314,96 +403,196 @@
 
 	.list {
 		display: grid;
-		gap: 0.5rem;
+		gap: 0.85rem;
 		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
 
-	.court {
+	/* Pure white with a firm edge and a resting shadow, so a card stands
+	   off the warm page ground. It lifts on hover so it's clear which one
+	   you're about to pick. */
+	.arena {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto auto;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 0.85rem 0.75rem 0.85rem 1rem;
-		border: 1px solid var(--line);
+		/* Cards in a row share a height; the spare room goes above the
+		   footer, not between the venue and its courts. */
+		grid-template-rows: auto auto 1fr;
+		gap: 0.9rem;
+		height: 100%;
+		padding: 1.15rem 1.15rem 1rem 1.25rem;
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-md);
-		background: var(--surface);
+		background: #ffffff;
 		color: var(--ink);
 		text-decoration: none;
+		box-shadow:
+			0 1px 2px rgba(16, 33, 22, 0.06),
+			0 6px 16px -10px rgba(16, 33, 22, 0.22);
 		transition:
-			border-color 0.2s var(--ease),
-			transform 0.15s var(--ease);
+			transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
+			box-shadow 0.28s var(--ease),
+			border-color 0.2s var(--ease);
 	}
 
-	.court:active {
-		transform: scale(0.985);
+	@media (hover: hover) {
+		.arena:hover {
+			transform: translateY(-4px);
+			border-color: var(--pine);
+			box-shadow:
+				0 2px 4px rgba(16, 33, 22, 0.06),
+				0 20px 38px -16px rgba(16, 33, 22, 0.36);
+		}
 	}
 
-	.court:hover,
-	.court:focus-visible {
+	.arena:focus-visible {
+		outline: 2px solid var(--pine);
+		outline-offset: 3px;
 		border-color: var(--pine);
 	}
 
-	.court.peak {
-		background: var(--sand);
-		border-color: var(--sand-line);
+	.arena:active {
+		transform: translateY(-1px) scale(0.99);
+		transition-duration: 0.1s;
+	}
+
+	.top {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: start;
+		gap: 1rem;
 	}
 
 	.info {
 		display: grid;
-		gap: 0.15rem;
+		gap: 0.2rem;
 		min-width: 0;
 	}
 
 	.venue {
-		font-size: 1rem;
-		font-weight: 600;
-		letter-spacing: -0.01em;
+		font-size: 1.1875rem;
+		font-weight: 700;
+		line-height: 1.25;
+		letter-spacing: -0.015em;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
 	.meta {
-		font-size: 0.8125rem;
+		font-size: 0.875rem;
 		color: var(--muted);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.run {
-		justify-self: start;
-		margin-top: 0.25rem;
-		padding: 0.1rem 0.5rem;
-		border-radius: var(--r-pill);
-		background: var(--pine-wash);
-		color: var(--pine-deep);
-		font-size: 0.75rem;
-		font-weight: 600;
 	}
 
 	.price {
 		display: grid;
 		justify-items: end;
+		line-height: 1.15;
+	}
+
+	.from,
+	.unit {
+		font-size: 0.75rem;
+		color: var(--muted);
 	}
 
 	.amount {
-		font-size: 1.0625rem;
-		font-weight: 700;
-	}
-
-	.unit {
-		font-size: 0.6875rem;
-		color: var(--muted);
+		font-size: 1.375rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
 		white-space: nowrap;
 	}
 
-	.go {
+	.amount small {
+		font-size: 0.75rem;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+		color: var(--muted);
+	}
+
+	/* The free courts, on a tinted panel inside the white card. */
+	.courts {
 		display: grid;
-		place-items: center;
-		color: var(--pine);
+		padding: 0.3rem 0.8rem;
+		border-radius: var(--r-sm);
+		background: var(--field);
+	}
+
+	.court {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 0.6rem;
+		padding-block: 0.45rem;
+	}
+
+	.court + .court {
+		border-top: 1px solid var(--line);
+	}
+
+	.cname {
+		font-size: 0.875rem;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	.tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		min-width: 0;
+	}
+
+	.tag {
+		padding: 0.1rem 0.5rem;
+		border-radius: var(--r-pill);
+		font-size: 0.6875rem;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	.tag.run {
+		background: var(--pine-wash);
+		color: var(--pine-deep);
+	}
+
+	.tag.peak {
+		background: var(--sand);
+		color: #7a4524; /* deep terracotta: brick is for errors */
+		box-shadow: inset 0 0 0 1px var(--sand-line);
+	}
+
+	.cprice {
+		font-size: 0.875rem;
+		font-weight: 700;
+	}
+
+	.bottom {
+		display: flex;
+		align-self: end;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+
+	.go {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		margin-left: auto;
+		font-size: 0.9rem;
+		font-weight: 700;
+		color: var(--pine-deep);
+		white-space: nowrap;
+	}
+
+	.go svg {
+		transition: transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
+	}
+
+	@media (hover: hover) {
+		.arena:hover .go svg {
+			transform: translateX(3px);
+		}
 	}
 
 	.go path {
@@ -440,11 +629,39 @@
 		}
 	}
 
+	/* Narrow phones: a court's tags drop under its name instead of
+	   squeezing between the name and the price. */
+	@media (max-width: 520px) {
+		.court {
+			grid-template-columns: minmax(0, 1fr) auto;
+			grid-template-areas:
+				'name price'
+				'tags tags';
+			row-gap: 0.3rem;
+		}
+
+		.cname {
+			grid-area: name;
+		}
+
+		.cprice {
+			grid-area: price;
+		}
+
+		.tags {
+			grid-area: tags;
+		}
+
+		.tags:empty {
+			display: none;
+		}
+	}
+
 	/* Wide screens: the whole day fits in one row, so the part-of-day
-	   switch goes, and the courts sit side by side. */
+	   switch goes, and the arenas sit side by side. */
 	@media (min-width: 900px) {
 		.finder {
-			gap: 1.1rem;
+			gap: 1.15rem;
 		}
 
 		.parts {
@@ -456,23 +673,33 @@
 		}
 
 		.hour {
-			padding-block: 0.6rem 0.5rem;
+			padding-block: 0.65rem 0.55rem;
 		}
 
 		.list {
-			grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr));
-			gap: 0.65rem;
+			grid-template-columns: repeat(auto-fill, minmax(26rem, 1fr));
+			gap: 1rem;
 		}
 
-		.court {
-			padding: 1rem 0.85rem 1rem 1.15rem;
+		.arena {
+			padding: 1.4rem 1.4rem 1.15rem 1.5rem;
+			gap: 1rem;
+		}
+
+		.venue {
+			font-size: 1.3125rem;
+		}
+
+		.amount {
+			font-size: 1.5rem;
 		}
 	}
 
 	@media (prefers-reduced-motion: reduce) {
 		.part,
 		.hour,
-		.court {
+		.arena,
+		.go svg {
 			transition: none;
 		}
 	}

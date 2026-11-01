@@ -1,7 +1,6 @@
 <script>
 	import { goto } from '$app/navigation';
 	import { SPORT_LABELS } from '$lib/api/index.js';
-	import HourLedger from '$lib/components/HourLedger.svelte';
 	import HourPulse from '$lib/components/HourPulse.svelte';
 	import HourFinder from '$lib/components/HourFinder.svelte';
 	import CentreMark from '$lib/components/CentreMark.svelte';
@@ -28,21 +27,6 @@
 	]);
 
 	const sportOptions = $derived(data.sports.map((s) => ({ value: s, label: SPORT_LABELS[s] })));
-
-	// The board opens on the by-time list; the whole-day grid is one tap
-	// away. The choice is remembered per browser.
-	let view = $state('time');
-	$effect(() => {
-		try {
-			if (localStorage.getItem('board-view') === 'day') view = 'day';
-		} catch {}
-	});
-	function setView(v) {
-		view = v;
-		try {
-			localStorage.setItem('board-view', v);
-		} catch {}
-	}
 
 	function set(changes) {
 		const next = { date, sport, area, ...changes };
@@ -76,7 +60,7 @@
 				<strong class="num">{ledger.rows.length}</strong>
 				{ledger.rows.length === 1 ? 'court' : 'courts'}{ledger.cheapest_npr
 					? `, from NPR ${formatNPR(ledger.cheapest_npr)}`
-					: ''}. Tap a price to hold that hour.
+					: ''}. Pick a time, then an arena.
 			{:else if ledger.rows.length}
 				Nothing free here. Try another day, another area, or another sport.
 			{:else}
@@ -122,18 +106,7 @@
 <section class="board">
 	<div class="shell">
 		{#if ledger.rows.length}
-			<div class="view-switch" role="group" aria-label="How to show the board">
-				<button type="button" aria-pressed={view === 'time'} onclick={() => setView('time')}>
-					By time
-				</button>
-				<button type="button" aria-pressed={view === 'day'} onclick={() => setView('day')}>
-					Whole day
-				</button>
-			</div>
-			<div class="views" data-view={view}>
-				<div class="grid-view"><HourLedger {ledger} /></div>
-				<div class="time-view"><HourFinder {ledger} /></div>
-			</div>
+			<HourFinder {ledger} />
 		{:else}
 			<div class="empty fade-up">
 				<h2 class="display display-m">Nothing here yet</h2>
@@ -198,38 +171,6 @@
 
 	.board {
 		padding-block: 1.5rem var(--band);
-	}
-
-	.view-switch {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.25rem;
-		margin-bottom: 0.9rem;
-	}
-
-	.views[data-view='time'] .grid-view,
-	.views[data-view='day'] .time-view {
-		display: none;
-	}
-
-	.view-switch button {
-		padding: 0.3rem 0.7rem;
-		border: 0;
-		border-radius: var(--r-pill);
-		background: none;
-		font: inherit;
-		font-size: 0.8125rem;
-		font-weight: 600;
-		color: var(--muted);
-		cursor: pointer;
-		transition:
-			background-color 0.2s var(--ease),
-			color 0.2s var(--ease);
-	}
-
-	.view-switch button[aria-pressed='true'] {
-		background: var(--pine-wash);
-		color: var(--pine-deep);
 	}
 
 	.empty {

@@ -48,6 +48,9 @@
 	let error = $state(null);
 	let fieldErrors = $state({});
 	let savedVenue = $state(false);
+	// The venue card opens into its edit form. Closed by default: most visits
+	// are for the till and the courts, not for renaming the place.
+	let venueOpen = $state(false);
 
 	/**
 	 * The venue form is seeded from the arena as it stands.
@@ -404,44 +407,80 @@
 		</form>
 
 		<h2 class="display display-m">Venue details</h2>
-		<form class="card venue" onsubmit={saveVenue}>
-			<Field name="v-name" label="Name" bind:value={venue.name} error={fieldErrors.name}
-				required maxlength="80" />
-			<div class="pair">
-				<Field name="v-area" label="Area" bind:value={venue.area} error={fieldErrors.area} required />
-				<Field name="v-city" label="City" bind:value={venue.city} error={fieldErrors.city} />
-			</div>
-			<div class="pair">
-				<Field name="v-opens" label="Opens" type="time" bind:value={venue.opens_at}
-					error={fieldErrors.opens_at} required />
-				<Field name="v-closes" label="Closes" type="time" bind:value={venue.closes_at}
-					error={fieldErrors.closes_at} required />
-			</div>
-			<Field name="v-phone" label="Phone" bind:value={venue.phone} error={fieldErrors.phone}
-				hint="Ten digits starting 98 or 97, or a landline." placeholder="9851000000" />
-			<Field name="v-amenities" label="Amenities" bind:value={venue.amenities}
-				error={fieldErrors.amenities} hint="Separated by commas."
-				placeholder="Covered, Floodlit, Parking" />
-			<Field name="v-cover" label="Cover image URL" bind:value={venue.cover_url} />
-			<label class="pick" for="v-description">
-				<span class="label">Description</span>
-				<textarea id="v-description" bind:value={venue.description} maxlength="2000" rows="4"
-					placeholder="Two covered courts behind the Jhamsikhel bus stop, laid with 40mm turf."
-				></textarea>
-			</label>
-			<div class="pair">
-				<Field name="v-lat" label="Latitude" type="number" step="any" bind:value={venue.lat}
-					error={fieldErrors.lat} />
-				<Field name="v-lng" label="Longitude" type="number" step="any" bind:value={venue.lng}
-					error={fieldErrors.lng} />
-			</div>
-			<button class="btn btn-primary" class:loading={busy} disabled={busy}>
-				{savedVenue ? 'Saved' : 'Save details'}
-			</button>
-			<p class="small quiet">
-				The web address stays <code>{arena.slug}</code> — it's in every link anyone has shared.
-			</p>
-		</form>
+		<details class="venue-card" bind:open={venueOpen}>
+			<summary>
+				<span class="cover" class:empty={!arena.cover_url}>
+					{#if arena.cover_url}
+						<img src={arena.cover_url} alt="" loading="lazy" />
+					{:else}
+						<span class="initial" aria-hidden="true">{arena.name.slice(0, 1)}</span>
+					{/if}
+				</span>
+				<span class="venue-what">
+					<strong class="venue-name">{arena.name}</strong>
+					<span class="small venue-meta">
+						{arena.area}{arena.city ? `, ${arena.city}` : ''} · open {arena.opens_at}–{arena.closes_at}
+						{#if arena.phone}· {arena.phone}{/if}
+					</span>
+					{#if arena.amenities?.length}
+						<span class="amenities">
+							{#each arena.amenities as amenity, i (i)}
+								<span class="chip">{amenity}</span>
+							{/each}
+						</span>
+					{/if}
+				</span>
+				<span class="venue-toggle small">{venueOpen ? 'Close' : 'Edit'}</span>
+				<span class="chev" aria-hidden="true"></span>
+			</summary>
+
+			<form class="venue-form" onsubmit={saveVenue}>
+				<div class="venue-col">
+					<Field name="v-name" label="Name" bind:value={venue.name} error={fieldErrors.name}
+						required maxlength="80" />
+					<div class="pair">
+						<Field name="v-area" label="Area" bind:value={venue.area} error={fieldErrors.area} required />
+						<Field name="v-city" label="City" bind:value={venue.city} error={fieldErrors.city} />
+					</div>
+					<div class="pair">
+						<Field name="v-opens" label="Opens" type="time" bind:value={venue.opens_at}
+							error={fieldErrors.opens_at} required />
+						<Field name="v-closes" label="Closes" type="time" bind:value={venue.closes_at}
+							error={fieldErrors.closes_at} required />
+					</div>
+					<Field name="v-phone" label="Phone" bind:value={venue.phone} error={fieldErrors.phone}
+						hint="Ten digits starting 98 or 97, or a landline." placeholder="9851000000" />
+					<div class="pair">
+						<Field name="v-lat" label="Latitude" type="number" step="any" bind:value={venue.lat}
+							error={fieldErrors.lat} />
+						<Field name="v-lng" label="Longitude" type="number" step="any" bind:value={venue.lng}
+							error={fieldErrors.lng} />
+					</div>
+				</div>
+
+				<div class="venue-col">
+					<Field name="v-amenities" label="Amenities" bind:value={venue.amenities}
+						error={fieldErrors.amenities} hint="Separated by commas."
+						placeholder="Covered, Floodlit, Parking" />
+					<Field name="v-cover" label="Cover image URL" bind:value={venue.cover_url} />
+					<label class="pick" for="v-description">
+						<span class="field-label">Description</span>
+						<textarea id="v-description" bind:value={venue.description} maxlength="2000" rows="6"
+							placeholder="Two covered courts behind the Jhamsikhel bus stop, laid with 40mm turf."
+						></textarea>
+					</label>
+				</div>
+
+				<div class="venue-actions">
+					<button class="btn btn-primary" class:loading={busy} disabled={busy}>
+						{savedVenue ? 'Saved' : 'Save details'}
+					</button>
+					<p class="small quiet">
+						The web address stays <code>{arena.slug}</code> — it's in every link anyone has shared.
+					</p>
+				</div>
+			</form>
+		</details>
 
 		<hr />
 		{#if !data.listing.is_active}
@@ -539,7 +578,157 @@
 		padding: clamp(1.5rem, 3vw, 2rem);
 	}
 
-	.venue { max-width: 40rem; }
+	/* Venue details: a horizontal summary that opens into its form. */
+	.venue-card {
+		margin-top: 1rem;
+		border: 1px solid var(--line);
+		border-radius: var(--r-md);
+		background: var(--surface);
+		transition: border-color var(--dur-hover) var(--ease);
+		/* Lets the open/close below animate to and from `auto` where the
+		   browser supports it; elsewhere it simply snaps open. */
+		interpolate-size: allow-keywords;
+	}
+
+	.venue-card:hover,
+	.venue-card[open] { border-color: var(--line-strong); }
+
+	.venue-card::details-content {
+		block-size: 0;
+		overflow: hidden;
+		transition:
+			block-size 280ms var(--ease),
+			content-visibility 280ms allow-discrete;
+	}
+
+	.venue-card[open]::details-content { block-size: auto; }
+
+	@media (prefers-reduced-motion: reduce) {
+		.venue-card::details-content { transition: none; }
+	}
+
+	.venue-card summary {
+		display: flex;
+		align-items: center;
+		gap: 1rem 1.25rem;
+		padding: 0.9rem 1.1rem;
+		cursor: pointer;
+		list-style: none;
+	}
+
+	.venue-card summary::-webkit-details-marker { display: none; }
+
+	.venue-card summary:focus-visible {
+		outline: 2px solid var(--pine);
+		outline-offset: 2px;
+		border-radius: var(--r-md);
+	}
+
+	.cover {
+		flex: none;
+		width: 7rem;
+		aspect-ratio: 4 / 3;
+		overflow: hidden;
+		border-radius: var(--r-sm);
+		background: var(--surface-sunk);
+	}
+
+	.cover.empty {
+		display: grid;
+		place-items: center;
+	}
+
+	.initial {
+		font-family: var(--display);
+		font-size: 1.75rem;
+		font-weight: 700;
+		color: var(--faint);
+	}
+
+	/* Matches the labels Field draws, so the textarea sits in with them. */
+	.field-label {
+		font-size: 0.9375rem;
+		font-weight: 600;
+		color: var(--ink);
+	}
+
+	.cover img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	.venue-what {
+		display: grid;
+		flex: 1;
+		gap: 0.3rem;
+		min-width: 0;
+	}
+
+	.venue-name { font-size: 1.0625rem; }
+	.venue-meta { color: var(--faint); }
+
+	.amenities {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+		margin-top: 0.15rem;
+	}
+
+	.venue-toggle {
+		flex: none;
+		color: var(--pine);
+		font-weight: 600;
+	}
+
+	/* Same drawn chevron as the court panels, turning with the disclosure. */
+	.chev {
+		flex: none;
+		width: 0.5rem;
+		height: 0.5rem;
+		border-right: 2px solid var(--faint);
+		border-bottom: 2px solid var(--faint);
+		transform: rotate(45deg) translate(-2px, -2px);
+		transition: transform var(--dur-hover) var(--ease);
+	}
+
+	.venue-card[open] .chev { transform: rotate(-135deg) translate(-2px, -2px); }
+
+	/* Overrides the page's card-form defaults: this form lives inside the card. */
+	.venue-form {
+		max-width: none;
+		margin: 0;
+		padding: 1.25rem 1.1rem 1.4rem;
+		border-top: 1px solid var(--line);
+		gap: 1rem 2rem;
+	}
+
+	.venue-col {
+		display: grid;
+		gap: 1rem;
+		align-content: start;
+		min-width: 0;
+	}
+
+	.venue-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 1rem;
+	}
+
+	.venue-actions p { margin: 0; }
+
+	@media (min-width: 52rem) {
+		.venue-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+		.venue-actions { grid-column: 1 / -1; }
+	}
+
+	@media (max-width: 34rem) {
+		.cover { width: 4.5rem; }
+		.venue-toggle { display: none; }
+	}
 
 	.gallery {
 		display: grid;

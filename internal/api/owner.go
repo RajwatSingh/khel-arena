@@ -420,6 +420,66 @@ func (s *Server) handleOwnerPayments(w http.ResponseWriter, r *http.Request) {
 	encode(w, http.StatusOK, ownerPaymentDTOsFromDomain(payments))
 }
 
+// handleOwnerCancellations — GET /v1/owner/arenas/{arenaID}/cancellations
+//
+// Cancelled bookings at the venue, newest first, with each player's reason
+// and what the cancellation cost them.
+func (s *Server) handleOwnerCancellations(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := s.currentUser(w, r)
+	if !ok {
+		return
+	}
+
+	arenaID, err := uuid.Parse(r.PathValue("arenaID"))
+	if err != nil {
+		writeError(w, r, domain.Invalid("arena_id", "That isn't an arena."))
+		return
+	}
+
+	limit, err := bookingLimit(r)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	cancellations, err := s.owner.Cancellations(r.Context(), arenaID, ownerID, limit)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	out := make([]cancellationDTO, 0, len(cancellations))
+	for _, c := range cancellations {
+		out = append(out, cancellationDTOFromDomain(c))
+	}
+	encode(w, http.StatusOK, out)
+}
+
+// handleRestoreScore — POST /v1/owner/cancellations/{bookingID}/restore-score
+//
+// The venue gives a player back the points a late cancellation cost them.
+// Once per cancellation, and only at the caller's own venue.
+func (s *Server) handleRestoreScore(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := s.currentUser(w, r)
+	if !ok {
+		return
+	}
+
+	bookingID, err := uuid.Parse(r.PathValue("bookingID"))
+	if err != nil {
+		writeError(w, r, domain.Invalid("booking_id", "That isn't a booking."))
+		return
+	}
+
+	c, err := s.owner.RestoreScore(r.Context(), bookingID, ownerID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	encode(w, http.StatusOK, cancellationDTOFromDomain(c))
+}
+
 // handleMarkCashReceived — POST /v1/owner/payments/{paymentID}/received
 //
 // The only way a cash booking becomes confirmed, and deliberately the arena's

@@ -493,6 +493,19 @@ export const removeArenaPaymentAccount = (arenaId, provider, opts) =>
 
 /** The venue confirming that cash changed hands — the only way a cash booking
  *  becomes confirmed. */
+/** Cancelled bookings at a venue, newest first, with each player's reason
+ *  and the points a late cancellation cost them. */
+export const arenaCancellations = (arenaId, limit = 50, opts) =>
+	request(`/owner/arenas/${arenaId}/cancellations?limit=${limit}`, { auth: true, ...opts });
+
+/** Gives a player back the points a late cancellation cost them. Once only. */
+export const restoreScore = (bookingId, opts) =>
+	request(`/owner/cancellations/${bookingId}/restore-score`, {
+		method: 'POST',
+		auth: true,
+		...opts
+	});
+
 export const markCashReceived = (paymentId, opts) =>
 	request(`/owner/payments/${paymentId}/received`, { method: 'POST', auth: true, ...opts });
 

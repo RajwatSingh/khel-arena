@@ -175,3 +175,90 @@ func TestABookingPaidOnlineCannotBeCancelledByThePlayer(t *testing.T) {
 		t.Errorf("paid_online = %v, want khalti", list[0].PaidOnline)
 	}
 }
+
+func TestTheVenueSeesTheReasonAndCanGiveThePointsBack(t *testing.T) {
+	f := newFixture(t, 2)
+	ctx := context.Background()
+	player, stranger := f.players[0], f.players[1]
+
+	// Five late cancels: score 0 and banned.
+	var last uuid.UUID
+	for range 5 {
+		last = f.bookFor(t, player, 2*time.Hour, "confirmed")
+		if _, err := f.repo.Cancel(ctx, last, player, "Family emergency"); err != nil {
+			t.Fatalf("cancelling: %v", err)
+		}
+	}
+	early := f.bookFor(t, player, 72*time.Hour, "confirmed")
+	if _, err := f.repo.Cancel(ctx, early, player, "Plans changed"); err != nil {
+		t.Fatalf("cancelling early: %v", err)
+	}
+	if !f.standing(t, player).Banned(time.Now()) {
+		t.Fatal("setup: the player should be banned")
+	}
+
+	// The owner sees every cancellation, newest first, with its reason.
+	list, err := f.repo.CancellationsForOwner(ctx, f.arenaID, f.owner, 10)
+	if err != nil {
+		t.Fatalf("listing: %v", err)
+	}
+	if len(list) != 6 {
+		t.Fatalf("cancellations = %d, want 6", len(list))
+	}
+	if list[0].BookingID != early || list[0].Reason != "Plans changed" || list[0].CanRestore() {
+		t.Errorf("newest = %+v, want the early one, with nothing to restore", list[0])
+	}
+	if list[1].Penalty != domain.LateCancelPenalty || !list[1].CanRestore() {
+		t.Errorf("a late one = %+v, want 20 points to restore", list[1])
+	}
+
+	// Another arena owner, or a player, sees nothing and can't restore.
+	if got, _ := f.repo.CancellationsForOwner(ctx, f.arenaID, stranger, 10); len(got) != 0 {
+		t.Errorf("a stranger listed %d cancellations", len(got))
+	}
+	if _, err := f.repo.RestorePenaltyOwnerScoped(ctx, last, stranger); domain.CodeOf(err) != domain.CodeNotFound {
+		t.Errorf("stranger restore: code = %q, want not_found", domain.CodeOf(err))
+	}
+
+	// The owner gives one back: 0 -> 20, which lifts the ban.
+	row, err := f.repo.RestorePenaltyOwnerScoped(ctx, last, f.owner)
+	if err != nil {
+		t.Fatalf("restoring: %v", err)
+	}
+	if row.PenaltyRestoredAt == nil || row.CanRestore() {
+		t.Errorf("row after restore = %+v", row)
+	}
+	if s := f.standing(t, player); s.UserScore != 20 || s.Banned(time.Now()) {
+		t.Errorf("after restoring: %+v, want 20 and no ban", s)
+	}
+
+	// Once only.
+	if _, err := f.repo.RestorePenaltyOwnerScoped(ctx, last, f.owner); domain.CodeOf(err) != domain.CodeConflict {
+		t.Errorf("second restore: code = %q, want conflict", domain.CodeOf(err))
+	}
+	// Nothing to give back on a cancellation that cost nothing.
+	if _, err := f.repo.RestorePenaltyOwnerScoped(ctx, early, f.owner); domain.CodeOf(err) != domain.CodeConflict {
+		t.Errorf("restoring a free cancel: code = %q, want conflict", domain.CodeOf(err))
+	}
+}
+
+func TestRestoringNeverGoesAbove100(t *testing.T) {
+	f := newFixture(t, 1)
+	ctx := context.Background()
+	player := f.players[0]
+
+	id := f.bookFor(t, player, time.Hour, "confirmed")
+	if _, err := f.repo.Cancel(ctx, id, player, "Plans changed"); err != nil {
+		t.Fatalf("cancelling: %v", err)
+	}
+	// Meanwhile the score was topped back up some other way.
+	if _, err := f.pool.Exec(ctx, `update users set user_score = 95 where id = $1`, player); err != nil {
+		t.Fatalf("setting score: %v", err)
+	}
+	if _, err := f.repo.RestorePenaltyOwnerScoped(ctx, id, f.owner); err != nil {
+		t.Fatalf("restoring: %v", err)
+	}
+	if s := f.standing(t, player); s.UserScore != 100 {
+		t.Errorf("score = %d, want capped at 100", s.UserScore)
+	}
+}

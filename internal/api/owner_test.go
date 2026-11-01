@@ -49,6 +49,12 @@ func TestOwnerRoutesAllRequireASession(t *testing.T) {
 		},
 		setPaymentAccount:    func(context.Context, uuid.UUID, uuid.UUID, domain.ArenaPaymentAccount) error { return nil },
 		removePaymentAccount: func(context.Context, uuid.UUID, uuid.UUID, domain.PaymentProvider) error { return nil },
+		cancellations: func(context.Context, uuid.UUID, uuid.UUID, int) ([]domain.Cancellation, error) {
+			return nil, nil
+		},
+		restoreScore: func(context.Context, uuid.UUID, uuid.UUID) (domain.Cancellation, error) {
+			return domain.Cancellation{}, nil
+		},
 	}
 
 	auth := &fakeAuth{authenticate: signedIn(testAccessToken)}
@@ -75,6 +81,8 @@ func TestOwnerRoutesAllRequireASession(t *testing.T) {
 		{http.MethodGet, arena + "/payment-accounts", ""},
 		{http.MethodPut, arena + "/payment-accounts/esewa", `{"secret_key":"k","merchant_code":"EPAYTEST","live":false,"enabled":true}`},
 		{http.MethodDelete, arena + "/payment-accounts/esewa", ""},
+		{http.MethodGet, arena + "/cancellations", ""},
+		{http.MethodPost, "/v1/owner/cancellations/" + testBookingID.String() + "/restore-score", ""},
 	}
 
 	for _, route := range routes {
@@ -424,5 +432,58 @@ func TestCashApprovalPassesTheCaller(t *testing.T) {
 				t.Fatal("the service was never asked")
 			}
 		})
+	}
+}
+
+func TestOwnerCancellationsShowReasonAndRestore(t *testing.T) {
+	auth := &fakeAuth{authenticate: signedIn(testAccessToken)}
+
+	var (
+		gotArena, gotOwner uuid.UUID
+		restoredID         uuid.UUID
+	)
+	late := domain.Cancellation{
+		BookingID: testBookingID, Slot: testSlot(), CourtLabel: "Court A",
+		PlayerName: "Rajwat Singh", PlayerUsername: "rajwat",
+		Reason: "Not enough players", Penalty: domain.LateCancelPenalty,
+	}
+	owner := &fakeOwner{
+		cancellations: func(_ context.Context, arenaID, ownerID uuid.UUID, _ int) ([]domain.Cancellation, error) {
+			gotArena, gotOwner = arenaID, ownerID
+			return []domain.Cancellation{late}, nil
+		},
+		restoreScore: func(_ context.Context, bookingID, _ uuid.UUID) (domain.Cancellation, error) {
+			restoredID = bookingID
+			now := time.Now()
+			restored := late
+			restored.PenaltyRestoredAt = &now
+			return restored, nil
+		},
+	}
+	h := newTestServer(t, auth, nil, nil, withOwner(owner))
+
+	w := do(h, http.MethodGet, "/v1/owner/arenas/"+testArenaID.String()+"/cancellations", "", bearer(testAccessToken))
+	if w.Code != http.StatusOK {
+		t.Fatalf("list: status = %d (%s)", w.Code, w.Body.String())
+	}
+	if gotArena != testArenaID || gotOwner != testUser.ID {
+		t.Errorf("listed arena %v for %v, want %v for the caller", gotArena, gotOwner, testArenaID)
+	}
+	var list []cancellationDTO
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil || len(list) != 1 {
+		t.Fatalf("list = %s, err = %v", w.Body.String(), err)
+	}
+	if list[0].Reason != "Not enough players" || list[0].Penalty != 20 || !list[0].CanRestore {
+		t.Errorf("row = %+v", list[0])
+	}
+
+	w = do(h, http.MethodPost, "/v1/owner/cancellations/"+testBookingID.String()+"/restore-score", "", bearer(testAccessToken))
+	if w.Code != http.StatusOK || restoredID != testBookingID {
+		t.Fatalf("restore: status = %d, id = %v", w.Code, restoredID)
+	}
+	var row cancellationDTO
+	_ = json.Unmarshal(w.Body.Bytes(), &row)
+	if row.CanRestore || row.PenaltyRestoredAt == nil {
+		t.Errorf("after restoring: %+v, want it marked restored", row)
 	}
 }

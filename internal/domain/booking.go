@@ -256,3 +256,25 @@ type BookingStanding struct {
 func (s BookingStanding) Banned(now time.Time) bool {
 	return s.BookingBannedUntil != nil && s.BookingBannedUntil.After(now)
 }
+
+// Cancellation is a cancelled booking as its venue sees it: who, when, why,
+// and what it cost the player.
+type Cancellation struct {
+	BookingID      uuid.UUID
+	Slot           Slot
+	CourtLabel     string
+	PlayerName     string
+	PlayerUsername string
+	Reason         string
+	CancelledAt    time.Time
+	// Penalty is the points the cancellation took off the player's score;
+	// zero when it wasn't late.
+	Penalty int
+	// PenaltyRestoredAt is set once the venue has given those points back.
+	PenaltyRestoredAt *time.Time
+}
+
+// CanRestore reports whether the venue can still give the points back.
+func (c Cancellation) CanRestore() bool {
+	return c.Penalty > 0 && c.PenaltyRestoredAt == nil
+}

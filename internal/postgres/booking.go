@@ -210,13 +210,17 @@ func (r *BookingRepo) Cancel(ctx context.Context, bookingID, userID uuid.UUID, r
 			)
 			update bookings b
 			   set status = 'cancelled', hold_expires_at = null,
-			       cancel_reason = $3, cancelled_at = now()
+			       cancel_reason = $3, cancelled_at = now(),
+			       cancel_penalty = case
+			           when target.status = 'confirmed' and target.starts_at - now() < $4::interval
+			           then $5 else 0 end
 			  from target
 			 where b.id = target.id
-			returning target.status = 'confirmed' and target.starts_at - now() < $4::interval`
+			returning b.cancel_penalty > 0`
 
 		var late bool
-		err := tx.QueryRow(ctx, cancelSQL, bookingID, userID, reason, domain.LateCancelWindow).Scan(&late)
+		err := tx.QueryRow(ctx, cancelSQL, bookingID, userID, reason,
+			domain.LateCancelWindow, domain.LateCancelPenalty).Scan(&late)
 		if noRows(err) {
 			return r.whyNotCancelled(ctx, tx, bookingID, userID)
 		}
@@ -326,6 +330,165 @@ func (r *BookingRepo) whyNotCancelled(ctx context.Context, tx pgx.Tx, bookingID,
 	default:
 		return domain.Conflict("This booking can no longer be cancelled.")
 	}
+}
+
+// CancellationsForOwner lists the cancelled bookings at one of the caller's
+// arenas, newest first, with the reason and what each cost the player.
+// Owner-scoped in the WHERE: an arena that isn't theirs lists nothing.
+func (r *BookingRepo) CancellationsForOwner(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]domain.Cancellation, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	const q = `
+		select b.id, b.slot, c.label, u.full_name, u.username,
+		       coalesce(b.cancel_reason, ''), coalesce(b.cancelled_at, b.updated_at),
+		       b.cancel_penalty, b.penalty_restored_at
+		  from bookings b
+		  join courts c on c.id = b.court_id
+		  join arenas a on a.id = c.arena_id
+		  join users  u on u.id = b.user_id
+		 where a.id = $1 and a.owner_id = $2
+		   and b.status = 'cancelled'
+		 order by coalesce(b.cancelled_at, b.updated_at) desc
+		 limit $3`
+
+	rows, err := r.pool.Query(ctx, q, arenaID, ownerID, limit)
+	if err != nil {
+		return nil, domain.Internal(err, "listing cancellations for arena %s", arenaID)
+	}
+	defer rows.Close()
+
+	out := []domain.Cancellation{}
+	for rows.Next() {
+		var (
+			c    domain.Cancellation
+			slot pgtype.Range[pgtype.Timestamptz]
+		)
+		err := rows.Scan(&c.BookingID, &slot, &c.CourtLabel, &c.PlayerName, &c.PlayerUsername,
+			&c.Reason, &c.CancelledAt, &c.Penalty, &c.PenaltyRestoredAt)
+		if err != nil {
+			return nil, domain.Internal(err, "scanning cancellation")
+		}
+		c.Slot = domain.Slot{Start: slot.Lower.Time.UTC(), End: slot.Upper.Time.UTC()}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domain.Internal(err, "listing cancellations for arena %s", arenaID)
+	}
+	return out, nil
+}
+
+// RestorePenaltyOwnerScoped gives a player back the points a late
+// cancellation at the caller's arena cost them. Once per cancellation.
+//
+// The points go back onto the score as it stands now (an expired ban already
+// lifted), capped at 100. If that lifts the player above the ban floor, any
+// ban they are serving ends with it: the venue has forgiven the cancellation
+// that caused it.
+func (r *BookingRepo) RestorePenaltyOwnerScoped(ctx context.Context, bookingID, ownerID uuid.UUID) (domain.Cancellation, error) {
+	err := InTx(ctx, r.pool, func(tx pgx.Tx) error {
+		// Marking the booking first, with every condition in its WHERE, is
+		// what makes this once-only even if the owner double-clicks.
+		const markSQL = `
+			update bookings b
+			   set penalty_restored_at = now()
+			  from courts c, arenas a
+			 where b.id = $1
+			   and c.id = b.court_id and a.id = c.arena_id and a.owner_id = $2
+			   and b.status = 'cancelled'
+			   and b.cancel_penalty > 0
+			   and b.penalty_restored_at is null
+			returning b.user_id, b.cancel_penalty`
+
+		var (
+			playerID uuid.UUID
+			penalty  int
+		)
+		err := tx.QueryRow(ctx, markSQL, bookingID, ownerID).Scan(&playerID, &penalty)
+		if noRows(err) {
+			return r.whyNotRestored(ctx, tx, bookingID, ownerID)
+		}
+		if err != nil {
+			return domain.Internal(err, "restoring points for booking %s", bookingID)
+		}
+
+		const giveBackSQL = `
+			with next as (
+				select least(` + effectiveUserScore + ` + $2, 100) as score,
+				       ` + activeBookingBan + ` as ban
+				  from users where id = $1
+			)
+			update users
+			   set user_score = next.score,
+			       booking_banned_until = case when next.score > $3 then null else next.ban end
+			  from next
+			 where users.id = $1`
+		if _, err := tx.Exec(ctx, giveBackSQL, playerID, penalty, domain.BookingBanFloor); err != nil {
+			return domain.Internal(err, "giving points back to %s", playerID)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Cancellation{}, err
+	}
+
+	// Read it back as the list shows it, so the client can swap the row.
+	return r.cancellationByID(ctx, bookingID)
+}
+
+func (r *BookingRepo) whyNotRestored(ctx context.Context, tx pgx.Tx, bookingID, ownerID uuid.UUID) error {
+	const q = `
+		select a.owner_id, b.status, b.cancel_penalty, b.penalty_restored_at
+		  from bookings b
+		  join courts c on c.id = b.court_id
+		  join arenas a on a.id = c.arena_id
+		 where b.id = $1`
+
+	var (
+		owner    uuid.UUID
+		status   domain.BookingStatus
+		penalty  int
+		restored *time.Time
+	)
+	err := tx.QueryRow(ctx, q, bookingID).Scan(&owner, &status, &penalty, &restored)
+	if noRows(err) || (err == nil && owner != ownerID) {
+		return domain.NotFound("No cancellation at your venue with that id.")
+	}
+	if err != nil {
+		return domain.Internal(err, "inspecting booking %s", bookingID)
+	}
+	switch {
+	case status != domain.BookingCancelled:
+		return domain.Conflict("That booking wasn't cancelled.")
+	case penalty == 0:
+		return domain.Conflict("That cancellation didn't cost the player any points.")
+	default:
+		return domain.Conflict("You've already given those points back.")
+	}
+}
+
+func (r *BookingRepo) cancellationByID(ctx context.Context, bookingID uuid.UUID) (domain.Cancellation, error) {
+	const q = `
+		select b.id, b.slot, c.label, u.full_name, u.username,
+		       coalesce(b.cancel_reason, ''), coalesce(b.cancelled_at, b.updated_at),
+		       b.cancel_penalty, b.penalty_restored_at
+		  from bookings b
+		  join courts c on c.id = b.court_id
+		  join users  u on u.id = b.user_id
+		 where b.id = $1`
+
+	var (
+		c    domain.Cancellation
+		slot pgtype.Range[pgtype.Timestamptz]
+	)
+	err := r.pool.QueryRow(ctx, q, bookingID).Scan(&c.BookingID, &slot, &c.CourtLabel,
+		&c.PlayerName, &c.PlayerUsername, &c.Reason, &c.CancelledAt, &c.Penalty, &c.PenaltyRestoredAt)
+	if err != nil {
+		return domain.Cancellation{}, domain.Internal(err, "reading cancellation %s", bookingID)
+	}
+	c.Slot = domain.Slot{Start: slot.Lower.Time.UTC(), End: slot.Upper.Time.UTC()}
+	return c, nil
 }
 
 // BookingStanding reports a player's user score and any booking ban, with an

@@ -123,7 +123,7 @@ func run() error {
 		returnURLs(cfg.HTTPAddr, cfg.AppURL), clock)
 
 	notifier := service.NewNotifier(buildMailSender(cfg), cfg.AppURL, slog.Default())
-	ownerService := service.NewOwnerService(arenas, payments, ownerAccounts, users, clock)
+	ownerService := service.NewOwnerService(arenas, payments, ownerAccounts, bookings, users, clock)
 	teamService := service.NewTeamService(postgres.NewTeamRepo(pool))
 	callRepo := postgres.NewMatchmakingRepo(pool)
 	callService := service.NewMatchmakingService(callRepo, bookings, clock)

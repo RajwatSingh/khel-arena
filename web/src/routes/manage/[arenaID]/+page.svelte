@@ -111,6 +111,14 @@
 	}
 
 	const received = (payment) => act(() => api.markCashReceived(payment.id));
+
+	// Cancellations: why each player cancelled, and the points a late one
+	// cost them, which the venue can give back if the player asks. The first
+	// few are shown; the rest fold away.
+	const cancellations = $derived(data.cancellations ?? []);
+	const recentCancellations = $derived(cancellations.slice(0, 5));
+	const olderCancellations = $derived(cancellations.slice(5));
+	const restoreScore = (c) => act(() => api.restoreScore(c.booking_id));
 	const approve = (payment) => act(() => api.approveCashBooking(payment.id));
 	const decline = (payment) => act(() => api.declineCashBooking(payment.id));
 	const removePhoto = (id) => act(() => api.deletePhoto(id));
@@ -303,6 +311,54 @@
 					{/each}
 				</ul>
 			</details>
+		{/if}
+
+		<h2 class="display display-m">Cancellations</h2>
+		{#if cancellations.length}
+			<p class="small quiet">
+				Why players cancelled. A confirmed booking cancelled less than 5 hours before kick-off costs
+				the player 20 user-score points. If they ask, and you agree, you can give them back.
+			</p>
+			{#snippet cancellationRow(c)}
+				<li>
+					<div class="what">
+						<a class="player" href="/players/{c.player_username}">
+							{c.player_name || c.player_username}
+						</a>
+						<span class="small">
+							{c.court_name} · {formatDate(localDate(new Date(c.starts_at)))}
+							{formatTime(c.starts_at)}–{formatTime(c.ends_at)} · cancelled
+							{formatDate(localDate(new Date(c.cancelled_at)))}
+						</span>
+						<span class="reason">{c.reason ? `“${c.reason}”` : 'No reason given'}</span>
+					</div>
+					{#if c.penalty_restored_at}
+						<span class="chip paid">points given back</span>
+					{:else if c.penalty > 0}
+						<span class="chip late">late · −{c.penalty} points</span>
+						<button class="btn btn-secondary" disabled={busy} onclick={() => restoreScore(c)}>
+							Give back {c.penalty} points
+						</button>
+					{/if}
+				</li>
+			{/snippet}
+			<ul class="till">
+				{#each recentCancellations as c (c.booking_id)}
+					{@render cancellationRow(c)}
+				{/each}
+			</ul>
+			{#if olderCancellations.length}
+				<details class="ledger">
+					<summary class="label">Older cancellations ({olderCancellations.length})</summary>
+					<ul class="till">
+						{#each olderCancellations as c (c.booking_id)}
+							{@render cancellationRow(c)}
+						{/each}
+					</ul>
+				</details>
+			{/if}
+		{:else}
+			<p class="small quiet">No cancellations.</p>
 		{/if}
 
 		<h2 class="display display-m">Taking payment</h2>
@@ -575,6 +631,11 @@
 	}
 
 	.chip.paid { background: var(--pine-wash); color: var(--pine-deep); }
+	.chip.late { background: var(--brick-wash); color: var(--brick); }
+
+	.player { font-weight: 600; color: inherit; text-decoration: none; }
+	.player:hover { color: var(--pine-deep); }
+	.what .reason { display: block; margin-top: 0.25rem; color: var(--ink); font-style: italic; }
 
 	.accounts {
 		display: grid;

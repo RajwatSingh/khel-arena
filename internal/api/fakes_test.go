@@ -440,6 +440,8 @@ type fakeOwner struct {
 	markCashReceived  func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
 	approveCash       func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
 	declineCash       func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
+	cancellations     func(context.Context, uuid.UUID, uuid.UUID, int) ([]domain.Cancellation, error)
+	restoreScore      func(context.Context, uuid.UUID, uuid.UUID) (domain.Cancellation, error)
 
 	paymentAccounts      func(context.Context, uuid.UUID, uuid.UUID) ([]domain.ArenaPaymentAccountInfo, error)
 	setPaymentAccount    func(context.Context, uuid.UUID, uuid.UUID, domain.ArenaPaymentAccount) error
@@ -526,6 +528,20 @@ func (f *fakeOwner) Payments(ctx context.Context, arenaID, ownerID uuid.UUID, li
 		f.unexpected("Payments")
 	}
 	return f.payments(ctx, arenaID, ownerID, limit)
+}
+
+func (f *fakeOwner) Cancellations(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]domain.Cancellation, error) {
+	if f.cancellations == nil {
+		f.unexpected("Cancellations")
+	}
+	return f.cancellations(ctx, arenaID, ownerID, limit)
+}
+
+func (f *fakeOwner) RestoreScore(ctx context.Context, bookingID, ownerID uuid.UUID) (domain.Cancellation, error) {
+	if f.restoreScore == nil {
+		f.unexpected("RestoreScore")
+	}
+	return f.restoreScore(ctx, bookingID, ownerID)
 }
 
 func (f *fakeOwner) MarkCashReceived(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error) {

@@ -40,6 +40,14 @@ type OwnerPayments interface {
 	ListForArenaOwner(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]postgres.OwnerPayment, error)
 }
 
+// OwnerCancellations is the venue's view of cancelled bookings, and the one
+// thing it can do about them: give a player back the points a late
+// cancellation cost. Owner-scoped in its SQL.
+type OwnerCancellations interface {
+	CancellationsForOwner(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]domain.Cancellation, error)
+	RestorePenaltyOwnerScoped(ctx context.Context, bookingID, ownerID uuid.UUID) (domain.Cancellation, error)
+}
+
 // OwnerPaymentAccounts is the credential store the owner surface writes to.
 //
 // nil on a deployment with no PAYMENT_ENC_KEY: there is nothing to seal a
@@ -60,6 +68,7 @@ type OwnerService struct {
 	arenas   OwnerStore
 	payments OwnerPayments
 	accounts OwnerPaymentAccounts // nil when online payments are off
+	cancels  OwnerCancellations
 	users    ProfileReader
 	clock    Clock
 }
@@ -70,11 +79,11 @@ type ProfileReader interface {
 	ByID(ctx context.Context, id uuid.UUID) (domain.User, error)
 }
 
-func NewOwnerService(arenas OwnerStore, payments OwnerPayments, accounts OwnerPaymentAccounts, users ProfileReader, clock Clock) *OwnerService {
+func NewOwnerService(arenas OwnerStore, payments OwnerPayments, accounts OwnerPaymentAccounts, cancels OwnerCancellations, users ProfileReader, clock Clock) *OwnerService {
 	if clock == nil {
 		clock = SystemClock{}
 	}
-	return &OwnerService{arenas: arenas, payments: payments, accounts: accounts, users: users, clock: clock}
+	return &OwnerService{arenas: arenas, payments: payments, accounts: accounts, cancels: cancels, users: users, clock: clock}
 }
 
 // requireOwnerAccount checks the caller is registered as an arena owner.
@@ -213,6 +222,28 @@ func (s *OwnerService) Payments(ctx context.Context, arenaID, ownerID uuid.UUID,
 		return nil, domain.Unauthenticated("Sign in to manage an arena.")
 	}
 	return s.payments.ListForArenaOwner(ctx, arenaID, ownerID, limit)
+}
+
+// ---------------------------------------------------------------------------
+// Cancellations
+// ---------------------------------------------------------------------------
+
+// Cancellations lists the cancelled bookings at one of the caller's venues,
+// with why each player cancelled and what it cost them.
+func (s *OwnerService) Cancellations(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]domain.Cancellation, error) {
+	if ownerID == uuid.Nil {
+		return nil, domain.Unauthenticated("Sign in to manage an arena.")
+	}
+	return s.cancels.CancellationsForOwner(ctx, arenaID, ownerID, limit)
+}
+
+// RestoreScore gives a player back the points a late cancellation at the
+// caller's venue cost them, if the venue chooses to. Once per cancellation.
+func (s *OwnerService) RestoreScore(ctx context.Context, bookingID, ownerID uuid.UUID) (domain.Cancellation, error) {
+	if ownerID == uuid.Nil {
+		return domain.Cancellation{}, domain.Unauthenticated("Sign in to manage an arena.")
+	}
+	return s.cancels.RestorePenaltyOwnerScoped(ctx, bookingID, ownerID)
 }
 
 // ---------------------------------------------------------------------------

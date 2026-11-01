@@ -109,6 +109,9 @@ type OwnerAPI interface {
 	ApproveCashBooking(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
 	DeclineCashBooking(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
 
+	Cancellations(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]domain.Cancellation, error)
+	RestoreScore(ctx context.Context, bookingID, ownerID uuid.UUID) (domain.Cancellation, error)
+
 	PaymentAccounts(ctx context.Context, arenaID, ownerID uuid.UUID) ([]domain.ArenaPaymentAccountInfo, error)
 	SetPaymentAccount(ctx context.Context, arenaID, ownerID uuid.UUID, acct domain.ArenaPaymentAccount) error
 	RemovePaymentAccount(ctx context.Context, arenaID, ownerID uuid.UUID, provider domain.PaymentProvider) error
@@ -410,6 +413,8 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("PUT /v1/owner/arenas/{arenaID}/active", protected(s.handleSetArenaActive))
 	mux.Handle("POST /v1/owner/arenas/{arenaID}/courts", protected(s.handleCreateCourt))
 	mux.Handle("GET /v1/owner/arenas/{arenaID}/payments", protected(s.handleOwnerPayments))
+	mux.Handle("GET /v1/owner/arenas/{arenaID}/cancellations", protected(s.handleOwnerCancellations))
+	mux.Handle("POST /v1/owner/cancellations/{bookingID}/restore-score", protected(s.handleRestoreScore))
 	mux.Handle("GET /v1/owner/arenas/{arenaID}/payment-accounts", protected(s.handleListPaymentAccounts))
 	mux.Handle("PUT /v1/owner/arenas/{arenaID}/payment-accounts/{provider}", protected(s.handleSetPaymentAccount))
 	mux.Handle("DELETE /v1/owner/arenas/{arenaID}/payment-accounts/{provider}", protected(s.handleDeletePaymentAccount))

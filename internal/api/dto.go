@@ -202,6 +202,40 @@ type bookingDetailDTO struct {
 	CancelReason string                  `json:"cancel_reason,omitempty"`
 }
 
+// cancellationDTO is a cancelled booking as its venue sees it.
+type cancellationDTO struct {
+	BookingID      uuid.UUID `json:"booking_id"`
+	Reference      string    `json:"reference"`
+	CourtName      string    `json:"court_name"`
+	StartsAt       time.Time `json:"starts_at"`
+	EndsAt         time.Time `json:"ends_at"`
+	PlayerName     string    `json:"player_name"`
+	PlayerUsername string    `json:"player_username"`
+	Reason         string    `json:"reason"`
+	CancelledAt    time.Time `json:"cancelled_at"`
+	// Penalty is the points it cost the player; 0 when it wasn't late.
+	Penalty           int        `json:"penalty"`
+	PenaltyRestoredAt *time.Time `json:"penalty_restored_at"`
+	CanRestore        bool       `json:"can_restore"`
+}
+
+func cancellationDTOFromDomain(c domain.Cancellation) cancellationDTO {
+	return cancellationDTO{
+		BookingID:         c.BookingID,
+		Reference:         bookingReference(c.BookingID),
+		CourtName:         c.CourtLabel,
+		StartsAt:          c.Slot.Start,
+		EndsAt:            c.Slot.End,
+		PlayerName:        c.PlayerName,
+		PlayerUsername:    c.PlayerUsername,
+		Reason:            c.Reason,
+		CancelledAt:       c.CancelledAt,
+		Penalty:           c.Penalty,
+		PenaltyRestoredAt: c.PenaltyRestoredAt,
+		CanRestore:        c.CanRestore(),
+	}
+}
+
 // cancelBookingRequest is why the player is cancelling. Required.
 type cancelBookingRequest struct {
 	Reason string `json:"reason"`

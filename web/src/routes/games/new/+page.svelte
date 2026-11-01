@@ -247,12 +247,6 @@
 		padding: clamp(1.5rem, 3vw, 2rem);
 	}
 
-	/* Same reason as `.where strong` below: the band's label colour is for
-	   dark ground. */
-	.panel .label {
-		color: var(--faint);
-	}
-
 	.step-title {
 		margin: 0.35rem 0 1rem;
 		font-family: var(--display);
@@ -323,12 +317,6 @@
 	.time {
 		font-weight: 700;
 		white-space: nowrap;
-	}
-
-	/* The card sits on the dark band, whose <strong> is the bright accent
-	   meant for dark ground; on the card it should read as plain ink. */
-	.where strong {
-		color: var(--ink);
 	}
 
 	.date,

@@ -105,6 +105,6 @@
 
 	.alt {
 		margin-top: clamp(1.5rem, 4vw, 2.5rem);
-		color: var(--muted);
+		color: var(--on-field-muted);
 	}
 </style>

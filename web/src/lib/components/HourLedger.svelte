@@ -12,13 +12,24 @@
 	 */
 	let { ledger } = $props();
 
+	// Only hours still to come get a column. An hour that has already started
+	// can't be booked, so on today's board it would only take up room.
 	const hours = $derived.by(() => {
 		const set = new Set();
 		for (const row of ledger.rows) {
-			for (const slot of row.slots) set.add(Number(formatTime(slot.starts_at).slice(0, 2)));
+			for (const slot of row.slots) {
+				if (!slot.is_past) set.add(Number(formatTime(slot.starts_at).slice(0, 2)));
+			}
 		}
 		return [...set].sort((a, b) => a - b);
 	});
+
+	// A column can still hold a past cell when courts start on different
+	// minutes (18:00 and 18:30 share a column), so the key only lists
+	// "Already played" when one is on screen.
+	const anyGone = $derived(
+		byHour.some(({ map }) => hours.some((h) => map.get(h)?.is_past))
+	);
 
 	const byHour = $derived(
 		ledger.rows.map((row) => {
@@ -41,6 +52,11 @@
 </script>
 
 <div class="ledger">
+	{#if hours.length === 0}
+	<div class="card done">
+		<p class="small">Every hour on this day has already been played. Pick another day above.</p>
+	</div>
+	{:else}
 	<!-- A scrollable region has to be reachable by keyboard, which is exactly
 	     what this lint rule assumes it is not. -->
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -104,11 +120,17 @@
 		<li><span class="chip free"></span>Free · price per hour, NPR</li>
 		<li><span class="chip peak"></span>Peak rate</li>
 		<li><span class="chip taken"><i></i></span>Taken</li>
-		<li><span class="chip gone"></span>Already played</li>
+		{#if anyGone}<li><span class="chip gone"></span>Already played</li>{/if}
 	</ul>
+	{/if}
 </div>
 
 <style>
+	.done {
+		padding: 1.5rem 1.35rem;
+		color: var(--muted);
+	}
+
 	.scroll {
 		overflow-x: auto;
 		scrollbar-width: thin;

@@ -332,6 +332,33 @@ a {
 	font-weight: 700;
 }
 
+.forest-band .link {
+	color: var(--accent-on-field);
+	text-decoration-color: color-mix(in srgb, var(--accent-on-field) 45%, transparent);
+}
+
+/* A card on the band is light ground again, so its text goes back to the
+   ink colours. Without this, headings on a white card come out cream. */
+.forest-band .card h1,
+.forest-band .card h2,
+.forest-band .card strong {
+	color: var(--ink);
+}
+
+.forest-band .card .label {
+	color: var(--faint);
+}
+
+.forest-band .card .lede,
+.forest-band .card .prose {
+	color: var(--muted);
+}
+
+.forest-band .card .link {
+	color: var(--pine);
+	text-decoration-color: color-mix(in srgb, var(--pine) 35%, transparent);
+}
+
 /* The pitch marking, drawn in — the same signature glyph as the masthead
    logo, scaled up as a quiet flourish on pages that aren't about live
    hours (HourPulse is for those; this is for everywhere else). */

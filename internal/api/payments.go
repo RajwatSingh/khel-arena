@@ -81,15 +81,21 @@ func (s *Server) handleCreateCheckout(w http.ResponseWriter, r *http.Request) {
 // It redirects rather than returning JSON because a person is looking at it:
 // the gateway sent a browser here, not a client library.
 func (s *Server) handlePaymentCallback(w http.ResponseWriter, r *http.Request) {
+	// Every exit redirects. The gateway sent a person here, and a JSON error
+	// would leave them on a bare API page with no way back into the site.
 	provider := domain.PaymentProvider(r.PathValue("provider"))
 	if !provider.Valid() {
-		writeError(w, r, domain.Invalid("provider", "We don't take payment through that."))
+		s.redirectAfterPayment(w, r, uuid.Nil, "failed")
 		return
 	}
 
+	// No transaction to look up. eSewa sends a cancelled or failed payment
+	// back with no `data` at all, so this is the ordinary "didn't pay" path,
+	// not just a tampered link. The payment stays initiated and the player can
+	// try again while the hold lasts.
 	ref, err := payment.RefFromCallback(provider, r.URL.Query())
 	if err != nil {
-		writeError(w, r, err)
+		s.redirectAfterPayment(w, r, uuid.Nil, "failed")
 		return
 	}
 

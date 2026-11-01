@@ -1,4 +1,7 @@
 <script>
+	import { onMount } from 'svelte';
+	import { page } from '$app/state';
+	import { replaceState } from '$app/navigation';
 	import { api, ApiError } from '$lib/api/index.js';
 	import CentreMark from '$lib/components/CentreMark.svelte';
 	import TextAnimate from '$lib/components/TextAnimate.svelte';
@@ -8,6 +11,25 @@
 	import { ONLINE_PROVIDERS, notSetUpMessage } from '$lib/payments.js';
 
 	const ticking = clock();
+
+	// Where a gateway sends the player back: the API checks the payment with
+	// eSewa or Khalti, then redirects here with ?payment=paid|failed and, when
+	// it knows it, ?booking=<id>. Read once, then dropped from the address bar
+	// so a refresh doesn't announce the same payment again.
+	const PAYMENT_OUTCOMES = {
+		paid: { tone: 'ok', text: 'Payment received. Your booking is confirmed.' },
+		failed: {
+			tone: 'bad',
+			text: "The payment didn't go through. If your hold still has time on it, you can try again."
+		}
+	};
+	const paymentOutcome = PAYMENT_OUTCOMES[page.url.searchParams.get('payment')] ?? null;
+	const paidBookingId =
+		page.url.searchParams.get('payment') === 'paid' ? page.url.searchParams.get('booking') : null;
+
+	onMount(() => {
+		if (page.url.searchParams.has('payment')) replaceState('/bookings', {});
+	});
 
 	let version = $state(0);
 	let error = $state(null);
@@ -166,6 +188,10 @@
 
 <section class="body">
 	<div class="shell">
+		{#if paymentOutcome}
+			<p class="outcome {paymentOutcome.tone}" role="status">{paymentOutcome.text}</p>
+		{/if}
+
 		{#if !session.signedIn}
 			<div class="notice fade-up">
 				<h2 class="display display-m">Sign in to see your hours</h2>
@@ -194,7 +220,11 @@
 					{@const requested = awaitingVenue(booking)}
 					{@const available = providersByArena[booking.arena_id]}
 					{@const done = booking.status === 'cancelled' || booking.status === 'expired'}
-					<li class="row" class:done use:reveal={{ delay: Math.min(i, 6) * 60 }}>
+					<li
+						class="row"
+						class:done
+						class:just-paid={booking.id === paidBookingId}
+						use:reveal={{ delay: Math.min(i, 6) * 60 }}>
 						<div class="when">
 							<span class="time num">
 								{formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}
@@ -410,6 +440,28 @@
 		color: var(--brick);
 		font-size: 0.9375rem;
 		line-height: 1.5;
+	}
+
+	.outcome {
+		margin-bottom: 1.25rem;
+		padding: 0.85rem 1.1rem;
+		border-radius: var(--r-sm);
+		font-size: 0.9375rem;
+		font-weight: 600;
+	}
+
+	.outcome.ok {
+		background: var(--pine-wash);
+		color: var(--pine);
+	}
+
+	.outcome.bad {
+		background: var(--brick-wash);
+		color: var(--brick);
+	}
+
+	.row.just-paid {
+		background: var(--pine-wash);
 	}
 
 	.error {

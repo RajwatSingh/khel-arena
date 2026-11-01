@@ -234,24 +234,35 @@ func TestHandlePaymentCallback(t *testing.T) {
 		}
 	})
 
-	t.Run("an unknown provider is refused", func(t *testing.T) {
+	// Even refusals redirect: whoever lands here is a person in a browser,
+	// and a JSON error page would strand them outside the site.
+	t.Run("an unknown provider redirects as failed", func(t *testing.T) {
+		// settle is nil, so the fake fails the test if the handler calls it.
 		w := do(newCallbackServer(t, &fakePayments{}), http.MethodGet,
 			"/v1/payments/paypal/callback?data=x", "")
 
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("status = %d, want 400", w.Code)
+		if w.Code != http.StatusSeeOther {
+			t.Fatalf("status = %d, want 303", w.Code)
+		}
+		if location := w.Header().Get("Location"); location != appURL+"/bookings?payment=failed" {
+			t.Errorf("Location = %q", location)
 		}
 	})
 
-	t.Run("a callback naming no transaction never reaches the service", func(t *testing.T) {
-		// settle is nil, so the fake fails the test if the handler calls it.
-		w := do(newCallbackServer(t, &fakePayments{}), http.MethodGet,
-			"/v1/payments/esewa/callback", "")
+	// eSewa returns a cancelled or failed payment with no data at all.
+	for _, query := range []string{"", "?data=", "?data=not-base64"} {
+		t.Run("a callback naming no transaction redirects without reaching the service "+query, func(t *testing.T) {
+			w := do(newCallbackServer(t, &fakePayments{}), http.MethodGet,
+				"/v1/payments/esewa/callback"+query, "")
 
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("status = %d, want 400", w.Code)
-		}
-	})
+			if w.Code != http.StatusSeeOther {
+				t.Fatalf("status = %d (%s), want 303", w.Code, w.Body.String())
+			}
+			if location := w.Header().Get("Location"); location != appURL+"/bookings?payment=failed" {
+				t.Errorf("Location = %q", location)
+			}
+		})
+	}
 
 	// It has to be reachable without a token: the gateway redirects a browser
 	// that carries no Authorization header. Safe because nothing in the

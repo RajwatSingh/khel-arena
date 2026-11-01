@@ -45,6 +45,9 @@ type ArenaListing struct {
 type ArenaDetail struct {
 	domain.Arena
 	Courts []CourtWithRules
+	// Photos rides along so the arena page renders from one request instead
+	// of fetching the arena and then, once it knows the id, its gallery.
+	Photos []Photo
 }
 
 // CourtWithRules is a court and the rules that price it.
@@ -178,10 +181,18 @@ func (r *ArenaRepo) BySlug(ctx context.Context, slug string) (ArenaDetail, error
 		where a.slug = $1
 		order by p.priority desc`
 
+	const photosSQL = `
+		select p.id, p.arena_id, p.url, coalesce(p.caption, ''), p.sort_order
+		from arena_photos p
+		join arenas a on a.id = p.arena_id
+		where a.slug = $1
+		order by p.sort_order, p.created_at desc`
+
 	batch := &pgx.Batch{}
 	batch.Queue(arenaSQL, slug)
 	batch.Queue(courtsSQL, slug)
 	batch.Queue(rulesSQL, slug)
+	batch.Queue(photosSQL, slug)
 
 	results := r.pool.SendBatch(ctx, batch)
 	defer results.Close()
@@ -228,11 +239,11 @@ func (r *ArenaRepo) BySlug(ctx context.Context, slug string) (ArenaDetail, error
 	if err != nil {
 		return ArenaDetail{}, domain.Internal(err, "loading pricing rules for arena %q", slug)
 	}
-	defer ruleRows.Close()
 
 	for ruleRows.Next() {
 		rule, err := scanPricingRule(ruleRows)
 		if err != nil {
+			ruleRows.Close()
 			return ArenaDetail{}, err
 		}
 		if i, ok := byID[rule.CourtID]; ok {
@@ -240,10 +251,30 @@ func (r *ArenaRepo) BySlug(ctx context.Context, slug string) (ArenaDetail, error
 		}
 	}
 	if err := ruleRows.Err(); err != nil {
+		ruleRows.Close()
 		return ArenaDetail{}, domain.Internal(err, "loading pricing rules for arena %q", slug)
 	}
+	ruleRows.Close()
 
-	return ArenaDetail{Arena: arena, Courts: courts}, nil
+	photoRows, err := results.Query()
+	if err != nil {
+		return ArenaDetail{}, domain.Internal(err, "loading photos for arena %q", slug)
+	}
+	defer photoRows.Close()
+
+	var photos []Photo
+	for photoRows.Next() {
+		var p Photo
+		if err := photoRows.Scan(&p.ID, &p.ArenaID, &p.URL, &p.Caption, &p.SortOrder); err != nil {
+			return ArenaDetail{}, domain.Internal(err, "scanning photo")
+		}
+		photos = append(photos, p)
+	}
+	if err := photoRows.Err(); err != nil {
+		return ArenaDetail{}, domain.Internal(err, "loading photos for arena %q", slug)
+	}
+
+	return ArenaDetail{Arena: arena, Courts: courts, Photos: photos}, nil
 }
 
 // ListAreas returns the neighbourhoods that currently have an active court, so

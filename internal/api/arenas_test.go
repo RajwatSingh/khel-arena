@@ -188,6 +188,33 @@ func TestHandleGetArena(t *testing.T) {
 		}
 	})
 
+	t.Run("the gallery comes back with the arena", func(t *testing.T) {
+		photo := postgres.Photo{ID: uuid.New(), URL: "https://example.test/pitch.jpg", Caption: "Covered court"}
+		arenas := &fakeArenas{bySlug: func(context.Context, string) (postgres.ArenaDetail, error) {
+			return postgres.ArenaDetail{Arena: testArena(), Photos: []postgres.Photo{photo}}, nil
+		}}
+
+		w := do(newTestServer(t, nil, nil, nil, withArenas(arenas)), http.MethodGet, "/v1/arenas/dhuku-futsal", "")
+
+		var got arenaDetailDTO
+		_ = json.Unmarshal(w.Body.Bytes(), &got)
+		if len(got.Photos) != 1 || got.Photos[0].Caption != "Covered court" {
+			t.Errorf("photos = %+v, want the one photo", got.Photos)
+		}
+	})
+
+	t.Run("no photos is an empty list, not null", func(t *testing.T) {
+		arenas := &fakeArenas{bySlug: func(context.Context, string) (postgres.ArenaDetail, error) {
+			return postgres.ArenaDetail{Arena: testArena()}, nil
+		}}
+
+		w := do(newTestServer(t, nil, nil, nil, withArenas(arenas)), http.MethodGet, "/v1/arenas/dhuku-futsal", "")
+
+		if !strings.Contains(w.Body.String(), `"photos":[]`) {
+			t.Errorf("body = %s, want \"photos\":[]", w.Body.String())
+		}
+	})
+
 	t.Run("an unknown slug is a 404", func(t *testing.T) {
 		arenas := &fakeArenas{bySlug: func(context.Context, string) (postgres.ArenaDetail, error) {
 			return postgres.ArenaDetail{}, domain.NotFound("No arena at that address.")

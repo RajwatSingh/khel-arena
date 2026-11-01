@@ -337,6 +337,7 @@ type arenaListingDTO struct {
 type arenaDetailDTO struct {
 	arenaDTO
 	Courts []courtDTO `json:"courts"`
+	Photos []photoDTO `json:"photos"`
 }
 
 type courtDTO struct {
@@ -436,7 +437,11 @@ func arenaDetailDTOFromDomain(d postgres.ArenaDetail) arenaDetailDTO {
 	for _, c := range d.Courts {
 		courts = append(courts, courtDTOFromDomain(c))
 	}
-	return arenaDetailDTO{arenaDTO: arenaDTOFromDomain(d.Arena), Courts: courts}
+	return arenaDetailDTO{
+		arenaDTO: arenaDTOFromDomain(d.Arena),
+		Courts:   courts,
+		Photos:   photoDTOsFromDomain(d.Photos),
+	}
 }
 
 func courtDTOFromDomain(c postgres.CourtWithRules) courtDTO {

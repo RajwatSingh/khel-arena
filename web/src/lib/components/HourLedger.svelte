@@ -45,6 +45,50 @@
 		return `/arenas/${row.arena_slug}?court=${row.court_id}&date=${ledger.date}&at=${encodeURIComponent(slot.starts_at)}`;
 	}
 
+	// Long boards open on the first few courts, with the next one peeking out
+	// under a fade, and expand to the rest. Not worth it for one extra row.
+	const LIMIT = 6;
+	const PEEK = 30;
+	const canExpand = $derived(byHour.length > LIMIT + 1);
+	let expanded = $state(false);
+	let fullHeight = $state(0);
+	let shortHeight = $state(0);
+	let wrapEl = $state();
+
+	// The height is animated between two measured numbers, since CSS can't
+	// transition to `auto`. Re-measured whenever the table changes size, so a
+	// narrower window or a new day's board keeps the numbers right.
+	function measure(table) {
+		const update = () => {
+			fullHeight = table.offsetHeight;
+			const row = table.tBodies[0]?.rows[LIMIT];
+			shortHeight = row ? Math.min(row.offsetTop + PEEK, fullHeight) : fullHeight;
+		};
+		const observer = new ResizeObserver(update);
+		observer.observe(table);
+		update();
+		return { destroy: () => observer.disconnect() };
+	}
+
+	// Open, the board keeps a strip of room under the last row for the
+	// button, which sits on the board's bottom edge.
+	const ROOM = 24;
+	const clipHeight = $derived(
+		!canExpand || !fullHeight ? null : expanded ? fullHeight + ROOM : shortHeight
+	);
+
+	function toggle() {
+		expanded = !expanded;
+		// Collapsing pulls the page up by the rows that just closed; if the
+		// top of the board has scrolled away, bring it back into view.
+		if (!expanded && wrapEl) {
+			const top = wrapEl.getBoundingClientRect().top;
+			if (top < 80) {
+				window.scrollTo({ top: window.scrollY + top - 96, behavior: 'smooth' });
+			}
+		}
+	}
+
 	// Day, sport and area all end up changing which courts are listed, when,
 	// or both — so one key covering court set + date is enough to catch a
 	// switch on any of the three and re-mount the whole board for it.
@@ -61,8 +105,20 @@
 	     what this lint rule assumes it is not. -->
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 	{#key boardKey}
-	<div class="card scroll" role="region" aria-label="Court availability by hour" tabindex="0">
-		<table>
+	<div class="board" class:collapsed={canExpand && !expanded} bind:this={wrapEl}>
+	<div
+		class="card scroll"
+		id="court-board"
+		role="region"
+		aria-label="Court availability by hour"
+		tabindex="0"
+	>
+		<div
+			class="clip"
+			class:measured={clipHeight !== null}
+			style:height={clipHeight === null ? null : `${clipHeight}px`}
+		>
+		<table use:measure>
 			<caption class="sr-only">
 				Free hours and the price per hour in Nepali rupees for every court, {ledger.date}
 			</caption>
@@ -76,7 +132,12 @@
 			</thead>
 			<tbody>
 				{#each byHour as { row, map }, r (`${row.court_id}:${ledger.date}`)}
-					<tr style="--row: {r}">
+					<tr
+						style="--row: {r}; --i: {r - LIMIT - 1}"
+						class:beyond={canExpand && r > LIMIT}
+						class:ssr-hidden={canExpand && r > LIMIT && !fullHeight}
+						inert={canExpand && !expanded && r >= LIMIT}
+					>
 						<th scope="row" class="side">
 							<a href="/arenas/{row.arena_slug}">
 								<MiddleTruncation class="venue" text={row.arena_name} />
@@ -113,8 +174,28 @@
 				{/each}
 			</tbody>
 		</table>
+		</div>
+	</div>
+	<div class="fade" aria-hidden="true"></div>
 	</div>
 	{/key}
+
+	{#if canExpand}
+		<div class="more">
+			<button
+				type="button"
+				class="expand"
+				aria-expanded={expanded}
+				aria-controls="court-board"
+				onclick={toggle}
+			>
+				<span>{expanded ? 'Show fewer courts' : `Show all ${byHour.length} courts`}</span>
+				<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+					<path d="M3.5 6l4.5 4.5L12.5 6" />
+				</svg>
+			</button>
+		</div>
+	{/if}
 
 	<ul class="key small">
 		<li><span class="chip free"></span>Free · price per hour, NPR</li>
@@ -126,6 +207,136 @@
 </div>
 
 <style>
+	/* --- expanding --- */
+
+	.board {
+		position: relative;
+		--expand-ease: cubic-bezier(0.32, 0.72, 0, 1);
+	}
+
+	.clip {
+		overflow-y: clip;
+	}
+
+	.clip.measured {
+		transition: height 0.7s var(--expand-ease);
+	}
+
+	.collapsed .clip.measured {
+		transition-duration: 0.5s;
+	}
+
+	/* Before the first measurement (server render) the rows past the peek
+	   simply aren't drawn, so the board never flashes open on load. */
+	tr.ssr-hidden {
+		display: none;
+	}
+
+	/* The rows that were out of sight rise in one after another as the
+	   board opens, and drop away together when it closes. */
+	tr.beyond {
+		transition:
+			opacity 0.45s var(--ease-reveal),
+			transform 0.55s var(--expand-ease),
+			filter 0.45s var(--ease-reveal);
+		transition-delay: calc(min(var(--i), 10) * 38ms + 60ms);
+	}
+
+	.collapsed tr.beyond {
+		opacity: 0;
+		transform: translateY(14px);
+		filter: blur(6px);
+		transition-duration: 0.25s;
+		transition-delay: 0s;
+	}
+
+	.fade {
+		position: absolute;
+		left: 1px;
+		right: 1px;
+		bottom: 1px;
+		height: 5.5rem;
+		border-radius: 0 0 var(--r-md) var(--r-md);
+		background: linear-gradient(
+			to bottom,
+			color-mix(in srgb, var(--surface) 0%, transparent),
+			var(--surface) 88%
+		);
+		pointer-events: none;
+		opacity: 0;
+		transition: opacity 0.4s var(--ease-reveal);
+	}
+
+	.collapsed .fade {
+		opacity: 1;
+		transition-delay: 0.15s;
+	}
+
+	.more {
+		display: flex;
+		justify-content: center;
+		margin-top: -1.35rem;
+		position: relative;
+		z-index: 3;
+	}
+
+	.expand {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.6rem 1.1rem 0.6rem 1.25rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-pill);
+		background: var(--surface);
+		box-shadow: var(--shadow);
+		font: inherit;
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--ink);
+		cursor: pointer;
+		transition:
+			border-color var(--dur-hover) var(--ease),
+			color var(--dur-hover) var(--ease),
+			transform 0.2s var(--ease);
+	}
+
+	.expand:hover {
+		border-color: var(--pine);
+		color: var(--pine-deep);
+		transform: translateY(-1px);
+	}
+
+	.expand:active {
+		transform: translateY(0) scale(0.97);
+	}
+
+	.expand:focus-visible {
+		outline: 2px solid var(--pine);
+		outline-offset: 2px;
+	}
+
+	.expand svg {
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.8;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		transition: transform 0.55s var(--expand-ease);
+	}
+
+	.expand[aria-expanded='true'] svg {
+		transform: rotate(180deg);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.clip.measured,
+		tr.beyond,
+		.fade,
+		.expand svg {
+			transition: none;
+		}
+	}
+
 	.done {
 		padding: 1.5rem 1.35rem;
 		color: var(--muted);

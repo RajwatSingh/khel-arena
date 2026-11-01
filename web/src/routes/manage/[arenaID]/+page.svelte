@@ -6,6 +6,8 @@
 	import TextAnimate from '$lib/components/TextAnimate.svelte';
 	import Field from '$lib/components/Field.svelte';
 	import CourtPanel from '$lib/components/CourtPanel.svelte';
+	import PaymentKeyForm from '$lib/components/PaymentKeyForm.svelte';
+	import PaymentKeyStatus from '$lib/components/PaymentKeyStatus.svelte';
 	import { formatDate, formatNPR, formatTime, localDate } from '$lib/time.js';
 
 	let { data } = $props();
@@ -116,41 +118,9 @@
 		Object.fromEntries((data.paymentAccounts ?? []).map((a) => [a.provider, a]))
 	);
 
-	function seedAccountForms(accounts) {
-		const byProvider = Object.fromEntries((accounts ?? []).map((a) => [a.provider, a]));
-		return Object.fromEntries(
-			PROVIDERS.map(([id]) => {
-				const a = byProvider[id];
-				return [
-					id,
-					{
-						secret_key: '',
-						merchant_code: a?.merchant_code ?? '',
-						live: a?.live ?? false,
-						enabled: a?.enabled ?? true
-					}
-				];
-			})
-		);
-	}
-
-	let acctForms = $state(untrack(() => seedAccountForms(data.paymentAccounts)));
-
-	async function saveAccount(provider) {
-		const f = acctForms[provider];
-		const ok = await act(() =>
-			api.setArenaPaymentAccount(arena.id, provider, {
-				secret_key: f.secret_key,
-				merchant_code: f.merchant_code,
-				live: f.live,
-				enabled: f.enabled
-			})
-		);
-		// The key is write-only; clear it so it is never left sitting in a field.
-		if (ok) acctForms[provider].secret_key = '';
-	}
-
-	const removeAccount = (provider) => act(() => api.removeArenaPaymentAccount(arena.id, provider));
+	// The provider whose key was saved in this visit, so its card can say so.
+	// Changing or removing a key afterwards happens on the Payment keys page.
+	let justActivated = $state(null);
 
 	async function upload(event) {
 		event.preventDefault();
@@ -327,64 +297,29 @@
 		</p>
 		<ul class="accounts">
 			{#each PROVIDERS as [id, label] (id)}
-				{@const live = accountByProvider[id]}
+				{@const saved = accountByProvider[id]}
 				<li class="account card">
 					<div class="account-head">
 						<h3 class="display display-m">{label}</h3>
-						{#if live}
-							<span class="chip" class:paid={live.enabled}>
-								{live.enabled ? 'accepting' : 'paused'} · {live.live ? 'live' : 'test'} · key {live.secret_hint}
-							</span>
-						{:else}
-							<span class="chip">not set up</span>
-						{/if}
+						{#if !saved}<span class="chip">not set up</span>{/if}
 					</div>
 
-					<Field
-						name="{id}-secret"
-						label="Secret key"
-						type="password"
-						bind:value={acctForms[id].secret_key}
-						hint={live
-							? 'Re-enter the key to save any change.'
-							: `From your ${label} merchant dashboard.`}
-						autocomplete="off"
-					/>
-					{#if id === 'esewa'}
-						<Field
-							name="esewa-merchant"
-							label="Merchant (product) code"
-							bind:value={acctForms[id].merchant_code}
-							hint="“EPAYTEST” on the sandbox; your real code in production."
+					{#if saved}
+						<PaymentKeyStatus {label} account={saved} fresh={justActivated === id} />
+						<p class="small quiet change-note">
+							To change or remove this key, open
+							<a class="link" href="/payment-keys#venue-{arena.id}">Payment keys</a> from your
+							profile menu.
+						</p>
+					{:else}
+						<PaymentKeyForm
+							arenaId={arena.id}
+							provider={id}
+							{label}
+							submitLabel="Activate {label}"
+							onsaved={(p) => (justActivated = p)}
 						/>
 					{/if}
-
-					<div class="toggles">
-						<label class="toggle">
-							<input type="checkbox" bind:checked={acctForms[id].live} />
-							Live account (unchecked talks to the {label} sandbox)
-						</label>
-						<label class="toggle">
-							<input type="checkbox" bind:checked={acctForms[id].enabled} />
-							Offer this to players
-						</label>
-					</div>
-
-					<div class="account-acts">
-						<button
-							class="btn btn-primary"
-							class:loading={busy}
-							disabled={busy}
-							onclick={() => saveAccount(id)}
-						>
-							{live ? 'Save' : 'Connect'}
-						</button>
-						{#if live}
-							<button class="btn btn-secondary" disabled={busy} onclick={() => removeAccount(id)}>
-								Remove
-							</button>
-						{/if}
-					</div>
 				</li>
 			{/each}
 		</ul>
@@ -589,26 +524,7 @@
 
 	.account-head h3 { margin: 0; }
 
-	.toggles {
-		display: grid;
-		gap: 0.5rem;
-	}
-
-	.toggle {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.5rem;
-		font-size: 0.9rem;
-		color: var(--muted);
-		cursor: pointer;
-	}
-
-	.toggle input { margin-top: 0.15rem; flex: none; }
-
-	.account-acts {
-		display: flex;
-		gap: 0.6rem;
-	}
+	.change-note { margin: 0; }
 
 	.ledger { margin-top: 1.25rem; }
 	.ledger summary { cursor: pointer; color: var(--faint); }

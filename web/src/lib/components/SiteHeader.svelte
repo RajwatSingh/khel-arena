@@ -155,6 +155,9 @@
 							</div>
 							<div class="actions">
 								<a href="/players/{user.username}">View profile</a>
+								{#if isOwner}
+									<a href="/payment-keys">Payment keys</a>
+								{/if}
 								<button class="signout" onclick={signOut}>Sign out</button>
 							</div>
 						</div>

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,7 +25,16 @@ func NewPaymentRepo(pool *pgxpool.Pool, bookings *BookingRepo) *PaymentRepo {
 const paymentColumns = `
 	id, booking_id, provider, amount_npr, status,
 	transaction_uuid, coalesce(provider_ref, ''), raw_response,
-	created_at, updated_at, verified_at`
+	created_at, updated_at, verified_at,
+	refund_due_at, coalesce(refund_reason, ''), refunded_at`
+
+// paymentColumnsP is paymentColumns for queries that alias payments as p.
+// Keep the two in step: scanPayment reads either.
+const paymentColumnsP = `
+	p.id, p.booking_id, p.provider, p.amount_npr, p.status,
+	p.transaction_uuid, coalesce(p.provider_ref, ''), p.raw_response,
+	p.created_at, p.updated_at, p.verified_at,
+	p.refund_due_at, coalesce(p.refund_reason, ''), p.refunded_at`
 
 func scanPayment(row pgx.Row) (domain.Payment, error) {
 	var (
@@ -33,7 +43,8 @@ func scanPayment(row pgx.Row) (domain.Payment, error) {
 	)
 	err := row.Scan(&p.ID, &p.BookingID, &p.Provider, &p.AmountNPR, &p.Status,
 		&p.TransactionUUID, &p.ProviderRef, &raw,
-		&p.CreatedAt, &p.UpdatedAt, &p.VerifiedAt)
+		&p.CreatedAt, &p.UpdatedAt, &p.VerifiedAt,
+		&p.RefundDueAt, &p.RefundReason, &p.RefundedAt)
 	if err != nil {
 		return domain.Payment{}, err
 	}
@@ -103,22 +114,29 @@ func (r *PaymentRepo) LatestForBooking(ctx context.Context, bookingID uuid.UUID)
 	return p, nil
 }
 
-// Settle writes the outcome of a verified payment and, when it succeeded,
-// confirms the booking -- both in one transaction.
+// Settle writes what the gateway said about a payment and, when the money
+// moved, confirms the booking it was for -- in one transaction.
 //
-// The atomicity is the whole point. A payment recorded as verified while its
-// booking stays pending is a player who has been charged and whose hour will
-// be released by the janitor fifteen minutes later; a booking confirmed
-// against a payment we failed to record is an hour given away for free. There
-// is no ordering of two separate writes that avoids both, so they are one
-// write.
+// The atomicity is the point. A payment recorded as verified while its
+// booking stays pending is a player charged for an hour the janitor will
+// release; a booking confirmed against a payment we failed to record is an
+// hour given away. So both are one write.
+//
+// A verified payment is always written, with the gateway's raw response.
+// Money that moved is a fact we must keep whatever state the booking is in.
+// When the booking can't take it (cancelled or lapsed while the player was
+// on the gateway, or already paid another way), the payment is kept as
+// verified and flagged for the venue to refund, instead of the whole write
+// being rolled back and the evidence lost.
 //
 // The row is locked FOR UPDATE and re-read inside the transaction rather than
 // trusted from the caller's copy: gateways retry, and two callbacks for the
-// same payment can arrive at once. The second finds the status already
-// settled and does nothing.
-func (r *PaymentRepo) Settle(ctx context.Context, p domain.Payment, confirmBooking bool) error {
-	return InTx(ctx, r.pool, func(tx pgx.Tx) error {
+// same payment can arrive at once. The second finds it final and does
+// nothing. The stored row is returned.
+func (r *PaymentRepo) Settle(ctx context.Context, p domain.Payment) (domain.Payment, error) {
+	var out domain.Payment
+
+	err := InTx(ctx, r.pool, func(tx pgx.Tx) error {
 		const lockSQL = `select status from payments where id = $1 for update`
 
 		var current domain.PaymentStatus
@@ -128,29 +146,137 @@ func (r *PaymentRepo) Settle(ctx context.Context, p domain.Payment, confirmBooki
 			}
 			return domain.Internal(err, "locking payment %s", p.ID)
 		}
-		if current.IsSettled() {
-			// A concurrent callback got here first. Its outcome stands.
+
+		reread := func() error {
+			const q = `select ` + paymentColumns + ` from payments where id = $1`
+			stored, err := scanPayment(tx.QueryRow(ctx, q, p.ID))
+			if err != nil {
+				return domain.Internal(err, "reading payment %s", p.ID)
+			}
+			out = stored
 			return nil
 		}
-
-		const updateSQL = `
-			update payments
-			   set status = $2, provider_ref = $3, raw_response = $4, verified_at = $5
-			 where id = $1`
 
 		var raw any
 		if len(p.RawResponse) > 0 {
 			raw = string(p.RawResponse)
 		}
-		if _, err := tx.Exec(ctx, updateSQL, p.ID, p.Status, p.ProviderRef, raw, p.VerifiedAt); err != nil {
-			return domain.Internal(err, "settling payment %s", p.ID)
+
+		switch {
+		case current.IsFinal():
+			// A concurrent callback got here first. Its outcome stands.
+			return reread()
+
+		case p.Status != domain.PaymentVerified:
+			// No money moved. Record the first answer; a repeat "not yet" on
+			// a payment already failed changes nothing.
+			if current == domain.PaymentFailed {
+				return reread()
+			}
+			const failSQL = `
+				update payments
+				   set status = $2, provider_ref = nullif($3, ''), raw_response = $4
+				 where id = $1`
+			if _, err := tx.Exec(ctx, failSQL, p.ID, p.Status, p.ProviderRef, raw); err != nil {
+				return domain.Internal(err, "recording failed payment %s", p.ID)
+			}
+			return reread()
 		}
 
-		if !confirmBooking {
-			return nil
+		refundReason, err := r.applyToBooking(ctx, tx, p)
+		if err != nil {
+			return err
 		}
-		return r.bookings.Confirm(ctx, tx, p.BookingID)
+
+		const verifySQL = `
+			update payments
+			   set status = 'verified', provider_ref = nullif($2, ''), raw_response = $3,
+			       verified_at = $4,
+			       refund_due_at = case when $5 <> '' then now() end,
+			       refund_reason = nullif($5, '')
+			 where id = $1`
+		if _, err := tx.Exec(ctx, verifySQL, p.ID, p.ProviderRef, raw, p.VerifiedAt, refundReason); err != nil {
+			return domain.Internal(err, "settling payment %s", p.ID)
+		}
+		return reread()
 	})
+
+	return out, err
+}
+
+// applyToBooking puts a verified payment towards its booking, and says why
+// not -- as a refund reason -- when the booking can't take it.
+func (r *PaymentRepo) applyToBooking(ctx context.Context, tx pgx.Tx, p domain.Payment) (string, error) {
+	// Locked so the janitor or the player can't cancel it underneath us.
+	const bookingSQL = `select status from bookings where id = $1 for update`
+	var status domain.BookingStatus
+	if err := tx.QueryRow(ctx, bookingSQL, p.BookingID).Scan(&status); err != nil {
+		return "", domain.Internal(err, "locking booking %s", p.BookingID)
+	}
+
+	const paidSQL = `
+		select exists (
+			select 1 from payments
+			 where booking_id = $1 and id <> $2
+			   and status = 'verified' and refund_due_at is null)`
+	var alreadyPaid bool
+	if err := tx.QueryRow(ctx, paidSQL, p.BookingID, p.ID).Scan(&alreadyPaid); err != nil {
+		return "", domain.Internal(err, "checking earlier payments for booking %s", p.BookingID)
+	}
+
+	switch {
+	case alreadyPaid:
+		return "This booking had already been paid for.", nil
+
+	case status == domain.BookingPending:
+		return "", r.bookings.Confirm(ctx, tx, p.BookingID)
+
+	case status == domain.BookingConfirmed || status == domain.BookingCompleted:
+		// Booked to pay cash, then paid online after all. The online payment
+		// is the payment; the venue must not also collect cash for it.
+		const closeCashSQL = `
+			update payments set status = 'failed'
+			 where booking_id = $1 and provider = 'cash' and status = 'initiated'`
+		if _, err := tx.Exec(ctx, closeCashSQL, p.BookingID); err != nil {
+			return "", domain.Internal(err, "closing cash request for booking %s", p.BookingID)
+		}
+		return "", nil
+
+	default:
+		return fmt.Sprintf("The booking was %s before the payment completed.", bookingStatusWords(status)), nil
+	}
+}
+
+func bookingStatusWords(s domain.BookingStatus) string {
+	switch s {
+	case domain.BookingNoShow:
+		return "marked a no-show"
+	default:
+		return string(s)
+	}
+}
+
+// MarkRefundedOwnerScoped records that the venue has sent back a payment it
+// was flagged to refund. Only for the caller's own venue, and only once.
+func (r *PaymentRepo) MarkRefundedOwnerScoped(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error) {
+	const q = `
+		update payments p
+		   set refunded_at = now()
+		  from bookings b, courts c, arenas a
+		 where p.id = $1
+		   and b.id = p.booking_id and c.id = b.court_id and a.id = c.arena_id
+		   and a.owner_id = $2
+		   and p.refund_due_at is not null and p.refunded_at is null
+		returning ` + paymentColumnsP
+
+	out, err := scanPayment(r.pool.QueryRow(ctx, q, paymentID, ownerID))
+	if noRows(err) {
+		return domain.Payment{}, domain.NotFound("No refund owed at your venue with that id.")
+	}
+	if err != nil {
+		return domain.Payment{}, domain.Internal(err, "marking payment %s refunded", paymentID)
+	}
+	return out, nil
 }
 
 // BookCash books the hour for a player paying cash at the venue.
@@ -231,9 +357,7 @@ func (r *PaymentRepo) BookCash(ctx context.Context, p domain.Payment) (domain.Pa
 // or settle any booking at any venue.
 func lockOwnedCashPayment(ctx context.Context, tx pgx.Tx, paymentID, ownerID uuid.UUID) (domain.Payment, error) {
 	const lockSQL = `
-		select p.id, p.booking_id, p.provider, p.amount_npr, p.status,
-			p.transaction_uuid, coalesce(p.provider_ref, ''), p.raw_response,
-			p.created_at, p.updated_at, p.verified_at
+		select ` + paymentColumnsP + `
 		from payments p
 		join bookings b on b.id = p.booking_id
 		join courts  c on c.id = b.court_id
@@ -431,6 +555,7 @@ func (r *PaymentRepo) ListForArenaOwner(ctx context.Context, arenaID, ownerID uu
 		select p.id, p.booking_id, p.provider, p.amount_npr, p.status,
 			p.transaction_uuid, coalesce(p.provider_ref, ''), p.raw_response,
 			p.created_at, p.updated_at, p.verified_at,
+			p.refund_due_at, coalesce(p.refund_reason, ''), p.refunded_at,
 			b.slot, b.status, c.label, u.full_name, u.username
 		from payments p
 		join bookings b on b.id = p.booking_id
@@ -457,6 +582,7 @@ func (r *PaymentRepo) ListForArenaOwner(ctx context.Context, arenaID, ownerID uu
 		err := rows.Scan(&op.ID, &op.BookingID, &op.Provider, &op.AmountNPR, &op.Status,
 			&op.TransactionUUID, &op.ProviderRef, &raw,
 			&op.CreatedAt, &op.UpdatedAt, &op.VerifiedAt,
+			&op.RefundDueAt, &op.RefundReason, &op.RefundedAt,
 			&slot, &op.BookingStatus, &op.CourtLabel, &op.PlayerName, &op.PlayerUsername)
 		if err != nil {
 			return nil, domain.Internal(err, "scanning owner payment")

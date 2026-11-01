@@ -101,10 +101,20 @@ func (p PaymentStatus) Validate() error {
 	return validateEnum("status", string(p), paymentStatuses)
 }
 
-// IsSettled reports whether the payment has reached a state the gateway will
-// not move it out of. A settled payment ignores late duplicate callbacks.
+// IsSettled reports whether a payment is no longer in progress. Cash uses
+// this: a declined cash request is as finished as a collected one.
 func (p PaymentStatus) IsSettled() bool {
 	return p == PaymentVerified || p == PaymentFailed || p == PaymentRefunded
+}
+
+// IsFinal reports whether a gateway payment can no longer change.
+//
+// `failed` is deliberately not final. We mark an intent failed ourselves when
+// its hold lapses or the player cancels, and a gateway can answer "pending"
+// before it answers "complete". If the gateway later says the money moved,
+// that has to be recorded, so a failed payment is still asked about.
+func (p PaymentStatus) IsFinal() bool {
+	return p == PaymentVerified || p == PaymentRefunded
 }
 
 // ---------------------------------------------------------------------------

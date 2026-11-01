@@ -25,6 +25,12 @@
 			// Also what a cancel looks like: eSewa returns a cancelled and a
 			// failed payment the same way, so this can't tell them apart.
 			text: "Payment cancelled or didn't go through. If your hold still has time on it, you can try again."
+		},
+		// The money moved, but the booking couldn't take it: it was cancelled
+		// or lapsed while the player was paying, or was already paid.
+		refund: {
+			tone: 'bad',
+			text: "Your payment went through, but this booking couldn't take it: it was cancelled or had already been paid. The venue owes you a refund. Contact them if you don't hear back."
 		}
 	};
 	const paymentOutcome = PAYMENT_OUTCOMES[page.url.searchParams.get('payment')] ?? null;
@@ -327,6 +333,10 @@
 								</span>
 							{:else if booking.status === 'confirmed'}
 								<span class="note num">{booking.reference}</span>
+							{:else if booking.refund_status === 'owed'}
+								<span class="note refund">Paid after it was cancelled · refund owed</span>
+							{:else if booking.refund_status === 'refunded'}
+								<span class="note">Refunded by the venue</span>
 							{:else if booking.status === 'cancelled' && booking.cancel_reason}
 								<span class="note reason">“{booking.cancel_reason}”</span>
 							{/if}
@@ -371,6 +381,14 @@
 								{/if}
 							{/if}
 						</div>
+
+						{#if booking.refund_status === 'owed'}
+							<p class="row-notice">
+								Your payment arrived after this booking had been cancelled, so {booking.arena_name}
+								owes you a refund. Contact them{booking.arena_phone ? ` on ${booking.arena_phone}` : ''}
+								if you don't hear back.
+							</p>
+						{/if}
 
 						{#if booking.status === 'confirmed' && booking.paid_online}
 							<p class="row-notice paid-note">
@@ -597,6 +615,7 @@
 	}
 
 	.note.reason { font-style: italic; }
+	.note.refund { color: var(--brick); font-weight: 600; }
 
 	/* Information, not an error: quieter than the red row notice. */
 	.row-notice.paid-note {

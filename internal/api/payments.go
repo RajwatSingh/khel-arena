@@ -113,7 +113,12 @@ func (s *Server) handlePaymentCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	outcome := "failed"
-	if settled.Status == domain.PaymentVerified {
+	switch {
+	case settled.Status == domain.PaymentVerified && settled.RefundDueAt != nil:
+		// The money moved, but the booking couldn't take it: the player
+		// needs to hear that the venue owes them a refund.
+		outcome = "refund"
+	case settled.Status == domain.PaymentVerified:
 		outcome = "paid"
 	}
 	s.redirectAfterPayment(w, r, settled.BookingID, outcome)

@@ -169,6 +169,10 @@ type BookingDetail struct {
 	ArenaPhone string
 	// CancelReason is what the player said when they cancelled.
 	CancelReason string
+	// RefundStatus is "owed" when the player paid online for this booking
+	// after it could no longer take the money, "refunded" once the venue has
+	// sent it back, and empty otherwise.
+	RefundStatus string
 }
 
 // ---------------------------------------------------------------------------

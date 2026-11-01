@@ -112,6 +112,13 @@
 
 	const received = (payment) => act(() => api.markCashReceived(payment.id));
 
+	// Online payments that arrived for a booking which couldn't take them.
+	// The money is in the venue's account; the venue sends it back by hand.
+	const refundsOwed = $derived(
+		data.payments.filter((p) => p.refund_due_at && !p.refunded_at)
+	);
+	const markRefunded = (payment) => act(() => api.markRefunded(payment.id));
+
 	// Cancellations: why each player cancelled, and the points a late one
 	// cost them, which the venue can give back if the player asks. The first
 	// few are shown; the rest fold away.
@@ -260,6 +267,35 @@
 								Decline
 							</button>
 						</div>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+
+		{#if refundsOwed.length}
+			<h2 class="display display-m">Refunds owed</h2>
+			<p class="small quiet">
+				These players paid online, but the money arrived after the booking had been cancelled, or for
+				a booking already paid. It's in your eSewa or Khalti account. Send it back, then mark it
+				refunded.
+			</p>
+			<ul class="till">
+				{#each refundsOwed as payment (payment.id)}
+					<li class="owed">
+						<div class="what">
+							<strong>{payment.player_name || payment.player_username}</strong>
+							<span class="small">
+								{payment.court_name} · {formatDate(localDate(new Date(payment.starts_at)))}
+								{formatTime(payment.starts_at)} · paid with {payment.provider}
+							</span>
+							{#if payment.refund_reason}
+								<span class="small">{payment.refund_reason}</span>
+							{/if}
+						</div>
+						<span class="amount num">{formatNPR(payment.amount_npr)}</span>
+						<button class="btn btn-primary" disabled={busy} onclick={() => markRefunded(payment)}>
+							Mark refunded
+						</button>
 					</li>
 				{/each}
 			</ul>
@@ -632,6 +668,7 @@
 
 	.chip.paid { background: var(--pine-wash); color: var(--pine-deep); }
 	.chip.late { background: var(--brick-wash); color: var(--brick); }
+	.till li.owed { border-color: var(--brick); }
 
 	.player { font-weight: 600; color: inherit; text-decoration: none; }
 	.player:hover { color: var(--pine-deep); }

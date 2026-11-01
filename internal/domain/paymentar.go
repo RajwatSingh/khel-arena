@@ -25,7 +25,18 @@ type Payment struct {
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 	VerifiedAt *time.Time
+
+	// RefundDueAt is set when a verified payment arrived for a booking that
+	// couldn't take it (cancelled, lapsed, or already paid), so the venue has
+	// to send the money back by hand. RefundReason says why. RefundedAt is the
+	// venue saying it has.
+	RefundDueAt  *time.Time
+	RefundReason string
+	RefundedAt   *time.Time
 }
+
+// RefundOwed reports whether the venue still has to send this money back.
+func (p Payment) RefundOwed() bool { return p.RefundDueAt != nil && p.RefundedAt == nil }
 
 // GatewayResult is what a provider adapter reports back after verifying a
 // callback. Adapters live outside this package; this is the shape they must
@@ -50,9 +61,10 @@ type GatewayResult struct {
 // was paid against what was owed, someone can pay NPR 1 for an NPR 2,000
 // court and present a genuine, correctly signed confirmation.
 func (p *Payment) Verify(result GatewayResult, now time.Time) (confirmBooking bool, err error) {
-	// A settled payment ignores late or duplicate callbacks. Gateways retry,
+	// A verified payment ignores late or duplicate callbacks. Gateways retry,
 	// and a player can refresh the redirect; neither should change anything.
-	if p.Status.IsSettled() {
+	// A failed one is still open to a later "complete": see IsFinal.
+	if p.Status.IsFinal() {
 		return false, nil
 	}
 

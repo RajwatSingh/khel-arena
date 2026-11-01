@@ -52,6 +52,9 @@ func TestOwnerRoutesAllRequireASession(t *testing.T) {
 		cancellations: func(context.Context, uuid.UUID, uuid.UUID, int) ([]domain.Cancellation, error) {
 			return nil, nil
 		},
+		markRefunded: func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error) {
+			return domain.Payment{}, nil
+		},
 		restoreScore: func(context.Context, uuid.UUID, uuid.UUID) (domain.Cancellation, error) {
 			return domain.Cancellation{}, nil
 		},
@@ -82,6 +85,7 @@ func TestOwnerRoutesAllRequireASession(t *testing.T) {
 		{http.MethodPut, arena + "/payment-accounts/esewa", `{"secret_key":"k","merchant_code":"EPAYTEST","live":false,"enabled":true}`},
 		{http.MethodDelete, arena + "/payment-accounts/esewa", ""},
 		{http.MethodGet, arena + "/cancellations", ""},
+		{http.MethodPost, "/v1/owner/payments/" + testPaymentID.String() + "/refunded", ""},
 		{http.MethodPost, "/v1/owner/cancellations/" + testBookingID.String() + "/restore-score", ""},
 	}
 

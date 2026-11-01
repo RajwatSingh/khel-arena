@@ -77,11 +77,13 @@ func (s *stubPayments) BookCash(_ context.Context, p domain.Payment) (domain.Pay
 	return p, nil
 }
 
-func (s *stubPayments) Settle(_ context.Context, p domain.Payment, confirmBooking bool) error {
+// Settle stands in for the repository, which confirms the booking whenever
+// the payment it is handed is verified.
+func (s *stubPayments) Settle(_ context.Context, p domain.Payment) (domain.Payment, error) {
 	s.settles++
 	s.settled = p
-	s.confirm = confirmBooking
-	return nil
+	s.confirm = p.Status == domain.PaymentVerified
+	return p, nil
 }
 
 type stubBookings struct {
@@ -484,4 +486,55 @@ func (cashOnlyResolver) ForCheckout(_ context.Context, _ uuid.UUID, provider dom
 
 func (cashOnlyResolver) ForSettlement(_ context.Context, p domain.Payment) (payment.Gateway, error) {
 	return cashOnlyResolver{}.ForCheckout(context.Background(), uuid.Nil, p.Provider)
+}
+
+// We may have marked an intent failed ourselves (its hold lapsed, or the
+// player cancelled) before the gateway says the money moved. That answer has
+// to be recorded, not ignored as "already settled".
+func TestSettleRecordsACompletePaymentThatWasMarkedFailed(t *testing.T) {
+	booking := heldBooking()
+	gw := &stubGateway{provider: domain.ProviderKhalti}
+	svc, payments := startedPayment(t, gw, booking)
+	payments.payment.Provider = domain.ProviderKhalti
+	payments.payment.Status = domain.PaymentFailed
+
+	gw.result = domain.GatewayResult{
+		Verified:        true,
+		TransactionUUID: payments.payment.TransactionUUID,
+		AmountNPR:       booking.PriceNPR,
+		ProviderRef:     "khalti-ref-1",
+		Raw:             []byte(`{"status":"Completed"}`),
+	}
+
+	ref := payment.CallbackRef{TransactionUUID: payments.payment.TransactionUUID}
+	settled, err := svc.Settle(context.Background(), domain.ProviderKhalti, ref)
+	if err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+	if settled.Status != domain.PaymentVerified || payments.settles != 1 {
+		t.Fatalf("status = %q after %d writes, want verified and written once", settled.Status, payments.settles)
+	}
+	if string(payments.settled.RawResponse) != `{"status":"Completed"}` {
+		t.Errorf("raw response = %q, want the gateway's evidence kept", payments.settled.RawResponse)
+	}
+}
+
+// Asking again about a failed payment that still hasn't completed writes
+// nothing: the first answer stands.
+func TestSettleLeavesAFailedPaymentAloneWhileStillIncomplete(t *testing.T) {
+	booking := heldBooking()
+	gw := &stubGateway{provider: domain.ProviderKhalti}
+	svc, payments := startedPayment(t, gw, booking)
+	payments.payment.Provider = domain.ProviderKhalti
+	payments.payment.Status = domain.PaymentFailed
+
+	gw.result = domain.GatewayResult{TransactionUUID: payments.payment.TransactionUUID}
+
+	ref := payment.CallbackRef{TransactionUUID: payments.payment.TransactionUUID}
+	if _, err := svc.Settle(context.Background(), domain.ProviderKhalti, ref); err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+	if payments.settles != 0 {
+		t.Errorf("settles = %d, want 0", payments.settles)
+	}
 }

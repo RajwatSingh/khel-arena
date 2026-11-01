@@ -583,7 +583,11 @@ func (r *BookingRepo) ListForUser(ctx context.Context, userID uuid.UUID, limit i
 			    and p.provider in ('esewa', 'khalti')
 			    and p.status = 'verified'
 			  limit 1) as paid_online,
-			coalesce(a.phone, ''), coalesce(b.cancel_reason, '')
+			coalesce(a.phone, ''), coalesce(b.cancel_reason, ''),
+			coalesce((select case when rp.refunded_at is not null then 'refunded' else 'owed' end
+			            from payments rp
+			           where rp.booking_id = b.id and rp.refund_due_at is not null
+			           order by rp.refund_due_at desc limit 1), '') as refund_status
 		from bookings b
 		join courts c on c.id = b.court_id
 		join arenas a on a.id = c.arena_id
@@ -615,7 +619,7 @@ func (r *BookingRepo) ListForUser(ctx context.Context, userID uuid.UUID, limit i
 			&d.Status, &d.Note, &holdExpires, &d.CreatedAt, &d.UpdatedAt,
 			&d.CourtLabel, &d.ArenaID, &d.ArenaName, &d.ArenaArea, &d.ArenaSlug,
 			&d.OpenToJoin, &d.PaymentProvider, &d.PaymentStatus,
-			&d.PaidOnline, &d.ArenaPhone, &d.CancelReason,
+			&d.PaidOnline, &d.ArenaPhone, &d.CancelReason, &d.RefundStatus,
 		)
 		if err != nil {
 			return nil, domain.Internal(err, "scanning booking row")

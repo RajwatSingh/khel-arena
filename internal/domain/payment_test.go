@@ -138,14 +138,34 @@ func TestPaymentVerifyIsIdempotentOnceSettled(t *testing.T) {
 		t.Error("a replay must not move the settlement time")
 	}
 
-	// A settled failure must not be revivable by a later "success" either.
+}
+
+// A failed payment is not final. We fail an intent ourselves when its hold
+// lapses or the player cancels, and a gateway can say "pending" before
+// "complete". When the gateway (asked server-to-server) later says the money
+// moved, that must be recorded. The amount check still applies.
+func TestPaymentVerifyRecordsALaterCompleteOnAFailedPayment(t *testing.T) {
+	now := time.Now().UTC()
+
 	failed := initiatedPayment(2000)
 	failed.Status = PaymentFailed
-	if confirm, _ := failed.Verify(good, now); confirm {
-		t.Error("a failed payment must not be confirmed by a later callback")
+	good := GatewayResult{Verified: true, TransactionUUID: failed.TransactionUUID, AmountNPR: 2000, Raw: []byte(`{}`)}
+	if confirm, err := failed.Verify(good, now); err != nil || !confirm {
+		t.Fatalf("confirm = %v, err = %v; want the late complete applied", confirm, err)
 	}
-	if failed.Status != PaymentFailed {
-		t.Errorf("status = %q, want it to stay %q", failed.Status, PaymentFailed)
+	if failed.Status != PaymentVerified || failed.VerifiedAt == nil {
+		t.Errorf("status = %q, verified_at = %v", failed.Status, failed.VerifiedAt)
+	}
+
+	// Still the wrong amount: still refused.
+	short := initiatedPayment(2000)
+	short.Status = PaymentFailed
+	underpaid := GatewayResult{Verified: true, TransactionUUID: short.TransactionUUID, AmountNPR: 20}
+	if _, err := short.Verify(underpaid, now); CodeOf(err) != CodeConflict {
+		t.Errorf("underpayment: code = %q, want conflict", CodeOf(err))
+	}
+	if short.Status != PaymentFailed {
+		t.Errorf("underpaid status = %q, want failed", short.Status)
 	}
 }
 

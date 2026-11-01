@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/RajwatSingh/khel-arena/internal/domain"
 	"github.com/RajwatSingh/khel-arena/internal/platform/payment"
@@ -173,6 +174,26 @@ func TestHandlePaymentCallback(t *testing.T) {
 		}
 		if !strings.Contains(location, "payment=paid") {
 			t.Errorf("Location = %q, want the outcome in the query", location)
+		}
+	})
+
+	// The money moved but the booking had been cancelled: the player hears
+	// that a refund is owed, not that the payment failed.
+	t.Run("a payment the booking couldn't take redirects as refund", func(t *testing.T) {
+		bookingID := uuid.New()
+		due := time.Now()
+		payments := &fakePayments{
+			settle: func(context.Context, domain.PaymentProvider, payment.CallbackRef) (domain.Payment, error) {
+				return domain.Payment{BookingID: bookingID, Status: domain.PaymentVerified, RefundDueAt: &due}, nil
+			},
+		}
+
+		w := do(newCallbackServer(t, payments), http.MethodGet,
+			"/v1/payments/esewa/callback"+esewaCallbackQuery("tx-1"), "")
+
+		location := w.Header().Get("Location")
+		if !strings.Contains(location, "payment=refund") || !strings.Contains(location, bookingID.String()) {
+			t.Errorf("Location = %q, want payment=refund for the booking", location)
 		}
 	})
 

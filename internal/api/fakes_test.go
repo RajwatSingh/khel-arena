@@ -440,6 +440,7 @@ type fakeOwner struct {
 	markCashReceived  func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
 	approveCash       func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
 	declineCash       func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
+	markRefunded      func(context.Context, uuid.UUID, uuid.UUID) (domain.Payment, error)
 	cancellations     func(context.Context, uuid.UUID, uuid.UUID, int) ([]domain.Cancellation, error)
 	restoreScore      func(context.Context, uuid.UUID, uuid.UUID) (domain.Cancellation, error)
 
@@ -528,6 +529,13 @@ func (f *fakeOwner) Payments(ctx context.Context, arenaID, ownerID uuid.UUID, li
 		f.unexpected("Payments")
 	}
 	return f.payments(ctx, arenaID, ownerID, limit)
+}
+
+func (f *fakeOwner) MarkRefunded(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error) {
+	if f.markRefunded == nil {
+		f.unexpected("MarkRefunded")
+	}
+	return f.markRefunded(ctx, paymentID, ownerID)
 }
 
 func (f *fakeOwner) Cancellations(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]domain.Cancellation, error) {

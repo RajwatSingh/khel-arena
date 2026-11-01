@@ -15,7 +15,10 @@ type PaymentStore interface {
 	ByTransactionUUID(ctx context.Context, transactionUUID string) (domain.Payment, error)
 	LatestForBooking(ctx context.Context, bookingID uuid.UUID) (domain.Payment, error)
 	// Settle writes the outcome and confirms the booking in one transaction.
-	Settle(ctx context.Context, p domain.Payment, confirmBooking bool) error
+	// Settle records the gateway's answer and returns the stored payment. A
+	// verified payment is always kept; one its booking can't take comes back
+	// flagged for a refund.
+	Settle(ctx context.Context, p domain.Payment) (domain.Payment, error)
 	// BookCash records a pay-at-the-venue payment and confirms the booking in
 	// one transaction. The payment stays initiated until the venue collects.
 	BookCash(ctx context.Context, p domain.Payment) (domain.Payment, error)
@@ -147,11 +150,18 @@ func (s *PaymentService) Settle(ctx context.Context, provider domain.PaymentProv
 		// started with.
 		return domain.Payment{}, domain.Invalid("provider", "That payment link doesn't match this payment.")
 	}
-	if p.Status.IsSettled() {
+	if p.Status.IsFinal() {
 		// Already done. Gateways retry and players refresh; neither should
 		// reach the gateway again or change anything.
 		return p, nil
 	}
+	if p.Provider == domain.ProviderCash {
+		// Cash is settled at the venue, never by a callback.
+		return domain.Payment{}, domain.Invalid("provider", "That payment link doesn't match this payment.")
+	}
+	// A failed payment is still asked about: the gateway may now say the
+	// money moved. See domain.PaymentStatus.IsFinal.
+	wasFailed := p.Status == domain.PaymentFailed
 
 	// The gateway is resolved from the payment's own arena, so verification
 	// goes back to the same merchant account the money went to.
@@ -165,19 +175,26 @@ func (s *PaymentService) Settle(ctx context.Context, provider domain.PaymentProv
 		return domain.Payment{}, err
 	}
 
-	confirmBooking, verifyErr := p.Verify(result, s.clock.Now())
+	_, verifyErr := p.Verify(result, s.clock.Now())
+
+	if wasFailed && p.Status != domain.PaymentVerified {
+		// Still no money. Nothing new to record.
+		return p, verifyErr
+	}
 
 	// The outcome is written even when Verify returned an error: a genuine
 	// confirmation for the wrong amount is exactly the case where the
 	// evidence must survive, and leaving the payment `initiated` would let the
-	// same callback be replayed.
-	if err := s.payments.Settle(ctx, p, confirmBooking); err != nil {
+	// same callback be replayed. A verified payment is written whatever state
+	// its booking is in; the repository flags it for a refund if need be.
+	stored, err := s.payments.Settle(ctx, p)
+	if err != nil {
 		return domain.Payment{}, err
 	}
 	if verifyErr != nil {
-		return p, verifyErr
+		return stored, verifyErr
 	}
-	return p, nil
+	return stored, nil
 }
 
 // Status reports the latest payment attempt on a booking the caller owns, for

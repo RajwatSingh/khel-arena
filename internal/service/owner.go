@@ -38,6 +38,7 @@ type OwnerPayments interface {
 	ApproveCashOwnerScoped(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
 	DeclineCashOwnerScoped(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
 	ListForArenaOwner(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]postgres.OwnerPayment, error)
+	MarkRefundedOwnerScoped(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
 }
 
 // OwnerCancellations is the venue's view of cancelled bookings, and the one
@@ -307,6 +308,15 @@ func (s *OwnerService) MarkCashReceived(ctx context.Context, paymentID, ownerID 
 		return domain.Payment{}, domain.Unauthenticated("Sign in to manage an arena.")
 	}
 	return s.payments.MarkCashReceivedOwnerScoped(ctx, paymentID, ownerID, s.clock.Now())
+}
+
+// MarkRefunded records that the venue has sent back an online payment that
+// arrived for a booking which couldn't take it.
+func (s *OwnerService) MarkRefunded(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error) {
+	if ownerID == uuid.Nil {
+		return domain.Payment{}, domain.Unauthenticated("Sign in to manage an arena.")
+	}
+	return s.payments.MarkRefundedOwnerScoped(ctx, paymentID, ownerID)
 }
 
 // ApproveCashBooking accepts a player's request to pay at the venue. The

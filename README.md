@@ -524,6 +524,14 @@ venue's first review can only come from its first paying customer, afterwards.
 like, but a posted review can only be deleted, never edited. Every review
 counts toward the arena's rating.
 
+**Money that moved is always recorded.** When eSewa or Khalti says COMPLETE,
+the verified payment and the gateway's raw response are written whatever
+state the booking is in. If the booking can't take it (cancelled or lapsed
+while the player was on the gateway, or already paid), the payment is kept
+and flagged for the venue to refund by hand, rather than the write being
+rolled back and the evidence lost. For the same reason a `failed` gateway
+payment is not final: a later COMPLETE still lands.
+
 **A dispute is a counter-report, not a rejection.** A captain who thinks the
 score is wrong files their version; `reported_by` moves to them, so the next
 confirmation has to come from the other side. Two people who keep disagreeing

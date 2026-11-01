@@ -200,6 +200,9 @@ type bookingDetailDTO struct {
 	PaidOnline   *domain.PaymentProvider `json:"paid_online,omitempty"`
 	ArenaPhone   string                  `json:"arena_phone"`
 	CancelReason string                  `json:"cancel_reason,omitempty"`
+	// RefundStatus is "owed" when the player paid online after the booking
+	// could no longer take it, "refunded" once the venue has sent it back.
+	RefundStatus string `json:"refund_status,omitempty"`
 }
 
 // cancellationDTO is a cancelled booking as its venue sees it.
@@ -342,6 +345,7 @@ func bookingDetailDTOFromDomain(b domain.BookingDetail) bookingDetailDTO {
 		PaidOnline:   b.PaidOnline,
 		ArenaPhone:   b.ArenaPhone,
 		CancelReason: b.CancelReason,
+		RefundStatus: b.RefundStatus,
 	}
 }
 
@@ -632,6 +636,12 @@ type paymentDTO struct {
 	Status     domain.PaymentStatus   `json:"status"`
 	CreatedAt  time.Time              `json:"created_at"`
 	VerifiedAt *time.Time             `json:"verified_at"`
+
+	// Set when the money arrived for a booking that couldn't take it, so the
+	// venue has to send it back by hand. RefundedAt is the venue saying it has.
+	RefundDueAt  *time.Time `json:"refund_due_at"`
+	RefundReason string     `json:"refund_reason,omitempty"`
+	RefundedAt   *time.Time `json:"refunded_at"`
 }
 
 func checkoutDTOFromDomain(c payment.Checkout, p domain.Payment) checkoutDTO {
@@ -654,6 +664,10 @@ func paymentDTOFromDomain(p domain.Payment) paymentDTO {
 		Status:     p.Status,
 		CreatedAt:  p.CreatedAt,
 		VerifiedAt: p.VerifiedAt,
+
+		RefundDueAt:  p.RefundDueAt,
+		RefundReason: p.RefundReason,
+		RefundedAt:   p.RefundedAt,
 	}
 }
 

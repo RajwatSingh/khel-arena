@@ -508,6 +508,30 @@ func (s *Server) handleMarkCashReceived(w http.ResponseWriter, r *http.Request) 
 	encode(w, http.StatusOK, paymentDTOFromDomain(settled))
 }
 
+// handleMarkRefunded — POST /v1/owner/payments/{paymentID}/refunded
+//
+// The venue says it has sent back a payment it was flagged to refund.
+func (s *Server) handleMarkRefunded(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := s.currentUser(w, r)
+	if !ok {
+		return
+	}
+
+	paymentID, err := uuid.Parse(r.PathValue("paymentID"))
+	if err != nil {
+		writeError(w, r, domain.Invalid("payment_id", "That isn't a payment."))
+		return
+	}
+
+	refunded, err := s.owner.MarkRefunded(r.Context(), paymentID, ownerID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	encode(w, http.StatusOK, paymentDTOFromDomain(refunded))
+}
+
 // handleApproveCashBooking — POST /v1/owner/payments/{paymentID}/approve
 //
 // The venue accepts a pay-at-the-venue request. The booking is confirmed; the

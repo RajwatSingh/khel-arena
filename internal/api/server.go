@@ -109,6 +109,8 @@ type OwnerAPI interface {
 	ApproveCashBooking(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
 	DeclineCashBooking(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
 
+	MarkRefunded(ctx context.Context, paymentID, ownerID uuid.UUID) (domain.Payment, error)
+
 	Cancellations(ctx context.Context, arenaID, ownerID uuid.UUID, limit int) ([]domain.Cancellation, error)
 	RestoreScore(ctx context.Context, bookingID, ownerID uuid.UUID) (domain.Cancellation, error)
 
@@ -424,6 +426,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("POST /v1/owner/courts/{courtID}/pricing/copy", protected(s.handleCopyPricingRules))
 	mux.Handle("DELETE /v1/owner/pricing/{ruleID}", protected(s.handleDeletePricingRule))
 	mux.Handle("POST /v1/owner/payments/{paymentID}/received", protected(s.handleMarkCashReceived))
+	mux.Handle("POST /v1/owner/payments/{paymentID}/refunded", protected(s.handleMarkRefunded))
 	mux.Handle("POST /v1/owner/payments/{paymentID}/approve", protected(s.handleApproveCashBooking))
 	mux.Handle("POST /v1/owner/payments/{paymentID}/decline", protected(s.handleDeclineCashBooking))
 

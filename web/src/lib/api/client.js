@@ -506,6 +506,11 @@ export const restoreScore = (bookingId, opts) =>
 		...opts
 	});
 
+/** The venue has sent back an online payment that arrived for a booking
+ *  which couldn't take it. */
+export const markRefunded = (paymentId, opts) =>
+	request(`/owner/payments/${paymentId}/refunded`, { method: 'POST', auth: true, ...opts });
+
 export const markCashReceived = (paymentId, opts) =>
 	request(`/owner/payments/${paymentId}/received`, { method: 'POST', auth: true, ...opts });
 

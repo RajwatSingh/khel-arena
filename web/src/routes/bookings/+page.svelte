@@ -20,7 +20,9 @@
 		paid: { tone: 'ok', text: 'Payment received. Your booking is confirmed.' },
 		failed: {
 			tone: 'bad',
-			text: "The payment didn't go through. If your hold still has time on it, you can try again."
+			// Also what a cancel looks like: eSewa returns a cancelled and a
+			// failed payment the same way, so this can't tell them apart.
+			text: "Payment cancelled or didn't go through. If your hold still has time on it, you can try again."
 		}
 	};
 	const paymentOutcome = PAYMENT_OUTCOMES[page.url.searchParams.get('payment')] ?? null;

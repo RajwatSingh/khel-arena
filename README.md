@@ -150,8 +150,16 @@ With the API up, `make web` serves the frontend on :5173 and proxies `/v1` to
 it, so both sides share an origin and the refresh cookie works as configured.
 `make seed` then creates two demo accounts (`rajwat@khelarena.np` and
 `owner@khelarena.np`, both `kathmandu2026`) and a bookable venue by calling the
-running API; it is idempotent and for development only. A quick check that it is
-alive:
+running API; it is idempotent and for development only.
+
+To try eSewa and Khalti locally, set `PAYMENT_ENC_KEY` in `.env`
+(`openssl rand -base64 32`), restart the API, and run `make seed-sandbox`. It
+connects both gateways' public sandbox accounts to every seeded venue, so a
+booking's "Pay with eSewa / Khalti" goes to their test servers. Pay with a test
+wallet: eSewa `9806800001` / `Nepal@123` / token `123456`, Khalti `9800000000`
+/ MPIN `1111` / OTP `987654`.
+
+A quick check that it is alive:
 
 ```sh
 curl -s localhost:8080/healthz

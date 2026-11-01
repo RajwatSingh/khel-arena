@@ -41,6 +41,10 @@ seed: ## Seed a running API with demo accounts + a venue (BASE_URL override)
 seed-futsals: ## Seed five real Nepali futsal venues with owners and photos (BASE_URL override)
 	@python3 scripts/seed-futsals.py
 
+.PHONY: seed-sandbox
+seed-sandbox: ## Connect eSewa + Khalti sandbox accounts to the seeded venues (local only)
+	@python3 scripts/seed-sandbox-payments.py
+
 # ── Test ────────────────────────────────────────────────────────────────────
 
 .PHONY: test

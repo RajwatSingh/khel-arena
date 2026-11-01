@@ -23,6 +23,7 @@
  */
 
 import { ApiError } from './errors.js';
+import { markLeftForGateway } from '../gatewayReturn.js';
 
 const BASE = '/v1';
 
@@ -611,6 +612,10 @@ export const paymentStatus = (bookingId, opts) =>
  * This navigates away, so it never returns.
  */
 export function redirectToGateway(checkout) {
+	// So that pressing Back on the gateway lands on /bookings, not on this
+	// page frozen mid-redirect. See $lib/gatewayReturn.js.
+	markLeftForGateway();
+
 	if (checkout.method === 'GET') {
 		window.location.assign(checkout.url);
 		return;

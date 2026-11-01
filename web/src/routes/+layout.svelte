@@ -4,8 +4,11 @@
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import AmbientLedger from '$lib/components/AmbientLedger.svelte';
 	import DotGridSpotlight from '$lib/components/DotGridSpotlight.svelte';
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { session } from '$lib/session.svelte.js';
 	import { haptic } from '$lib/haptic.js';
+	import { takeGatewayReturn } from '$lib/gatewayReturn.js';
 
 	let { children } = $props();
 
@@ -17,6 +20,30 @@
 		session.restore();
 	});
 
+	// A player who pressed Back on eSewa or Khalti goes to /bookings, where
+	// their hold shows with every way to pay and the option to cancel. See
+	// $lib/gatewayReturn.js for why the page they came from won't do.
+	//
+	// A gateway that finished sends them to /bookings anyway, through the
+	// payment callback; then the note is simply cleared.
+	function returnFromGateway(restoredFromCache) {
+		if (!takeGatewayReturn()) return;
+
+		if (restoredFromCache) {
+			// The page was frozen as it was left. A real load, not a client-side
+			// navigation, so no stale "Opening Khalti…" state survives.
+			location.replace('/bookings');
+		} else if (location.pathname !== '/bookings') {
+			goto('/bookings', { replaceState: true });
+		}
+	}
+
+	onMount(() => returnFromGateway(false));
+
+	function onPageShow(event) {
+		if (event.persisted) returnFromGateway(true);
+	}
+
 	// One delegated listener catches every button on the site, present and
 	// future, rather than wiring haptic() into each one by hand — a tap on
 	// a touch device gets a buzz back, a click anywhere else is a no-op.
@@ -26,7 +53,7 @@
 	}
 </script>
 
-<svelte:window onclick={onClick} />
+<svelte:window onclick={onClick} onpageshow={onPageShow} />
 
 <AmbientLedger />
 <DotGridSpotlight />

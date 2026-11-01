@@ -119,12 +119,15 @@
 		</div>
 
 		<div class="hours" role="group" aria-label="Hour">
-			{#each partHours as h (h)}
+			<!-- Every hour is drawn; phones show only the chosen part of the
+			     day, wide screens show the whole day in one row. -->
+			{#each hours as h (h)}
 				{@const free = freeCount.get(h)}
 				<button
 					type="button"
 					class="hour"
 					class:none={free === 0}
+					class:other-part={!partHours.includes(h)}
 					aria-pressed={h === hour}
 					aria-label="{clock(h)}, {free === 0 ? 'nothing free' : `${free} free`}"
 					onclick={() => (chosen = h)}
@@ -428,6 +431,42 @@
 
 	.quiet {
 		color: var(--muted);
+	}
+
+	/* Phones: one part of the day at a time. */
+	@media (max-width: 899px) {
+		.hour.other-part {
+			display: none;
+		}
+	}
+
+	/* Wide screens: the whole day fits in one row, so the part-of-day
+	   switch goes, and the courts sit side by side. */
+	@media (min-width: 900px) {
+		.finder {
+			gap: 1.1rem;
+		}
+
+		.parts {
+			display: none;
+		}
+
+		.hours {
+			gap: 0.3rem;
+		}
+
+		.hour {
+			padding-block: 0.6rem 0.5rem;
+		}
+
+		.list {
+			grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr));
+			gap: 0.65rem;
+		}
+
+		.court {
+			padding: 1rem 0.85rem 1rem 1.15rem;
+		}
 	}
 
 	@media (prefers-reduced-motion: reduce) {

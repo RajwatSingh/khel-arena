@@ -29,8 +29,8 @@
 
 	const sportOptions = $derived(data.sports.map((s) => ({ value: s, label: SPORT_LABELS[s] })));
 
-	// Phones open on the by-time list; the whole-day grid is one tap away.
-	// Desktop always shows the grid. The choice is remembered per browser.
+	// The board opens on the by-time list; the whole-day grid is one tap
+	// away. The choice is remembered per browser.
 	let view = $state('time');
 	$effect(() => {
 		try {
@@ -200,26 +200,16 @@
 		padding-block: 1.5rem var(--band);
 	}
 
-	.view-switch,
-	.time-view {
-		display: none;
+	.view-switch {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.25rem;
+		margin-bottom: 0.9rem;
 	}
 
-	@media (max-width: 720px) {
-		.view-switch {
-			display: flex;
-			justify-content: flex-end;
-			gap: 0.25rem;
-			margin-bottom: 0.9rem;
-		}
-
-		.views[data-view='time'] .grid-view {
-			display: none;
-		}
-
-		.views[data-view='time'] .time-view {
-			display: block;
-		}
+	.views[data-view='time'] .grid-view,
+	.views[data-view='day'] .time-view {
+		display: none;
 	}
 
 	.view-switch button {

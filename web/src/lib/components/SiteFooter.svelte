@@ -32,16 +32,12 @@
 			<nav aria-label="Playing">
 				<h2 class="label">Play</h2>
 				<a class="foot-link" href="/games">Games needing players</a>
-				<a class="foot-link" href="/teams">My teams</a>
-				<a class="foot-link" href="/tournaments">Tournaments</a>
-				<a class="foot-link" href="/standings">The table</a>
 			</nav>
 
 			<nav aria-label="Account">
 				<h2 class="label">Account</h2>
 				<a class="foot-link" href="/login">Sign in</a>
 				<a class="foot-link" href="/register">Create an account</a>
-				<a class="foot-link" href="/manage">Manage a venue</a>
 			</nav>
 
 			<div>

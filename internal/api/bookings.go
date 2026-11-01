@@ -136,12 +136,25 @@ func (s *Server) handleCancelBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.bookings.Cancel(r.Context(), bookingID, userID); err != nil {
+	req, err := decode[cancelBookingRequest](w, r)
+	if err != nil {
 		writeError(w, r, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	outcome, err := s.bookings.Cancel(r.Context(), bookingID, userID, req.Reason)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	// 200 with a body rather than 204: the player needs to see what a late
+	// cancellation did to their user score.
+	encode(w, http.StatusOK, cancelOutcomeDTO{
+		Late:               outcome.Late,
+		UserScore:          outcome.UserScore,
+		BookingBannedUntil: outcome.BookingBannedUntil,
+	})
 }
 
 // bookingLimit reads ?limit=, defaulting when absent and clamping when

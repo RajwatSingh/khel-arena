@@ -178,49 +178,52 @@ func (r *BookingRepo) ByID(ctx context.Context, id uuid.UUID) (domain.Booking, e
 	return b, nil
 }
 
-// Cancel releases a booking and takes down any community post riding on it.
+// Cancel releases a booking the caller owns, records why, and charges a late
+// cancellation against their user score, all in one transaction.
 //
-// Ownership and the status guard are both in the UPDATE's WHERE clause, so
-// the check and the write cannot drift apart the way a read-then-write can.
-// The caller is told which of the two failed by re-reading only when the
-// update matches nothing.
-func (r *BookingRepo) Cancel(ctx context.Context, bookingID, userID uuid.UUID) error {
-	return InTx(ctx, r.pool, func(tx pgx.Tx) error {
-		const cancelSQL = `
-			update bookings
-			   set status = 'cancelled', hold_expires_at = null
-			 where id = $1
-			   and user_id = $2
-			   and status in ('pending', 'confirmed')`
+// Ownership, status and "not paid online" are all conditions of the UPDATE
+// itself rather than checks made first: a read-then-write would leave a
+// window for the booking to change in between.
+//
+// A booking paid through eSewa or Khalti is refused. That money sits in the
+// venue's own account, so only the venue can give it back; the error names
+// them and their phone number.
+func (r *BookingRepo) Cancel(ctx context.Context, bookingID, userID uuid.UUID, reason string) (domain.CancelOutcome, error) {
+	var outcome domain.CancelOutcome
 
-		tag, err := tx.Exec(ctx, cancelSQL, bookingID, userID)
+	err := InTx(ctx, r.pool, func(tx pgx.Tx) error {
+		// `late` is decided here, against the database clock, so the rule and
+		// the record of when it was cancelled agree.
+		const cancelSQL = `
+			with target as (
+				select b.id, b.status, lower(b.slot) as starts_at
+				  from bookings b
+				 where b.id = $1
+				   and b.user_id = $2
+				   and b.status in ('pending', 'confirmed')
+				   and not exists (
+				       select 1 from payments p
+				        where p.booking_id = b.id
+				          and p.provider in ('esewa', 'khalti')
+				          and p.status = 'verified')
+				   for update of b
+			)
+			update bookings b
+			   set status = 'cancelled', hold_expires_at = null,
+			       cancel_reason = $3, cancelled_at = now()
+			  from target
+			 where b.id = target.id
+			returning target.status = 'confirmed' and target.starts_at - now() < $4::interval`
+
+		var late bool
+		err := tx.QueryRow(ctx, cancelSQL, bookingID, userID, reason, domain.LateCancelWindow).Scan(&late)
+		if noRows(err) {
+			return r.whyNotCancelled(ctx, tx, bookingID, userID)
+		}
 		if err != nil {
 			return domain.Internal(err, "cancelling booking %s", bookingID)
 		}
-
-		if tag.RowsAffected() == 0 {
-			// Nothing changed. Work out why, without revealing the existence
-			// of a booking that belongs to someone else.
-			const lookupSQL = `select user_id, status from bookings where id = $1`
-			var ownerID uuid.UUID
-			var status domain.BookingStatus
-
-			err := tx.QueryRow(ctx, lookupSQL, bookingID).Scan(&ownerID, &status)
-			if noRows(err) || (err == nil && ownerID != userID) {
-				return domain.NotFound("That booking doesn't exist.")
-			}
-			if err != nil {
-				return domain.Internal(err, "inspecting booking %s", bookingID)
-			}
-			switch status {
-			case domain.BookingCancelled:
-				return domain.Conflict("This booking is already cancelled.")
-			case domain.BookingCompleted:
-				return domain.Conflict("This game has already been played.")
-			default:
-				return domain.Conflict("This booking can no longer be cancelled.")
-			}
-		}
+		outcome.Late = late
 
 		// Pull any community post that was advertising this booking.
 		const closePostSQL = `
@@ -239,8 +242,106 @@ func (r *BookingRepo) Cancel(ctx context.Context, bookingID, userID uuid.UUID) e
 		if _, err := tx.Exec(ctx, failPaymentSQL, bookingID); err != nil {
 			return domain.Internal(err, "closing payment intent for booking %s", bookingID)
 		}
+
+		if !late {
+			const standingSQL = `select ` + effectiveUserScore + `, ` + activeBookingBan + `
+				from users where id = $1`
+			if err := tx.QueryRow(ctx, standingSQL, userID).
+				Scan(&outcome.UserScore, &outcome.BookingBannedUntil); err != nil {
+				return domain.Internal(err, "reading user score for %s", userID)
+			}
+			return nil
+		}
+
+		// The penalty starts from the score as it stands, so a player whose
+		// ban has run out is charged from 50, not from the 0 that banned
+		// them. Reaching the floor starts a fresh ban; anything above it
+		// clears an expired one.
+		const penaltySQL = `
+			with current as (
+				select ` + effectiveUserScore + ` as score from users where id = $1
+			), next as (
+				select greatest(score - $2, 0) as score from current
+			)
+			update users
+			   set user_score = next.score,
+			       booking_banned_until = case when next.score <= $3
+			           then now() + $4::interval end
+			  from next
+			 where users.id = $1
+			returning users.user_score, users.booking_banned_until`
+		err = tx.QueryRow(ctx, penaltySQL, userID, domain.LateCancelPenalty,
+			domain.BookingBanFloor, domain.BookingBanLength).
+			Scan(&outcome.UserScore, &outcome.BookingBannedUntil)
+		if err != nil {
+			return domain.Internal(err, "charging a late cancellation to %s", userID)
+		}
 		return nil
 	})
+	return outcome, err
+}
+
+// whyNotCancelled works out why Cancel's UPDATE touched nothing, without
+// revealing that a booking belonging to someone else exists.
+func (r *BookingRepo) whyNotCancelled(ctx context.Context, tx pgx.Tx, bookingID, userID uuid.UUID) error {
+	const lookupSQL = `
+		select b.user_id, b.status, a.name, coalesce(a.phone, ''),
+		       (select p.provider from payments p
+		         where p.booking_id = b.id
+		           and p.provider in ('esewa', 'khalti')
+		           and p.status = 'verified'
+		         limit 1)
+		  from bookings b
+		  join courts c on c.id = b.court_id
+		  join arenas a on a.id = c.arena_id
+		 where b.id = $1`
+
+	var (
+		ownerID    uuid.UUID
+		status     domain.BookingStatus
+		arenaName  string
+		arenaPhone string
+		paidOnline *domain.PaymentProvider
+	)
+	err := tx.QueryRow(ctx, lookupSQL, bookingID).Scan(&ownerID, &status, &arenaName, &arenaPhone, &paidOnline)
+	if noRows(err) || (err == nil && ownerID != userID) {
+		return domain.NotFound("That booking doesn't exist.")
+	}
+	if err != nil {
+		return domain.Internal(err, "inspecting booking %s", bookingID)
+	}
+
+	switch {
+	case status == domain.BookingCancelled:
+		return domain.Conflict("This booking is already cancelled.")
+	case status == domain.BookingCompleted:
+		return domain.Conflict("This game has already been played.")
+	case paidOnline != nil:
+		contact := arenaName
+		if arenaPhone != "" {
+			contact += " on " + arenaPhone
+		}
+		return domain.Conflict(
+			"You paid for this online, so the venue has to refund you. Contact %s to cancel.", contact)
+	default:
+		return domain.Conflict("This booking can no longer be cancelled.")
+	}
+}
+
+// BookingStanding reports a player's user score and any booking ban, with an
+// expired ban already lifted.
+func (r *BookingRepo) BookingStanding(ctx context.Context, userID uuid.UUID) (domain.BookingStanding, error) {
+	const q = `select ` + effectiveUserScore + `, ` + activeBookingBan + ` from users where id = $1`
+
+	var out domain.BookingStanding
+	err := r.pool.QueryRow(ctx, q, userID).Scan(&out.UserScore, &out.BookingBannedUntil)
+	if noRows(err) {
+		return domain.BookingStanding{}, domain.NotFound("No such player.")
+	}
+	if err != nil {
+		return domain.BookingStanding{}, domain.Internal(err, "reading booking standing for %s", userID)
+	}
+	return out, nil
 }
 
 // Confirm promotes a paid hold to a confirmed booking. Clearing the expiry is
@@ -313,7 +414,13 @@ func (r *BookingRepo) ListForUser(ctx context.Context, userID uuid.UUID, limit i
 			b.status, coalesce(b.note, ''), b.hold_expires_at, b.created_at, b.updated_at,
 			c.label, a.id, a.name, a.area, a.slug,
 			(mp.id is not null and mp.status = 'open') as open_to_join,
-			lp.provider, lp.status
+			lp.provider, lp.status,
+			(select p.provider from payments p
+			  where p.booking_id = b.id
+			    and p.provider in ('esewa', 'khalti')
+			    and p.status = 'verified'
+			  limit 1) as paid_online,
+			coalesce(a.phone, ''), coalesce(b.cancel_reason, '')
 		from bookings b
 		join courts c on c.id = b.court_id
 		join arenas a on a.id = c.arena_id
@@ -345,6 +452,7 @@ func (r *BookingRepo) ListForUser(ctx context.Context, userID uuid.UUID, limit i
 			&d.Status, &d.Note, &holdExpires, &d.CreatedAt, &d.UpdatedAt,
 			&d.CourtLabel, &d.ArenaID, &d.ArenaName, &d.ArenaArea, &d.ArenaSlug,
 			&d.OpenToJoin, &d.PaymentProvider, &d.PaymentStatus,
+			&d.PaidOnline, &d.ArenaPhone, &d.CancelReason,
 		)
 		if err != nil {
 			return nil, domain.Internal(err, "scanning booking row")

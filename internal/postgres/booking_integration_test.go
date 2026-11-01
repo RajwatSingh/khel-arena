@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/RajwatSingh/khel-arena/internal/domain"
 )
 
@@ -164,7 +166,7 @@ func TestCancellingFreesTheSlot(t *testing.T) {
 		t.Fatal("the slot should have been unavailable while held")
 	}
 
-	if err := f.repo.Cancel(ctx, first.ID, f.players[0]); err != nil {
+	if err := f.cancel(ctx, first.ID, f.players[0]); err != nil {
 		t.Fatalf("cancelling: %v", err)
 	}
 
@@ -184,7 +186,7 @@ func TestCancelRequiresOwnership(t *testing.T) {
 		t.Fatalf("seeding: %v", err)
 	}
 
-	err = f.repo.Cancel(ctx, booking.ID, f.players[1])
+	err = f.cancel(ctx, booking.ID, f.players[1])
 	if !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("code = %q, want %q so the booking's existence stays private",
 			domain.CodeOf(err), domain.CodeNotFound)
@@ -196,10 +198,10 @@ func TestCancelRequiresOwnership(t *testing.T) {
 	}
 
 	// Cancelling twice is a conflict, not a silent success.
-	if err := f.repo.Cancel(ctx, booking.ID, f.players[0]); err != nil {
+	if err := f.cancel(ctx, booking.ID, f.players[0]); err != nil {
 		t.Fatalf("the owner's cancellation failed: %v", err)
 	}
-	if err := f.repo.Cancel(ctx, booking.ID, f.players[0]); !errors.Is(err, domain.ErrConflict) {
+	if err := f.cancel(ctx, booking.ID, f.players[0]); !errors.Is(err, domain.ErrConflict) {
 		t.Errorf("a second cancellation should conflict, got %v", err)
 	}
 }
@@ -345,7 +347,7 @@ func TestBookedRangesReflectsWhatBlocksASlot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seeding the cancelled booking: %v", err)
 	}
-	if err := f.repo.Cancel(ctx, cancelled.ID, f.players[2]); err != nil {
+	if err := f.cancel(ctx, cancelled.ID, f.players[2]); err != nil {
 		t.Fatalf("cancelling: %v", err)
 	}
 
@@ -400,4 +402,10 @@ func TestListForUserJoinsArenaContext(t *testing.T) {
 	if got.OpenToJoin {
 		t.Error("a booking with no community post should not read as open to join")
 	}
+}
+
+// cancel is Cancel with an ordinary reason, for tests about something else.
+func (f *fixture) cancel(ctx context.Context, bookingID, userID uuid.UUID) error {
+	_, err := f.repo.Cancel(ctx, bookingID, userID, "Plans changed")
+	return err
 }

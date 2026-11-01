@@ -115,7 +115,7 @@ type fakeBookings struct {
 	create       func(context.Context, service.CreateBookingInput) (domain.Booking, error)
 	availability func(context.Context, uuid.UUID, time.Time) ([]domain.GridSlot, error)
 	listMine     func(context.Context, uuid.UUID, int) ([]domain.BookingDetail, error)
-	cancel       func(context.Context, uuid.UUID, uuid.UUID) error
+	cancel       func(context.Context, uuid.UUID, uuid.UUID, string) (domain.CancelOutcome, error)
 
 	gotInput   service.CreateBookingInput
 	gotDate    time.Time
@@ -148,12 +148,12 @@ func (f *fakeBookings) ListMine(ctx context.Context, userID uuid.UUID, limit int
 	return f.listMine(ctx, userID, limit)
 }
 
-func (f *fakeBookings) Cancel(ctx context.Context, bookingID, userID uuid.UUID) error {
+func (f *fakeBookings) Cancel(ctx context.Context, bookingID, userID uuid.UUID, reason string) (domain.CancelOutcome, error) {
 	if f.cancel == nil {
 		f.t.Fatal("handler called BookingAPI.Cancel, which this test did not expect")
 	}
 	f.gotUserID = userID
-	return f.cancel(ctx, bookingID, userID)
+	return f.cancel(ctx, bookingID, userID, reason)
 }
 
 type fakeProfiles struct {

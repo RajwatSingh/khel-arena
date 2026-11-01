@@ -4,6 +4,7 @@
 	import { api, ApiError, SPORT_LABELS } from '$lib/api/index.js';
 	import { session } from '$lib/session.svelte.js';
 	import DateRail from '$lib/components/DateRail.svelte';
+	import CancelDialog from '$lib/components/CancelDialog.svelte';
 	import HoldPanel from '$lib/components/HoldPanel.svelte';
 	import PhotoStrip from '$lib/components/PhotoStrip.svelte';
 	import ReviewPanel from '$lib/components/ReviewPanel.svelte';
@@ -283,10 +284,33 @@
 				: message;
 	}
 
-	async function release() {
+	// Letting go of holds asks why first, like every cancellation. Holds that
+	// have already run out ("Start over") need no answer: nobody chose that.
+	let releaseOpen = $state(false);
+
+	function askRelease() {
+		const now = Date.now();
+		const allLapsed = holds.every(
+			(h) => h.status === 'pending' && new Date(h.hold_expires_at).getTime() <= now
+		);
+		if (allLapsed) {
+			release('The hold ran out before payment');
+		} else {
+			releaseOpen = true;
+		}
+	}
+
+	async function release(reason) {
 		const ids = holds.map((h) => h.id);
+		const results = await Promise.allSettled(ids.map((id) => api.cancelBooking(id, reason)));
 		reset();
-		await Promise.all(ids.map((id) => api.cancelBooking(id).catch(() => {})));
+		const failed = results.filter((r) => r.status === 'rejected');
+		// A lapsed hold can't be cancelled any more, and that's fine; only say
+		// something when a live one wasn't released.
+		if (failed.length && reason !== 'The hold ran out before payment') {
+			const first = failed[0].reason;
+			error = first instanceof ApiError ? first.message : 'Some hours could not be released.';
+		}
 	}
 </script>
 
@@ -432,12 +456,20 @@
 				{cashBusy}
 				onpay={pay}
 				onpaycash={payCash}
-				onrelease={release}
+				onrelease={askRelease}
 				ondone={reset}
 			/>
 		</div>
 	</div>
 </section>
+
+<CancelDialog
+	bind:open={releaseOpen}
+	title={holds.length > 1 ? 'Let go of these hours?' : 'Let go of this hour?'}
+	confirmLabel={holds.length > 1 ? 'Cancel holds' : 'Cancel hold'}
+	what="{holds.length} {holds.length === 1 ? 'hour' : 'hours'} at {arena.name}, held and unpaid"
+	onconfirm={release}
+/>
 
 <section class="extras">
 	<div class="shell">

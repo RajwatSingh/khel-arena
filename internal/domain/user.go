@@ -37,6 +37,12 @@ type User struct {
 	MatchesWon     int
 	CommunityScore int
 
+	// UserScore is out of 100 and drops when the player cancels late. See
+	// the rules beside LateCancelPenalty. BookingBannedUntil is set while a
+	// low score keeps them from booking.
+	UserScore          int
+	BookingBannedUntil *time.Time
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

@@ -19,11 +19,24 @@ func NewUserRepo(pool *pgxpool.Pool) *UserRepo { return &UserRepo{pool: pool} }
 
 // userColumns deliberately omits password_hash. The only query that reads it
 // is CredentialsByEmail, so no other code path can leak a hash by accident.
+//
+// The last two are the user score and booking ban as they stand right now:
+// a ban that has run out reads as lifted, with the score back at 50.
 const userColumns = `
 	id, email, email_verified_at, username, full_name, account_type,
 	coalesce(avatar_url, ''), coalesce(phone, ''), city,
 	position, jersey_number, preferred_foot, skill, coalesce(bio, ''),
-	matches_played, matches_won, community_score, created_at, updated_at`
+	matches_played, matches_won, community_score, created_at, updated_at,
+	` + effectiveUserScore + `, ` + activeBookingBan
+
+// effectiveUserScore and activeBookingBan read a user's standing with any
+// expired ban already lifted. Every read goes through these, so nothing ever
+// shows a ban that has run out. They name bare columns of `users`.
+const (
+	effectiveUserScore = `case when booking_banned_until is not null and booking_banned_until <= now()
+		then 50 else user_score end`
+	activeBookingBan = `case when booking_banned_until > now() then booking_banned_until end`
+)
 
 func scanUser(row pgx.Row) (domain.User, error) {
 	var u domain.User
@@ -37,6 +50,7 @@ func scanUser(row pgx.Row) (domain.User, error) {
 		&u.AvatarURL, &u.Phone, &u.City,
 		&position, &jersey, &foot, &u.Skill, &u.Bio,
 		&u.MatchesPlayed, &u.MatchesWon, &u.CommunityScore, &u.CreatedAt, &u.UpdatedAt,
+		&u.UserScore, &u.BookingBannedUntil,
 	)
 	if err != nil {
 		return domain.User{}, err

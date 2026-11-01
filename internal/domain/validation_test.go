@@ -371,3 +371,29 @@ func TestTournamentRegistrationWindow(t *testing.T) {
 		}
 	}
 }
+
+func TestCancelReason(t *testing.T) {
+	if got, err := CancelReason("  Not enough players  "); err != nil || got != "Not enough players" {
+		t.Errorf("got %q, %v; want the trimmed reason", got, err)
+	}
+	for _, bad := range []string{"", "  ", "ok", strings.Repeat("x", MaxCancelReasonLength+1)} {
+		if _, err := CancelReason(bad); CodeOf(err) != CodeInvalid {
+			t.Errorf("CancelReason(%q): code = %q, want invalid", bad, CodeOf(err))
+		}
+	}
+}
+
+func TestBookingStandingBanned(t *testing.T) {
+	now := time.Now()
+	later, earlier := now.Add(time.Hour), now.Add(-time.Hour)
+
+	if (BookingStanding{}).Banned(now) {
+		t.Error("no ban date should mean not banned")
+	}
+	if !(BookingStanding{BookingBannedUntil: &later}).Banned(now) {
+		t.Error("a ban in the future should apply")
+	}
+	if (BookingStanding{BookingBannedUntil: &earlier}).Banned(now) {
+		t.Error("a ban in the past should not apply")
+	}
+}

@@ -225,7 +225,10 @@ print(free[0]["starts_at"], free[0]["ends_at"]) if free else print("", "")
     check "a non-numeric ?limit= is refused" 400
 
     request DELETE "/v1/bookings/$BOOKING_ID"
-    check "DELETE /v1/bookings/{id}" 204
+    check "cancelling without a reason is refused" 400
+
+    request DELETE "/v1/bookings/$BOOKING_ID" '{"reason":"Smoke test"}'
+    check "DELETE /v1/bookings/{id} with a reason" 200
 
     request DELETE "/v1/bookings/not-a-uuid"
     check "DELETE with a malformed id is refused" 400

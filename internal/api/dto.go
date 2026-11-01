@@ -133,6 +133,11 @@ type userDTO struct {
 	Position      *domain.Position   `json:"position"`
 	JerseyNumber  *int               `json:"jersey_number"`
 	PreferredFoot *domain.Foot       `json:"preferred_foot"`
+
+	// The player's own standing: shown on their bookings page, and why a
+	// booking might be refused.
+	UserScore          int        `json:"user_score"`
+	BookingBannedUntil *time.Time `json:"booking_banned_until"`
 }
 
 type sessionDTO struct {
@@ -188,6 +193,25 @@ type bookingDetailDTO struct {
 	// booking with a cash intent is waiting on the venue, not on the player.
 	PaymentProvider *domain.PaymentProvider `json:"payment_provider,omitempty"`
 	PaymentStatus   *domain.PaymentStatus   `json:"payment_status,omitempty"`
+
+	// PaidOnline names the gateway when the booking was paid through eSewa
+	// or Khalti. Such a booking is cancelled through the venue, who refunds
+	// it, so the client shows ArenaPhone instead of a cancel button.
+	PaidOnline   *domain.PaymentProvider `json:"paid_online,omitempty"`
+	ArenaPhone   string                  `json:"arena_phone"`
+	CancelReason string                  `json:"cancel_reason,omitempty"`
+}
+
+// cancelBookingRequest is why the player is cancelling. Required.
+type cancelBookingRequest struct {
+	Reason string `json:"reason"`
+}
+
+// cancelOutcomeDTO is what a cancellation did to the player's standing.
+type cancelOutcomeDTO struct {
+	Late               bool       `json:"late"`
+	UserScore          int        `json:"user_score"`
+	BookingBannedUntil *time.Time `json:"booking_banned_until"`
 }
 
 // ------------------------------------------------------------ constructors -
@@ -204,6 +228,9 @@ func userDTOFromDomain(user domain.User) userDTO {
 		Position:      user.Position,
 		JerseyNumber:  user.JerseyNumber,
 		PreferredFoot: user.PreferredFoot,
+
+		UserScore:          user.UserScore,
+		BookingBannedUntil: user.BookingBannedUntil,
 	}
 }
 
@@ -277,6 +304,10 @@ func bookingDetailDTOFromDomain(b domain.BookingDetail) bookingDetailDTO {
 
 		PaymentProvider: b.PaymentProvider,
 		PaymentStatus:   b.PaymentStatus,
+
+		PaidOnline:   b.PaidOnline,
+		ArenaPhone:   b.ArenaPhone,
+		CancelReason: b.CancelReason,
 	}
 }
 
@@ -1387,6 +1418,7 @@ type playerDTO struct {
 	MatchesPlayed  int              `json:"matches_played"`
 	MatchesWon     int              `json:"matches_won"`
 	CommunityScore int              `json:"community_score"`
+	UserScore      int              `json:"user_score"`
 	JoinedAt       time.Time        `json:"joined_at"`
 	Highlights     []highlightDTO   `json:"highlights"`
 }
@@ -1406,6 +1438,7 @@ func playerDTOFromDomain(u domain.User) playerDTO {
 		MatchesPlayed:  u.MatchesPlayed,
 		MatchesWon:     u.MatchesWon,
 		CommunityScore: u.CommunityScore,
+		UserScore:      u.UserScore,
 		JoinedAt:       u.CreatedAt,
 		Highlights:     []highlightDTO{},
 	}

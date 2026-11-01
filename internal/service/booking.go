@@ -24,7 +24,8 @@ type BookingStore interface {
 	BookedRanges(ctx context.Context, courtID uuid.UUID, window domain.Slot) ([]domain.Slot, error)
 	CreateHold(ctx context.Context, b domain.Booking) (domain.Booking, error)
 	ByID(ctx context.Context, id uuid.UUID) (domain.Booking, error)
-	Cancel(ctx context.Context, bookingID, userID uuid.UUID) error
+	Cancel(ctx context.Context, bookingID, userID uuid.UUID, reason string) (domain.CancelOutcome, error)
+	BookingStanding(ctx context.Context, userID uuid.UUID) (domain.BookingStanding, error)
 	ListForUser(ctx context.Context, userID uuid.UUID, limit int) ([]domain.BookingDetail, error)
 	ReleaseStaleHolds(ctx context.Context) (int, error)
 	// MarkPlayed promotes confirmed bookings whose hour has passed. The
@@ -90,6 +91,17 @@ func (s *BookingService) Create(ctx context.Context, in CreateBookingInput) (dom
 		return domain.Booking{}, domain.Unauthenticated("Sign in to book a court.")
 	}
 
+	// A player whose user score fell to the floor can't book for a month.
+	standing, err := s.store.BookingStanding(ctx, in.UserID)
+	if err != nil {
+		return domain.Booking{}, err
+	}
+	if standing.Banned(now) {
+		return domain.Booking{}, domain.Forbidden(
+			"Your user score is %d/100 after late cancellations, so you can't book until %s.",
+			standing.UserScore, standing.BookingBannedUntil.In(s.loc).Format("2 January"))
+	}
+
 	court, err := s.store.LoadCourtContext(ctx, in.CourtID)
 	if err != nil {
 		return domain.Booking{}, err
@@ -146,16 +158,21 @@ func (s *BookingService) Availability(ctx context.Context, courtID uuid.UUID, da
 	}), nil
 }
 
-// Cancel releases a booking the caller owns.
+// Cancel releases a booking the caller owns, with the reason they gave.
 //
-// Ownership is enforced in the repository's UPDATE rather than by loading the
-// booking and checking here: a read-then-write leaves a window in which the
-// booking can change between the check and the write.
-func (s *BookingService) Cancel(ctx context.Context, bookingID, userID uuid.UUID) error {
+// Ownership, the late-cancellation penalty and the refusal of bookings paid
+// online are all enforced in the repository's transaction rather than by
+// loading the booking and checking here: a read-then-write leaves a window in
+// which the booking can change between the check and the write.
+func (s *BookingService) Cancel(ctx context.Context, bookingID, userID uuid.UUID, reason string) (domain.CancelOutcome, error) {
 	if userID == uuid.Nil {
-		return domain.Unauthenticated("Sign in to manage your bookings.")
+		return domain.CancelOutcome{}, domain.Unauthenticated("Sign in to manage your bookings.")
 	}
-	return s.store.Cancel(ctx, bookingID, userID)
+	reason, err := domain.CancelReason(reason)
+	if err != nil {
+		return domain.CancelOutcome{}, err
+	}
+	return s.store.Cancel(ctx, bookingID, userID, reason)
 }
 
 // ListMine returns the caller's bookings, newest first.

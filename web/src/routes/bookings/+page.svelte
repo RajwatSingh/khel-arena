@@ -8,7 +8,9 @@
 	import { reveal } from '$lib/actions/reveal.js';
 	import { clock, session } from '$lib/session.svelte.js';
 	import { formatCountdown, formatDate, formatNPR, formatTime } from '$lib/time.js';
-	import { ONLINE_PROVIDERS, notSetUpMessage } from '$lib/payments.js';
+	import { ONLINE_PROVIDERS, notSetUpMessage, providerLabel } from '$lib/payments.js';
+	import CancelDialog from '$lib/components/CancelDialog.svelte';
+	import { isBanned, isLateCancel, BOOKING_BAN_FLOOR, LATE_CANCEL_PENALTY } from '$lib/userScore.js';
 
 	const ticking = clock();
 
@@ -136,14 +138,49 @@
 		}
 	}
 
-	async function cancel(booking) {
+	// The player's user score and any booking ban. Read from /me, then kept
+	// up to date from what each cancellation reports.
+	let standing = $state(null);
+	$effect(() => {
+		if (!session.signedIn) return;
+		api
+			.me()
+			.then((me) => {
+				standing = { score: me.user_score, bannedUntil: me.booking_banned_until };
+			})
+			.catch(() => {});
+	});
+	const banned = $derived(standing ? isBanned(standing.bannedUntil, ticking.now) : false);
+
+	// Every cancel goes through the popup, which asks why first.
+	let cancelling = $state(null);
+	let cancelOpen = $state(false);
+	let cancelNotice = $state(null);
+
+	function cancel(booking) {
 		error = null;
-		try {
-			await api.cancelBooking(booking.id);
-			version++;
-		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'That did not go through.';
+		cancelNotice = null;
+		cancelling = booking;
+		cancelOpen = true;
+	}
+
+	// Throws on failure so the popup stays open and shows why.
+	async function confirmCancel(reason) {
+		const outcome = await api.cancelBooking(cancelling.id, reason);
+		standing = { score: outcome.user_score, bannedUntil: outcome.booking_banned_until };
+		if (outcome.late) {
+			cancelNotice = isBanned(outcome.booking_banned_until)
+				? `Cancelled. Your user score is now ${outcome.user_score}/100, so you can't book until ${formatDate(outcome.booking_banned_until.slice(0, 10))}.`
+				: `Cancelled. Your user score is now ${outcome.user_score}/100.`;
 		}
+		version++;
+	}
+
+	function cancelTitle(b) {
+		if (!b) return 'Cancel this booking?';
+		if (b.status === 'pending' && !awaitingVenue(b)) return 'Let go of this hold?';
+		if (awaitingVenue(b)) return 'Withdraw this request?';
+		return 'Cancel this booking?';
 	}
 
 	// A message under one booking — e.g. the venue hasn't set up that gateway —
@@ -192,6 +229,29 @@
 	<div class="shell">
 		{#if paymentOutcome}
 			<p class="outcome {paymentOutcome.tone}" role="status">{paymentOutcome.text}</p>
+		{/if}
+
+		{#if cancelNotice}
+			<p class="outcome bad" role="status">{cancelNotice}</p>
+		{/if}
+
+		{#if standing}
+			<div class="standing" class:banned>
+				<div class="score">
+					<span class="label">User score</span>
+					<span class="num score-value">{standing.score}<small>/100</small></span>
+				</div>
+				<p class="small">
+					{#if banned}
+						<strong>You can't book any venue until {formatDate(standing.bannedUntil.slice(0, 10))}.</strong>
+						Your score fell to {BOOKING_BAN_FLOOR} or below after late cancellations. It goes back to
+						50 when the ban ends.
+					{:else}
+						Cancelling a confirmed booking less than 5 hours before kick-off costs
+						{LATE_CANCEL_PENALTY} points. At {BOOKING_BAN_FLOOR} or below, you can't book for a month.
+					{/if}
+				</p>
+			</div>
 		{/if}
 
 		{#if !session.signedIn}
@@ -261,8 +321,14 @@
 								>
 									{formatCountdown(remaining)} left to pay
 								</span>
+							{:else if booking.status === 'confirmed' && booking.paid_online}
+								<span class="note num">
+									{booking.reference} · paid with {providerLabel(booking.paid_online)}
+								</span>
 							{:else if booking.status === 'confirmed'}
 								<span class="note num">{booking.reference}</span>
+							{:else if booking.status === 'cancelled' && booking.cancel_reason}
+								<span class="note reason">“{booking.cancel_reason}”</span>
 							{/if}
 						</div>
 
@@ -296,9 +362,23 @@
 								{#if !booking.open_to_join && new Date(booking.starts_at).getTime() > ticking.now}
 									<a class="btn btn-secondary" href="/games/new?booking={booking.id}">Find players</a>
 								{/if}
-								<button class="btn btn-secondary" onclick={() => cancel(booking)}>Cancel</button>
+								{#if booking.paid_online}
+									{#if booking.arena_phone}
+										<a class="btn btn-secondary" href="tel:{booking.arena_phone}">Call venue to cancel</a>
+									{/if}
+								{:else}
+									<button class="btn btn-secondary" onclick={() => cancel(booking)}>Cancel</button>
+								{/if}
 							{/if}
 						</div>
+
+						{#if booking.status === 'confirmed' && booking.paid_online}
+							<p class="row-notice paid-note">
+								You paid online, so only {booking.arena_name} can refund you. To cancel, contact them{booking.arena_phone
+									? ` on ${booking.arena_phone}`
+									: ''}.
+							</p>
+						{/if}
 
 						{#if rowNotice.id === booking.id}
 							<p class="row-notice" role="alert">{rowNotice.text}</p>
@@ -309,6 +389,18 @@
 		{/if}
 	</div>
 </section>
+
+<CancelDialog
+	bind:open={cancelOpen}
+	title={cancelTitle(cancelling)}
+	confirmLabel={cancelling?.status === 'pending' ? 'Cancel hold' : 'Cancel booking'}
+	what={cancelling
+		? `${cancelling.arena_name} · ${cancelling.court_name} · ${formatDate(cancelling.starts_at.slice(0, 10))}, ${formatTime(cancelling.starts_at)}–${formatTime(cancelling.ends_at)}`
+		: ''}
+	late={isLateCancel(cancelling, ticking.now)}
+	userScore={standing?.score ?? null}
+	onconfirm={confirmCancel}
+/>
 
 <style>
 	h1 {
@@ -460,6 +552,56 @@
 	.outcome.bad {
 		background: var(--brick-wash);
 		color: var(--brick);
+	}
+
+	.standing {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.75rem 1.5rem;
+		margin-bottom: 1.5rem;
+		padding: 0.9rem 1.1rem;
+		border: 1px solid var(--line);
+		border-radius: var(--r-md);
+		background: var(--surface);
+	}
+
+	.standing p {
+		flex: 1 1 22rem;
+		margin: 0;
+		color: var(--muted);
+	}
+
+	.standing.banned {
+		border-color: var(--brick);
+		background: var(--brick-wash);
+	}
+
+	.standing.banned p { color: var(--brick); }
+
+	.score {
+		display: grid;
+		gap: 0.1rem;
+	}
+
+	.score-value {
+		font-size: 1.6rem;
+		font-weight: 700;
+		line-height: 1;
+	}
+
+	.score-value small {
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--faint);
+	}
+
+	.note.reason { font-style: italic; }
+
+	/* Information, not an error: quieter than the red row notice. */
+	.row-notice.paid-note {
+		background: var(--surface-sunk);
+		color: var(--muted);
 	}
 
 	.row.just-paid {

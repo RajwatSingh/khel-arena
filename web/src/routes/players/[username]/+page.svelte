@@ -154,6 +154,10 @@
 					<dt class="label">Community</dt>
 					<dd class="num">{player.community_score}</dd>
 				</div>
+				<div>
+					<dt class="label">User score</dt>
+					<dd class="num">{player.user_score}/100</dd>
+				</div>
 			</dl>
 
 			<hr />

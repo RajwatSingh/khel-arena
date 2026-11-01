@@ -361,22 +361,28 @@ func TestHandleListBookings(t *testing.T) {
 }
 
 func TestHandleCancelBooking(t *testing.T) {
-	t.Run("cancels", func(t *testing.T) {
+	t.Run("cancels with a reason and reports the user score", func(t *testing.T) {
 		auth := &fakeAuth{authenticate: signedIn(testAccessToken)}
-		var gotBookingID uuid.UUID
-		bookings := &fakeBookings{cancel: func(_ context.Context, bookingID, userID uuid.UUID) error {
-			gotBookingID = bookingID
-			return nil
+		var (
+			gotBookingID uuid.UUID
+			gotReason    string
+		)
+		bookings := &fakeBookings{cancel: func(_ context.Context, bookingID, userID uuid.UUID, reason string) (domain.CancelOutcome, error) {
+			gotBookingID, gotReason = bookingID, reason
+			return domain.CancelOutcome{Late: true, UserScore: 80}, nil
 		}}
 
 		w := do(newTestServer(t, auth, bookings, nil), http.MethodDelete,
-			"/v1/bookings/"+testBookingID.String(), "", bearer(testAccessToken))
+			"/v1/bookings/"+testBookingID.String(), `{"reason":"Not enough players"}`, bearer(testAccessToken))
 
-		if w.Code != http.StatusNoContent {
-			t.Fatalf("status = %d (%s), want 204", w.Code, w.Body.String())
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d (%s), want 200", w.Code, w.Body.String())
 		}
 		if gotBookingID != testBookingID {
 			t.Errorf("booking id = %v, want %v", gotBookingID, testBookingID)
+		}
+		if gotReason != "Not enough players" {
+			t.Errorf("reason = %q", gotReason)
 		}
 		// Ownership is a condition of the repository's UPDATE, so the handler
 		// must reach it with the caller's id rather than loading the booking
@@ -384,16 +390,36 @@ func TestHandleCancelBooking(t *testing.T) {
 		if bookings.gotUserID != testUser.ID {
 			t.Errorf("user id = %v, want the caller %v", bookings.gotUserID, testUser.ID)
 		}
+
+		var got cancelOutcomeDTO
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if !got.Late || got.UserScore != 80 || got.BookingBannedUntil != nil {
+			t.Errorf("outcome = %+v", got)
+		}
+	})
+
+	t.Run("a missing body is refused before the service", func(t *testing.T) {
+		auth := &fakeAuth{authenticate: signedIn(testAccessToken)}
+
+		// cancel is nil, so the fake fails the test if the handler calls it.
+		w := do(newTestServer(t, auth, &fakeBookings{}, nil), http.MethodDelete,
+			"/v1/bookings/"+testBookingID.String(), "", bearer(testAccessToken))
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400", w.Code)
+		}
 	})
 
 	t.Run("someone else's booking is a 404, decided by the repository", func(t *testing.T) {
 		auth := &fakeAuth{authenticate: signedIn(testAccessToken)}
-		bookings := &fakeBookings{cancel: func(context.Context, uuid.UUID, uuid.UUID) error {
-			return domain.NotFound("No booking with that reference.")
+		bookings := &fakeBookings{cancel: func(context.Context, uuid.UUID, uuid.UUID, string) (domain.CancelOutcome, error) {
+			return domain.CancelOutcome{}, domain.NotFound("No booking with that reference.")
 		}}
 
 		w := do(newTestServer(t, auth, bookings, nil), http.MethodDelete,
-			"/v1/bookings/"+testBookingID.String(), "", bearer(testAccessToken))
+			"/v1/bookings/"+testBookingID.String(), `{"reason":"Plans changed"}`, bearer(testAccessToken))
 
 		if w.Code != http.StatusNotFound {
 			t.Errorf("status = %d, want 404", w.Code)

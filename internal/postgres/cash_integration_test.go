@@ -225,7 +225,7 @@ func TestPlayerCancellingClosesTheCashPayment(t *testing.T) {
 	f := newFixture(t, 1)
 	booking, p, _ := f.bookCash(t, f.players[0], 18)
 
-	if err := f.repo.Cancel(context.Background(), booking.ID, f.players[0]); err != nil {
+	if err := f.cancel(context.Background(), booking.ID, f.players[0]); err != nil {
 		t.Fatalf("cancelling: %v", err)
 	}
 	if got := f.paymentStatus(t, p.ID); got != domain.PaymentFailed {

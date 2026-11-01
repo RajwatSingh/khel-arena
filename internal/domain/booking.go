@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -159,6 +160,15 @@ type BookingDetail struct {
 	// booking is waiting on the venue rather than on them.
 	PaymentProvider *PaymentProvider
 	PaymentStatus   *PaymentStatus
+
+	// PaidOnline is set when an eSewa or Khalti payment for this booking was
+	// verified. The player can't cancel it themselves: the money is in the
+	// venue's account, so the venue has to refund it.
+	PaidOnline *PaymentProvider
+	// ArenaPhone is who to call about a refund.
+	ArenaPhone string
+	// CancelReason is what the player said when they cancelled.
+	CancelReason string
 }
 
 // ---------------------------------------------------------------------------
@@ -184,3 +194,65 @@ type GridSlot struct {
 
 // Available reports whether a player can actually take this cell.
 func (g GridSlot) Available() bool { return !g.IsBooked && !g.IsPast }
+
+// ---------------------------------------------------------------------------
+// Cancellation and the user score
+// ---------------------------------------------------------------------------
+
+// The user score rules. A player starts at UserScoreStart. Cancelling a
+// confirmed booking less than LateCancelWindow before it starts costs
+// LateCancelPenalty points. At BookingBanFloor or below, the player can't
+// book for BookingBanLength; once that has passed the score reads as
+// UserScoreAfterBan.
+//
+// Only confirmed bookings count. Letting go of an unpaid hold costs nothing,
+// so nobody is pushed into leaving a hold to lapse instead of releasing it.
+const (
+	UserScoreStart    = 100
+	LateCancelWindow  = 5 * time.Hour
+	LateCancelPenalty = 20
+	BookingBanFloor   = 10
+	UserScoreAfterBan = 50
+)
+
+// BookingBanLength is how long a player at or below BookingBanFloor can't
+// book. Kept as a Postgres interval: "a month" is a calendar month there.
+const BookingBanLength = "1 month"
+
+// MaxCancelReasonLength matches the column check in migration 0013.
+const MaxCancelReasonLength = 300
+
+// CancelReason checks and tidies the reason a player gives for cancelling.
+func CancelReason(raw string) (string, error) {
+	reason := strings.TrimSpace(raw)
+	v := &Validation{}
+	v.Check(len([]rune(reason)) >= 3, "reason", "Tell the venue why you're cancelling.")
+	v.Check(len([]rune(reason)) <= MaxCancelReasonLength, "reason",
+		"Keep the reason under %d characters.", MaxCancelReasonLength)
+	if err := v.Err(); err != nil {
+		return "", err
+	}
+	return reason, nil
+}
+
+// CancelOutcome is what cancelling did to the player's standing.
+type CancelOutcome struct {
+	// Late is true when the booking was confirmed and less than
+	// LateCancelWindow from its start, so it cost points.
+	Late bool
+	// UserScore is the player's score after the cancellation.
+	UserScore int
+	// BookingBannedUntil is set when the player can't book until then.
+	BookingBannedUntil *time.Time
+}
+
+// BookingStanding is whether a player may book right now.
+type BookingStanding struct {
+	UserScore          int
+	BookingBannedUntil *time.Time
+}
+
+// Banned reports whether the player is barred from booking at `now`.
+func (s BookingStanding) Banned(now time.Time) bool {
+	return s.BookingBannedUntil != nil && s.BookingBannedUntil.After(now)
+}

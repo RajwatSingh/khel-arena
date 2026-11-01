@@ -52,7 +52,7 @@ type BookingAPI interface {
 	Create(ctx context.Context, in service.CreateBookingInput) (domain.Booking, error)
 	Availability(ctx context.Context, courtID uuid.UUID, date time.Time) ([]domain.GridSlot, error)
 	ListMine(ctx context.Context, userID uuid.UUID, limit int) ([]domain.BookingDetail, error)
-	Cancel(ctx context.Context, bookingID, userID uuid.UUID) error
+	Cancel(ctx context.Context, bookingID, userID uuid.UUID, reason string) (domain.CancelOutcome, error)
 }
 
 // ArenaAPI is the part of service.ArenaService the handlers reach for.

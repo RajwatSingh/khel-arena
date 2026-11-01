@@ -289,8 +289,13 @@ export const listBookings = (limit = 20, opts) =>
 export const createBooking = (input, opts) =>
 	request('/bookings', { method: 'POST', body: input, auth: true, ...opts });
 
-export const cancelBooking = (id, opts) =>
-	request(`/bookings/${id}`, { method: 'DELETE', auth: true, ...opts });
+/**
+ * Cancels a booking. A reason is required. Returns what it did to the user
+ * score: `{ late, user_score, booking_banned_until }`. A booking paid through
+ * eSewa or Khalti is refused; the venue has to refund it.
+ */
+export const cancelBooking = (id, reason, opts) =>
+	request(`/bookings/${id}`, { method: 'DELETE', body: { reason }, auth: true, ...opts });
 
 // -------------------------------------- results, reviews and galleries --
 

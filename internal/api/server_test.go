@@ -54,7 +54,9 @@ func TestRoutes(t *testing.T) {
 		},
 		availability: func(context.Context, uuid.UUID, time.Time) ([]domain.GridSlot, error) { return nil, nil },
 		listMine:     func(context.Context, uuid.UUID, int) ([]domain.BookingDetail, error) { return nil, nil },
-		cancel:       func(context.Context, uuid.UUID, uuid.UUID) error { return nil },
+		cancel: func(context.Context, uuid.UUID, uuid.UUID, string) (domain.CancelOutcome, error) {
+			return domain.CancelOutcome{UserScore: 100}, nil
+		},
 	}
 	profiles := &fakeProfiles{
 		me: func(context.Context, uuid.UUID) (domain.User, error) { return testUser, nil },
@@ -116,7 +118,7 @@ func TestRoutes(t *testing.T) {
 		{http.MethodGet, "/v1/me", "", true, http.StatusOK},
 		{http.MethodPost, "/v1/bookings", `{"court_id":"` + testCourtID.String() + `","starts_at":"2026-08-14T12:15:00Z","ends_at":"2026-08-14T13:15:00Z"}`, true, http.StatusCreated},
 		{http.MethodGet, "/v1/bookings", "", true, http.StatusOK},
-		{http.MethodDelete, "/v1/bookings/" + testBookingID.String(), "", true, http.StatusNoContent},
+		{http.MethodDelete, "/v1/bookings/" + testBookingID.String(), `{"reason":"Plans changed"}`, true, http.StatusOK},
 		{http.MethodPost, "/v1/bookings/" + testBookingID.String() + "/checkout", `{"provider":"esewa"}`, true, http.StatusCreated},
 		{http.MethodGet, "/v1/bookings/" + testBookingID.String() + "/payment", "", true, http.StatusOK},
 	}

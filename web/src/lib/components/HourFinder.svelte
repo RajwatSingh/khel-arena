@@ -395,9 +395,9 @@
 	.count {
 		margin: 0.5rem 0 0;
 		font-family: var(--display);
-		font-size: 1.25rem;
-		font-weight: 800;
-		letter-spacing: -0.02em;
+		font-size: 1.4rem;
+		font-weight: 700;
+		letter-spacing: 0;
 		color: var(--ink);
 	}
 

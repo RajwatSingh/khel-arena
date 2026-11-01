@@ -45,7 +45,7 @@
 	--brick-wash: #f2e0d8;
 
 	/* Type */
-	--display: 'Inter', 'Arial Black', system-ui, sans-serif;
+	--display: 'Anek Latin', 'Inter', 'Arial Narrow', system-ui, sans-serif;
 	--sans: 'Inter', system-ui, -apple-system, sans-serif;
 
 	/* Shape */
@@ -155,35 +155,38 @@ a {
 }
 
 /* ---------------------------------------------------------------- type ----
-   Archivo carries weight and size fast — big jumps between headline steps,
-   tight negative tracking as it grows. Public Sans stays put underneath.  */
+   Headlines are Anek Latin, set semi-condensed and bold: a scoreboard and
+   jersey feel, with a Devanagari sibling if Nepali ever joins the English.
+   Being narrower, it runs a step larger than Inter did and needs almost no
+   negative tracking. Inter stays underneath for reading and for numbers. */
 
 .display {
 	font-family: var(--display);
+	font-stretch: 87.5%;
 	font-weight: 800;
-	letter-spacing: -0.02em;
+	letter-spacing: -0.005em;
 	text-wrap: balance;
 	color: var(--ink);
 }
 
 .display-xl {
-	font-size: clamp(2.75rem, 6vw, 4.75rem);
-	line-height: 1.02;
-	letter-spacing: -0.03em;
-	font-weight: 900;
+	font-size: clamp(3rem, 6.6vw, 5.25rem);
+	line-height: 0.98;
+	letter-spacing: -0.01em;
+	font-weight: 800;
 }
 
 .display-l {
-	font-size: clamp(2rem, 3.6vw, 3.1rem);
-	line-height: 1.08;
-	letter-spacing: -0.025em;
+	font-size: clamp(2.2rem, 4vw, 3.4rem);
+	line-height: 1.02;
+	letter-spacing: -0.008em;
 	font-weight: 800;
 }
 
 .display-m {
-	font-size: clamp(1.3rem, 1.85vw, 1.65rem);
-	line-height: 1.2;
-	letter-spacing: -0.015em;
+	font-size: clamp(1.4rem, 2vw, 1.8rem);
+	line-height: 1.12;
+	letter-spacing: 0;
 	font-weight: 700;
 }
 

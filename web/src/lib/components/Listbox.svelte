@@ -167,7 +167,7 @@
 		display: inline-flex;
 	}
 
-	/* The AvailabilitySearch variant: stands in for a bare, borderless
+	/* The fill variant: stands in for a bare, borderless
 	   <select> sitting flush in its own column, not a pill sitting in a row
 	   of other controls — full width, no border/background of its own,
 	   larger text to match what it's replacing. */

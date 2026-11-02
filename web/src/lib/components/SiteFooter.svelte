@@ -23,7 +23,7 @@
 
 			<nav aria-label="Booking">
 				<h2 class="label">Book</h2>
-				<a class="foot-link" href="/tonight">Find a court</a>
+				<a class="foot-link" href="/">Find a court</a>
 				<a class="foot-link" href="/arenas">All arenas</a>
 				<a class="foot-link" href="/bookings">My bookings</a>
 			</nav>

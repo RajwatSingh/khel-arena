@@ -95,7 +95,7 @@
 		{:else}
 			<p class="empty prose">
 				No games are short of players in {data.area === 'all' ? 'the valley' : data.area} right now.
-				<a class="link" href="/tonight">Book a court</a> and post the spare places.
+				<a class="link" href="/">Book a court</a> and post the spare places.
 			</p>
 		{/if}
 	</div>

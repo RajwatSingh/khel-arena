@@ -17,8 +17,7 @@
 			The board is still up. Everything bookable in the valley is one tap away.
 		</p>
 		<div class="acts fade-up fade-up-2">
-			<a class="btn btn-primary" href="/tonight">Find a court</a>
-			<a class="btn btn-secondary" href="/">Back to the front</a>
+			<a class="btn btn-primary" href="/">Find a court</a>
 		</div>
 	</div>
 </section>

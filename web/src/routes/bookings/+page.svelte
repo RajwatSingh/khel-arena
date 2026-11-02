@@ -273,7 +273,7 @@
 					The board shows every free hour in the valley. Pick one and it is yours for fifteen
 					minutes while you pay.
 				</p>
-				<a class="btn btn-primary" href="/tonight">Find a court</a>
+				<a class="btn btn-primary" href="/">Find a court</a>
 			</div>
 		{:else}
 			{#if error}

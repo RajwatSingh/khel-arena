@@ -1,461 +1,192 @@
 <script>
-	import HourLedger from '$lib/components/HourLedger.svelte';
+	import { goto } from '$app/navigation';
+	import { SPORT_LABELS } from '$lib/api/index.js';
 	import HourPulse from '$lib/components/HourPulse.svelte';
+	import HourFinder from '$lib/components/HourFinder.svelte';
 	import CentreMark from '$lib/components/CentreMark.svelte';
 	import TextAnimate from '$lib/components/TextAnimate.svelte';
-	import ArenaRecord from '$lib/components/ArenaRecord.svelte';
-	import AvailabilitySearch from '$lib/components/AvailabilitySearch.svelte';
-	import { reveal } from '$lib/actions/reveal.js';
-	import { formatDateLong, formatNPR, formatTime } from '$lib/time.js';
+	import DateRail from '$lib/components/DateRail.svelte';
+	import Listbox from '$lib/components/Listbox.svelte';
+	import SportIcon from '$lib/components/SportIcon.svelte';
+	import { formatDateLong, formatNPR } from '$lib/time.js';
 
 	let { data } = $props();
 
-	const freeTonight = $derived(
-		data.ledger.rows.reduce(
-			(total, row) =>
-				total +
-				row.slots.filter((s) => s.available && Number(formatTime(s.starts_at).slice(0, 2)) >= 17)
-					.length,
-			0
-		)
-	);
+	// The URL owns the board. Every control writes to it, so a filtered view is
+	// shareable and the back button walks back through the searches.
+	const date = $derived(data.date);
+	const sport = $derived(data.sport);
+	const area = $derived(data.area);
 
-	// Counts up from zero on mount, once, as the header's own small piece of
-	// motion. Falls back to the real number whenever there's no animated
-	// value yet — SSR, no JS, or reduced motion never show a zero.
-	let animatedCount = $state(null);
+	const ledger = $derived(data.ledger);
+	const sportName = $derived(SPORT_LABELS[sport].toLowerCase());
 
-	$effect(() => {
-		const target = freeTonight;
-		const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+	const areaOptions = $derived([
+		{ value: 'all', label: 'Anywhere in the valley' },
+		...data.areas.map((a) => ({ value: a, label: a }))
+	]);
 
-		if (reduceMotion) {
-			animatedCount = null;
-			return;
-		}
+	const sportOptions = $derived(data.sports.map((s) => ({ value: s, label: SPORT_LABELS[s] })));
 
-		animatedCount = 0;
-		let raf;
-		const start = performance.now();
-		const duration = 800;
-
-		function tick(now) {
-			const t = Math.min(1, (now - start) / duration);
-			const eased = 1 - Math.pow(1 - t, 3);
-			animatedCount = t < 1 ? Math.round(target * eased) : null;
-			if (t < 1) raf = requestAnimationFrame(tick);
-		}
-
-		raf = requestAnimationFrame(tick);
-		return () => cancelAnimationFrame(raf);
-	});
-
-	const steps = [
-		{
-			at: 'Right away',
-			title: 'Hold the hour',
-			body: 'One tap puts the hour in your name. Nothing is charged yet, and nobody else can take it while you hold it.'
-		},
-		{
-			at: 'Within 15 minutes',
-			title: 'Pay, or lose it',
-			body: 'eSewa, Khalti, or cash reserved at the arena. Miss the window and the hour goes back on the board for someone else.'
-		},
-		{
-			at: 'At kick-off',
-			title: 'Show the reference',
-			body: 'Read the four digits out at the gate. Cancel any time before you are due on and the hour is released.'
-		}
-	];
+	function set(changes) {
+		const next = { date, sport, area, ...changes };
+		goto(`/?date=${next.date}&sport=${next.sport}&area=${encodeURIComponent(next.area)}`, {
+			replaceState: true,
+			keepFocus: true,
+			noScroll: true
+		});
+	}
 </script>
 
 <svelte:head>
-	<title>Khel Arena · Book a court by the hour in Kathmandu</title>
+	<title>Find a court · Every free hour in the valley | Khel Arena</title>
 	<meta
 		name="description"
-		content="Live futsal, basketball and badminton availability across Kathmandu and Lalitpur. Hold an hour for fifteen minutes, pay with eSewa or Khalti, play."
+		content="Every court in Kathmandu and Lalitpur, every hour of the day, priced. Pick an hour to hold it."
 	/>
 </svelte:head>
 
-<section class="hero forest-band">
+<section class="head forest-band">
 	<div class="shell">
-		<p class="label live">Kathmandu &amp; Lalitpur · {formatDateLong(data.date)}</p>
-
-		{#if freeTonight > 0}
-			<h1 class="display display-xl">
-				<span class="count num">{animatedCount ?? freeTonight}</span>
-				<TextAnimate text="court-hours are still free tonight." delay={90} />
-			</h1>
-		{:else}
-			<h1 class="display display-xl"><TextAnimate text="Tonight is played out." /></h1>
-		{/if}
-
-		<HourPulse />
-
-		<p class="lede">
-			{#if freeTonight > 0}
-				An hour nobody claims doesn't go on sale. It just goes away. Tap one, give your five
-				fifteen minutes to say yes, then pay to make it yours.
+		<p class="label fade-up">The board</p>
+		<h1 class="display display-l">{#key date}<TextAnimate text={formatDateLong(date)} />{/key}</h1>
+		<div class="pulse-wrap fade-up fade-up-1">
+			<HourPulse />
+		</div>
+		<p class="lede fade-up fade-up-2">
+			{#if ledger.open_hours > 0}
+				<strong class="num">{ledger.open_hours}</strong>
+				free {ledger.open_hours === 1 ? 'hour' : 'hours'} on
+				<strong class="num">{ledger.rows.length}</strong>
+				{ledger.rows.length === 1 ? 'court' : 'courts'}{ledger.cheapest_npr
+					? `, from NPR ${formatNPR(ledger.cheapest_npr)}`
+					: ''}. Pick a time, then an arena.
+			{:else if ledger.rows.length}
+				Nothing free here. Try another day, another area, or another sport.
 			{:else}
-				Every evening hour in the valley is taken or done. Tomorrow is one tap away, and the dawn
-				slots are still open.
+				No {sportName} courts are listed in that area yet.
 			{/if}
 		</p>
-
 		<div class="pitch-mark fade-up fade-up-3">
 			<CentreMark wide />
 		</div>
+	</div>
+</section>
 
-		<div class="search-wrap">
-			<AvailabilitySearch
-				dates={data.dates}
-				areas={data.areas}
-				sports={['futsal', 'basketball', 'badminton', 'cricket_net']}
-			/>
+<section class="controls">
+	<div class="shell">
+		<div class="fade-up fade-up-2">
+			<DateRail dates={data.dates} selected={date} onselect={(d) => set({ date: d })} />
 		</div>
 
-		{#if data.ledger.cheapest_npr}
-			<p class="from small">
-				Cheapest free hour today is <strong class="num"
-					>NPR {formatNPR(data.ledger.cheapest_npr)}</strong
-				>. No booking fee: the arena's price is the price.
-			</p>
-		{/if}
+		<div class="filters fade-up fade-up-3">
+			<div class="group">
+				<Listbox
+					label="Filter by sport"
+					value={sport}
+					options={sportOptions}
+					onselect={(v) => set({ sport: v })}
+				>
+					{#snippet icon(v)}
+						<SportIcon sport={v} size={16} />
+					{/snippet}
+				</Listbox>
+
+				<Listbox
+					label="Filter by area"
+					value={area}
+					options={areaOptions}
+					onselect={(v) => set({ area: v })}
+				/>
+			</div>
+		</div>
 	</div>
 </section>
 
 <section class="board">
 	<div class="shell">
-		<header class="section-head">
-			<div>
-				<h2 class="display display-l">Every free hour today</h2>
-				<p class="lede">
-					Futsal courts across the valley, hour by hour. Tap a price to hold that hour.
+		{#if ledger.rows.length}
+			<HourFinder {ledger} />
+		{:else}
+			<div class="empty fade-up">
+				<h2 class="display display-m">Nothing here yet</h2>
+				<p class="small">
+					No {sportName} courts in {area === 'all' ? 'the valley' : area}. Widen the area or pick another
+					sport.
 				</p>
+				<button class="btn btn-secondary" onclick={() => set({ area: 'all' })}>Search the whole valley</button>
 			</div>
-			<a class="btn btn-secondary" href="/tonight">See the whole week</a>
-		</header>
-
-		<HourLedger ledger={data.ledger} />
-	</div>
-</section>
-
-<section class="band how">
-	<div class="shell">
-		<header class="section-head" use:reveal>
-			<div>
-				<h2 class="display display-l">Fifteen minutes to get your five to answer</h2>
-				<p class="lede">
-					A held hour is real: the court leaves the board the moment you tap it. It is also
-					temporary, which is the only reason anyone can trust the board at all.
-				</p>
-			</div>
-		</header>
-
-		<ol class="steps">
-			{#each steps as step, i (step.at)}
-				<li use:reveal={{ delay: i * 80 }}>
-					<p class="when">{step.at}</p>
-					<h3 class="display display-m">{step.title}</h3>
-					<p class="small">{step.body}</p>
-				</li>
-			{/each}
-		</ol>
-	</div>
-</section>
-
-<section class="band arenas-band">
-	<div class="shell">
-		<header class="section-head" use:reveal>
-			<div>
-				<h2 class="display display-l">Four arenas, nine courts</h2>
-				<p class="lede">
-					Every venue you can book here, with its own hours and its own rates.
-				</p>
-			</div>
-			<a class="btn btn-secondary" href="/arenas">All arenas</a>
-		</header>
-
-		<ul class="arenas">
-			{#each data.arenas as arena, i (arena.id)}
-				<li use:reveal={{ delay: i * 70 }}><ArenaRecord {arena} /></li>
-			{/each}
-		</ul>
-	</div>
-</section>
-
-<section class="band">
-	<div class="shell">
-		<div class="promises">
-			<div class="promise" use:reveal>
-				<h2 class="display display-l">Two teams can never be sold the same hour</h2>
-				<div class="prose">
-					<p>
-						Double-booking is not something we check for and apologise about afterwards. The
-						database physically cannot hold two live bookings on one court at one time: not under
-						load, not on a retry, not when twenty people tap the same eight o'clock slot in the
-						same second.
-					</p>
-					<p>
-						Exactly one of them gets it. The other nineteen are told straight away and can pick
-						again, rather than finding out at the gate with nine people and a ball.
-					</p>
-				</div>
-				<a class="btn btn-primary" href="/tonight">Find an hour</a>
-			</div>
-
-			<div class="promise-light" use:reveal={{ delay: 90 }}>
-				<h2 class="display display-m">The arena's price is the price</h2>
-				<div class="prose">
-					<p>
-						No booking fee, and nothing added for being the last hour left on the board. eSewa,
-						Khalti, or cash at the gate: the number on the cell is the number you pay, whether you
-						book at noon or with four minutes left on your hold.
-					</p>
-				</div>
-			</div>
-		</div>
+		{/if}
 	</div>
 </section>
 
 <style>
-	.hero {
-		padding-block: clamp(3rem, 6vw, 5.5rem) clamp(2.5rem, 5vw, 4rem);
-		animation: fade-up var(--dur-load) var(--ease) backwards;
-	}
-
-	.hero h1,
-	.hero .from strong {
-		color: var(--on-field);
-	}
-
-	.hero .lede,
-	.hero .from {
-		color: var(--on-field-muted);
-	}
-
-	.hero :global(.hourpulse),
-	.hero .lede,
-	.hero .search-wrap,
-	.hero .from {
-		animation: fade-up var(--dur-load) var(--ease) backwards;
-	}
-
-	.hero .lede {
-		animation-delay: var(--dur-load-step);
-	}
-
-	.hero .search-wrap {
-		animation-delay: calc(var(--dur-load-step) * 2);
-	}
-
-	.hero .from {
-		animation-delay: calc(var(--dur-load-step) * 3);
-	}
-
-	@keyframes fade-up {
-		from {
-			opacity: 0;
-			transform: translateY(10px);
-		}
-	}
-
-	.label.live {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.55rem;
-		color: var(--on-field-faint);
-	}
-
-	.label.live::before {
-		content: '';
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: var(--accent-on-field);
-		animation: pulse 2.4s ease-in-out infinite;
-	}
-
-	@keyframes pulse {
-		0%,
-		100% {
-			opacity: 1;
-			box-shadow: 0 0 0 0 color-mix(in srgb, var(--pine) 35%, transparent);
-		}
-		50% {
-			opacity: 0.55;
-			box-shadow: 0 0 0 4px color-mix(in srgb, var(--pine) 0%, transparent);
-		}
-	}
-
 	h1 {
-		margin-top: 1.1rem;
-		max-width: 18ch;
+		margin-top: 0.6rem;
 	}
 
-	.count {
-		color: var(--accent-on-field);
-		font-weight: 600;
+	.head .lede {
+		margin-top: 1rem;
+		max-width: 56ch;
 	}
 
-	:global(.hero .hourpulse) {
-		margin-top: 1.6rem;
-		max-width: 34rem;
+	.pulse-wrap {
+		margin-top: 1.4rem;
+		max-width: 26rem;
 	}
 
-	.hero .lede {
-		margin-top: 1.6rem;
-		max-width: 52ch;
+	.controls {
+		padding-block: clamp(2rem, 4vw, 3rem) 0.5rem;
 	}
 
-	.search-wrap {
-		margin-top: 2.25rem;
-		max-width: 60rem;
+	.controls .shell {
+		display: grid;
+		gap: 1rem;
 	}
 
-	.from {
-		margin-top: 1.1rem;
-		color: var(--muted);
+	/* Grid items default to min-width: auto, which lets a row that wants to
+	   be wider than the viewport (the date rail, the filter chips) push the
+	   whole page into horizontal scroll instead of clipping/scrolling
+	   itself the way its own overflow-x: auto says it should. */
+	.controls .shell > * {
+		min-width: 0;
 	}
 
-	.from strong {
-		color: var(--ink);
-		font-weight: 600;
+	.filters {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	/* Both filters read as one control now — what, then where — sat
+	   together on the same edge instead of pulled to opposite ends of the
+	   row, so the eye takes them in as a pair. */
+	.group {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
 	}
 
 	.board {
-		padding-block: clamp(2.25rem, 4vw, 3.25rem) var(--band);
+		padding-block: 1.5rem var(--band);
 	}
 
-	.section-head {
-		display: flex;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: 1.5rem 2rem;
-		margin-bottom: 2rem;
-		flex-wrap: wrap;
+	.empty {
+		display: grid;
+		justify-items: start;
+		gap: 0.75rem;
+		padding-block: clamp(2.5rem, 6vw, 4rem);
+		border-top: 1px solid var(--line);
 	}
 
-	.section-head .lede {
+	.empty p {
+		color: var(--muted);
+		max-width: 44ch;
+	}
+
+	.empty .btn {
 		margin-top: 0.75rem;
 	}
-
-	.section-head .btn {
-		flex-shrink: 0;
-	}
-
-	/* --------------------------------------------------------------- how --- */
-
-	.how {
-		background: var(--surface);
-		border-block: 1px solid var(--line);
-	}
-
-	.steps {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
-		gap: 1rem;
-	}
-
-	.steps li {
-		padding-top: 1.4rem;
-		border-top: 2px solid var(--line);
-		transition: border-color 0.2s var(--ease);
-	}
-
-	.steps li:hover {
-		border-top-color: var(--pine);
-	}
-
-	/* The markers are the clock, not 01/02/03 — the hold window is the content. */
-	.when {
-		display: inline-block;
-		margin-bottom: 0.9rem;
-		padding: 0.25rem 0.7rem;
-		border-radius: var(--r-pill);
-		background: var(--pine-wash);
-		color: var(--pine);
-		font-size: 0.8125rem;
-		font-weight: 600;
-	}
-
-	.steps h3 {
-		margin-bottom: 0.5rem;
-		color: var(--ink);
-	}
-
-	.steps p {
-		color: var(--muted);
-	}
-
-	/* ------------------------------------------------------------ arenas --- */
-
-	.arenas {
-		display: grid;
-	}
-
-	/* ----------------------------------------------------------- promise --- */
-
-	.promises {
-		display: grid;
-		grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-		gap: 1rem;
-		align-items: stretch;
-	}
-
-	.promise,
-	.promise-light {
-		display: flex;
-		flex-direction: column;
-		padding: clamp(1.75rem, 4vw, 3.5rem);
-	}
-
-	.promise {
-		background: var(--pine);
-		color: #ffffff;
-	}
-
-	.promise h2 {
-		color: #ffffff;
-		max-width: 18ch;
-	}
-
-	.promise .prose {
-		margin-top: 1.5rem;
-		color: rgba(255, 255, 255, 0.92);
-		font-size: 1.0625rem;
-	}
-
-	.promise .btn {
-		margin-top: 2rem;
-		align-self: flex-start;
-		background: #ffffff;
-		color: var(--pine);
-	}
-
-	.promise .btn:hover {
-		background: var(--sand);
-	}
-
-	/* The pricing card borrows the ledger's peak-rate tint — sand already
-	   means "money" on this site, so reusing it here is not decoration. */
-	.promise-light {
-		justify-content: center;
-		background: var(--sand);
-	}
-
-	.promise-light h2 {
-		max-width: 16ch;
-	}
-
-	.promise-light .prose {
-		margin-top: 1rem;
-	}
-
-	@media (max-width: 780px) {
-		.promises {
-			grid-template-columns: minmax(0, 1fr);
-		}
-	}
-
 </style>

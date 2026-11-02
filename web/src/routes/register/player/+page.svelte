@@ -36,7 +36,7 @@
 		fieldErrors = {};
 		try {
 			await session.signUp({ ...form, position: form.position || null });
-			goto('/tonight');
+			goto('/');
 		} catch (err) {
 			if (err instanceof ApiError) {
 				error = err.fields.length ? null : err.message;

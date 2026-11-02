@@ -565,7 +565,7 @@ services; the janitor; rate limiting; and the HTTP API over all of them, with
 `client.js`, and every page is served from Postgres:
 
 ```
-/tonight, /arenas       book a court by the hour
+/, /arenas              book a court by the hour
 /games                  the call sheet -- games short of players
 /teams                  squads, rosters, invite codes
 /tournaments            brackets and entries

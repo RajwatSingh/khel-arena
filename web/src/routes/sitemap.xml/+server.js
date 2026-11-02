@@ -26,7 +26,6 @@ export async function GET({ url, fetch }) {
 
 	const paths = [
 		{ path: '/', priority: '1.0' },
-		{ path: '/tonight', priority: '0.9' },
 		{ path: '/arenas', priority: '0.8' },
 		...arenas.map((arena) => ({ path: `/arenas/${arena.slug}`, priority: '0.7' }))
 	];

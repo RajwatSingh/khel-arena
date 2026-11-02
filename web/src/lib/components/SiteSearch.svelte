@@ -127,7 +127,7 @@
 	const isOwner = $derived(session.user?.account_type === 'arena_owner');
 
 	const pages = $derived([
-		{ label: 'Find a court', sub: 'Free hours, by time', href: '/tonight' },
+		{ label: 'Find a court', sub: 'Free hours, by time', href: '/' },
 		{ label: 'Arenas', sub: 'Every venue in the valley', href: '/arenas' },
 		{ label: 'Games needing players', sub: 'Join a game', href: '/games' },
 		{ label: 'Post a game', sub: 'Find players for your booking', href: '/games/new' },
@@ -167,7 +167,7 @@
 					kind: 'area',
 					label: `Courts in ${a}`,
 					sub: 'Free hours in this area',
-					href: `/tonight?area=${encodeURIComponent(a)}`
+					href: `/?area=${encodeURIComponent(a)}`
 				}))
 			},
 			{

@@ -6,7 +6,7 @@
 	 * it inside an existing heading — it renders inline spans only, so
 	 * the heading keeps its own margin/max-width/balance rules. Re-runs
 	 * whenever `text` changes — a scoreboard flipping to a new line reads
-	 * as a feature here (the /tonight date, an arena name), not a glitch.
+	 * as a feature here (the board's date, an arena name), not a glitch.
 	 */
 	let { text = '', stagger = 40, delay = 0 } = $props();
 

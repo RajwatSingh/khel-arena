@@ -7,14 +7,13 @@
 
 	const ticking = clock();
 
-	// Primary nav stays at four: the two ways in (a court, a game) and the
-	// two registers behind them. Teams, tournaments and the back office are
+	// Primary nav stays short. Teams, tournaments and the back office are
 	// reachable from the pages that need them and from the footer.
-	// A venue operator and a player want different bars. The operator's four
-	// are their dashboard and back office plus the two public boards they
-	// still need to see; the player's are the two ways in and their holds.
+	// A venue operator and a player want different bars. The operator's are
+	// their dashboard and back office plus the two public boards they still
+	// need to see. The player's leave out the court board: it is the home
+	// page, and the logo already goes there.
 	const playerLinks = [
-		{ href: '/tonight', label: 'Find a court' },
 		{ href: '/games', label: 'Games' },
 		{ href: '/arenas', label: 'Arenas' },
 		{ href: '/bookings', label: 'My bookings' }

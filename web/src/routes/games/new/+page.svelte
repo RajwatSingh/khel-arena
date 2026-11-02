@@ -105,7 +105,7 @@
 							You need a confirmed booking to post a game. Book a court first, then come back to
 							find players for it.
 						</p>
-						<a class="btn btn-primary" href="/tonight">Find a court</a>
+						<a class="btn btn-primary" href="/">Find a court</a>
 					</div>
 				{:else}
 					{#if available.length === 0}

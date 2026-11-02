@@ -7,7 +7,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-check --threshold warning",
+    "check": "svelte-kit sync && svelte-check --threshold warning",
     "test": "vitest run",
     "test:watch": "vitest"
   },

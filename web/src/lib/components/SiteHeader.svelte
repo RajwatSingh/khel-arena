@@ -78,7 +78,12 @@
 		if (menuOpen) profileOpen = false;
 	}
 
-	function onWindowClick(e) {
+	// Outside taps are caught on pointerdown, before anything re-renders. On
+	// click, the tap that opens the menu has already swapped the bars icon
+	// for a cross, so its target is gone from the page, reads as "outside",
+	// and the menu shut again at once. iOS Safari also sends no click to the
+	// window for taps on plain page areas, so they never closed anything.
+	function onWindowPointerdown(e) {
 		if (profileOpen && profileEl && !profileEl.contains(e.target)) profileOpen = false;
 		if (menuOpen && menuEl && !menuEl.contains(e.target)) menuOpen = false;
 	}
@@ -106,7 +111,7 @@
 	}
 </script>
 
-<svelte:window onclick={onWindowClick} onkeydown={onKeydown} />
+<svelte:window onpointerdown={onWindowPointerdown} onkeydown={onKeydown} />
 
 <header>
 	<div class="shell bar">

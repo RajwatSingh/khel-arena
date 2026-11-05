@@ -3,6 +3,7 @@
 	import { SPORT_LABELS } from '$lib/api/index.js';
 	import { session } from '$lib/session.svelte.js';
 	import CallRecord from '$lib/components/CallRecord.svelte';
+	import RequestsInbox from '$lib/components/RequestsInbox.svelte';
 	import CentreMark from '$lib/components/CentreMark.svelte';
 	import TextAnimate from '$lib/components/TextAnimate.svelte';
 	import Listbox from '$lib/components/Listbox.svelte';
@@ -63,6 +64,8 @@
 
 <section class="board">
 	<div class="shell">
+		<RequestsInbox />
+
 		<div class="controls">
 			<div class="filters">
 				<Listbox

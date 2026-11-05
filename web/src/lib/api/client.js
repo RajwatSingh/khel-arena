@@ -571,6 +571,9 @@ export const callFeed = ({ skill = 'all', area = 'all', limit = 50, ...opts } = 
 
 export const myCalls = (opts) => request('/calls/mine', { auth: true, ...opts });
 
+/** The signed-in player's open games with requests still waiting on them. */
+export const callRequests = (opts) => request('/calls/requests', { auth: true, ...opts });
+
 export const getCall = (id, opts) => request(`/calls/${id}`, { auth: true, ...opts });
 
 export const createCall = (input, opts) =>

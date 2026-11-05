@@ -137,6 +137,7 @@ type TeamAPI interface {
 type MatchmakingAPI interface {
 	Feed(ctx context.Context, f postgres.CallFilter) ([]domain.Call, error)
 	MyCalls(ctx context.Context, userID uuid.UUID) ([]domain.Call, error)
+	Requests(ctx context.Context, userID uuid.UUID) ([]service.CallWithResponses, error)
 	Create(ctx context.Context, authorID uuid.UUID, c domain.Call) (domain.Call, error)
 	Get(ctx context.Context, callID, viewerID uuid.UUID) (service.CallWithResponses, error)
 	Update(ctx context.Context, callID, actorID uuid.UUID, c domain.Call) (domain.Call, error)
@@ -447,6 +448,7 @@ func (s *Server) routes() http.Handler {
 	// way, because a shared link should open for somebody not signed in --
 	// the handler simply omits the viewer-specific fields.
 	mux.Handle("GET /v1/calls/mine", protected(s.handleMyCalls))
+	mux.Handle("GET /v1/calls/requests", protected(s.handleCallRequests))
 	mux.Handle("POST /v1/calls", protected(s.handleCreateCall))
 	// Public, but the organiser sees who has asked and a player sees that
 	// they have asked, so the viewer is identified when they send a token.

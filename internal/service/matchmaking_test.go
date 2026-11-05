@@ -60,6 +60,9 @@ func (s *stubCalls) Withdraw(context.Context, uuid.UUID, uuid.UUID) error { s.wr
 func (s *stubCalls) HasResponded(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return s.responded, nil
 }
+func (s *stubCalls) PendingRequests(context.Context, uuid.UUID, time.Time) ([]domain.Response, error) {
+	return s.responses, nil
+}
 
 type fixedClock struct{ t time.Time }
 
@@ -324,5 +327,38 @@ func TestFeedRejectsAnUnknownSkill(t *testing.T) {
 
 	if domain.CodeOf(err) != domain.CodeInvalid {
 		t.Errorf("code = %q, want invalid", domain.CodeOf(err))
+	}
+}
+
+func TestRequestsGroupsPendingUnderTheirGame(t *testing.T) {
+	author := uuid.New()
+	call := openCall(author, 2, 0)
+	call.ID = uuid.New()
+	a, b := uuid.New(), uuid.New()
+
+	stub := &stubCalls{call: call, responses: []domain.Response{
+		{CallID: call.ID, UserID: a},
+		{CallID: call.ID, UserID: b},
+		// A request on a game this user didn't post is never theirs to answer.
+		{CallID: uuid.New(), UserID: uuid.New()},
+	}}
+	svc := NewMatchmakingService(stub, nil, fixedClock{now})
+
+	got, err := svc.Requests(context.Background(), author)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != call.ID {
+		t.Fatalf("got %d games, want just the author's one", len(got))
+	}
+	if len(got[0].Responses) != 2 || got[0].Responses[0].UserID != a || got[0].Responses[1].UserID != b {
+		t.Fatalf("responses = %+v, want a then b", got[0].Responses)
+	}
+}
+
+func TestRequestsNeedsASignedInUser(t *testing.T) {
+	svc := NewMatchmakingService(&stubCalls{}, nil, fixedClock{now})
+	if _, err := svc.Requests(context.Background(), uuid.Nil); err == nil {
+		t.Fatal("anonymous caller got requests")
 	}
 }

@@ -73,3 +73,56 @@ func TestAcceptAndWithdrawCountOncePerPlayer(t *testing.T) {
 	}
 	state(1, domain.MatchmakingOpen)
 }
+
+func TestPendingRequestsAreTheAuthorsUnansweredOnes(t *testing.T) {
+	f := newFixture(t, 3)
+	repo := NewMatchmakingRepo(f.pool)
+	ctx := context.Background()
+	author, a, b := f.players[0], f.players[1], f.players[2]
+
+	newCall := func(title string, by uuid.UUID, starts time.Time) uuid.UUID {
+		t.Helper()
+		c, err := repo.Create(ctx, domain.Call{
+			AuthorID: by, ArenaID: &f.arenaID, Title: title,
+			NeededPlayers: 3, Skill: domain.SkillCasual, StartsAt: starts,
+		})
+		if err != nil {
+			t.Fatalf("creating %q: %v", title, err)
+		}
+		t.Cleanup(func() {
+			_, _ = f.pool.Exec(context.Background(), `delete from matchmaking_posts where id = $1`, c.ID)
+		})
+		return c.ID
+	}
+	respond := func(call, who uuid.UUID) {
+		t.Helper()
+		if err := repo.Respond(ctx, call, who, ""); err != nil {
+			t.Fatalf("responding: %v", err)
+		}
+	}
+
+	mine := newCall("Mine", author, time.Now().Add(24*time.Hour))
+	theirs := newCall("Theirs", a, time.Now().Add(24*time.Hour))
+	respond(mine, a)
+	respond(mine, b)
+	respond(theirs, b)
+	if err := repo.Accept(ctx, mine, a); err != nil {
+		t.Fatalf("accepting: %v", err)
+	}
+
+	got, err := repo.PendingRequests(ctx, author, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].CallID != mine || got[0].UserID != b {
+		t.Fatalf("got %+v, want only b's request on the author's game", got)
+	}
+	if got[0].Responder == nil || got[0].Responder.ID != b {
+		t.Fatal("responder card missing")
+	}
+
+	// A game that has already kicked off is no longer asking for anyone.
+	if got, _ := repo.PendingRequests(ctx, author, time.Now().Add(48*time.Hour)); len(got) != 0 {
+		t.Fatalf("past game still shows %d requests", len(got))
+	}
+}

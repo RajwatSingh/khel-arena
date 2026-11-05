@@ -25,6 +25,7 @@ type MatchmakingStore interface {
 	Accept(ctx context.Context, callID, userID uuid.UUID) error
 	Withdraw(ctx context.Context, callID, userID uuid.UUID) error
 	HasResponded(ctx context.Context, callID, userID uuid.UUID) (bool, error)
+	PendingRequests(ctx context.Context, authorID uuid.UUID, now time.Time) ([]domain.Response, error)
 }
 
 // MatchmakingBookings is the slice of booking storage this service reads, for
@@ -115,6 +116,48 @@ func (s *MatchmakingService) MyCalls(ctx context.Context, userID uuid.UUID) ([]d
 		return nil, domain.Unauthenticated("Sign in to see your games.")
 	}
 	return s.calls.ListForUser(ctx, userID)
+}
+
+// Requests returns the author's open games that have players waiting for an
+// answer, each with only its pending requests. The game with the newest
+// request comes first, so a fresh request is at the top of the list.
+func (s *MatchmakingService) Requests(ctx context.Context, userID uuid.UUID) ([]CallWithResponses, error) {
+	if userID == uuid.Nil {
+		return nil, domain.Unauthenticated("Sign in to see your games.")
+	}
+
+	pending, err := s.calls.PendingRequests(ctx, userID, s.clock.Now())
+	if err != nil || len(pending) == 0 {
+		return nil, err
+	}
+
+	calls, err := s.calls.ListForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[uuid.UUID]domain.Call, len(calls))
+	for _, c := range calls {
+		if c.AuthoredBy(userID) {
+			byID[c.ID] = c
+		}
+	}
+
+	var out []CallWithResponses
+	index := map[uuid.UUID]int{}
+	for _, r := range pending {
+		i, seen := index[r.CallID]
+		if !seen {
+			call, ok := byID[r.CallID]
+			if !ok {
+				continue
+			}
+			i = len(out)
+			index[r.CallID] = i
+			out = append(out, CallWithResponses{Call: call})
+		}
+		out[i].Responses = append(out[i].Responses, r)
+	}
+	return out, nil
 }
 
 // Get returns a call, with its responses only for the author.

@@ -237,11 +237,14 @@ func (r *MatchmakingRepo) Respond(ctx context.Context, callID, userID uuid.UUID,
 	return nil
 }
 
+const responseColumns = `
+	x.post_id, x.user_id, coalesce(x.message, ''), x.accepted, x.created_at,
+	u.username, u.full_name, coalesce(u.avatar_url, ''), u.community_score`
+
 // Responses returns who has asked to join.
 func (r *MatchmakingRepo) Responses(ctx context.Context, callID uuid.UUID) ([]domain.Response, error) {
 	const q = `
-		select x.post_id, x.user_id, coalesce(x.message, ''), x.accepted, x.created_at,
-			u.username, u.full_name, coalesce(u.avatar_url, ''), u.community_score
+		select ` + responseColumns + `
 		from matchmaking_responses x
 		join users u on u.id = x.user_id
 		where x.post_id = $1
@@ -251,6 +254,33 @@ func (r *MatchmakingRepo) Responses(ctx context.Context, callID uuid.UUID) ([]do
 	if err != nil {
 		return nil, domain.Internal(err, "loading responses for call %s", callID)
 	}
+	return scanResponses(rows)
+}
+
+// PendingRequests returns the requests still waiting on an author's answer:
+// not yet accepted, on that author's games that are open and not yet played.
+// Newest first, so the request that just came in leads.
+func (r *MatchmakingRepo) PendingRequests(ctx context.Context, authorID uuid.UUID, now time.Time) ([]domain.Response, error) {
+	const q = `
+		select ` + responseColumns + `
+		from matchmaking_responses x
+		join matchmaking_posts p on p.id = x.post_id
+		join users u on u.id = x.user_id
+		where p.author_id = $1
+		  and p.status = 'open'
+		  and p.starts_at > $2
+		  and not x.accepted
+		order by x.created_at desc
+		limit 100`
+
+	rows, err := r.pool.Query(ctx, q, authorID, now)
+	if err != nil {
+		return nil, domain.Internal(err, "loading pending requests for %s", authorID)
+	}
+	return scanResponses(rows)
+}
+
+func scanResponses(rows pgx.Rows) ([]domain.Response, error) {
 	defer rows.Close()
 
 	var out []domain.Response

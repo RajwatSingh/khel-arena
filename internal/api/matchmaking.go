@@ -50,6 +50,29 @@ func (s *Server) handleMyCalls(w http.ResponseWriter, r *http.Request) {
 	encode(w, http.StatusOK, callDTOsFromDomain(calls))
 }
 
+// handleCallRequests — GET /v1/calls/requests (authenticated)
+//
+// The caller's open games with players waiting for an answer, each carrying
+// only its pending requests.
+func (s *Server) handleCallRequests(w http.ResponseWriter, r *http.Request) {
+	userID, ok := s.currentUser(w, r)
+	if !ok {
+		return
+	}
+
+	calls, err := s.calls.Requests(r.Context(), userID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	out := make([]callDetailDTO, 0, len(calls))
+	for _, c := range calls {
+		out = append(out, callDetailDTOFromDomain(c))
+	}
+	encode(w, http.StatusOK, out)
+}
+
 // handleCreateCall — POST /v1/calls (authenticated)
 func (s *Server) handleCreateCall(w http.ResponseWriter, r *http.Request) {
 	userID, ok := s.currentUser(w, r)

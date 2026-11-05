@@ -47,7 +47,7 @@ SANDBOX_ACCOUNTS = {
 TEST_WALLETS = """
 Pay with a test wallet:
   eSewa   ID 9806800001 (to ...005)   password Nepal@123   token 123456
-  Khalti  ID 9800000000 (to ...005)   MPIN 1111            OTP 987654
+  Khalti  ID 9800000001 (to ...005)   MPIN 1111            OTP 987654
 """
 
 

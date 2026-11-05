@@ -306,29 +306,15 @@ func (r *MatchmakingRepo) Accept(ctx context.Context, callID, userID uuid.UUID) 
 			update matchmaking_responses set accepted = true
 			 where post_id = $1 and user_id = $2 and not accepted`
 
-		tag, err := tx.Exec(ctx, acceptSQL, callID, userID)
-		if err != nil {
+		// The count and the open/filled status are not touched here: the
+		// matchmaking_responses_sync_filled trigger (0007) moves both when
+		// `accepted` flips. Updating them here too counted every player twice,
+		// so accepting the last place broke `not_overfilled`.
+		//
+		// Zero rows means they never asked or are already in (a double
+		// click). Both are "nothing to do".
+		if _, err := tx.Exec(ctx, acceptSQL, callID, userID); err != nil {
 			return domain.Internal(err, "accepting response on call %s", callID)
-		}
-		if tag.RowsAffected() == 0 {
-			// Either they never asked, or they are already in. Both are
-			// "nothing to do", and the second is a double click.
-			return nil
-		}
-
-		const fillSQL = `update matchmaking_posts set filled_players = filled_players + 1 where id = $1`
-		if _, err := tx.Exec(ctx, fillSQL, callID); err != nil {
-			return domain.Internal(err, "filling a spot on call %s", callID)
-		}
-
-		// A call that just filled up stops appearing in the feed. Written
-		// here rather than left for the janitor so the state is true the
-		// moment it becomes true.
-		if filled+1 >= needed {
-			const closeSQL = `update matchmaking_posts set status = 'filled' where id = $1`
-			if _, err := tx.Exec(ctx, closeSQL, callID); err != nil {
-				return domain.Internal(err, "closing filled call %s", callID)
-			}
 		}
 		return nil
 	})
@@ -342,27 +328,14 @@ func (r *MatchmakingRepo) Withdraw(ctx context.Context, callID, userID uuid.UUID
 			 where post_id = $1 and user_id = $2
 			returning accepted`
 
+		// Freeing the spot and reopening a full call is the
+		// matchmaking_responses_sync_filled trigger's job (0007), as in Accept.
 		var accepted bool
 		if err := tx.QueryRow(ctx, q, callID, userID).Scan(&accepted); err != nil {
 			if noRows(err) {
 				return domain.NotFound("You haven't asked to join this one.")
 			}
 			return domain.Internal(err, "withdrawing from call %s", callID)
-		}
-		if !accepted {
-			return nil // never held a spot
-		}
-
-		// Giving the spot back reopens the call: it was full, and now it is
-		// not. `greatest(...,0)` because the count must never go negative even
-		// if something upstream has gone wrong.
-		const freeSQL = `
-			update matchmaking_posts
-			   set filled_players = greatest(filled_players - 1, 0),
-			       status = case when status = 'filled' then 'open' else status end
-			 where id = $1`
-		if _, err := tx.Exec(ctx, freeSQL, callID); err != nil {
-			return domain.Internal(err, "freeing a spot on call %s", callID)
 		}
 		return nil
 	})
